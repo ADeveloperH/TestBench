@@ -113,13 +113,18 @@ export function TestCaseManager({ store, apps }: Props) {
               <span className="manage-badge">{scopeSummary(tc.scope)}</span>
               <span className="count">{tc.rules.length} 条规则</span>
               <button
+                className={editingId === tc.id ? "active" : ""}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setEditingId(tc.id);
-                  setExpandedId(tc.id);
+                  if (editingId === tc.id) {
+                    setEditingId(null);
+                  } else {
+                    setEditingId(tc.id);
+                    setExpandedId(tc.id);
+                  }
                 }}
               >
-                编辑
+                {editingId === tc.id ? "收起" : "编辑"}
               </button>
               <button
                 className="manage-del"
