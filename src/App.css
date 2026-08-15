@@ -688,17 +688,11 @@ button.danger:hover {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .tc-manager > .manage-add {
   flex-shrink: 0;
-}
-
-.tc-manager .tc-editor {
-  flex-shrink: 0;
-  max-height: 45%;
-  overflow-y: auto;
 }
 
 .tc-item {
@@ -711,6 +705,7 @@ button.danger:hover {
   display: flex;
   align-items: center;
   gap: 10px;
+  cursor: pointer;
 }
 
 .tc-status {

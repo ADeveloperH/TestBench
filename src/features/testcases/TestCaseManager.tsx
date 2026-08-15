@@ -3,6 +3,7 @@ import type { AppInfo } from "../../core/apps";
 import type { TestCasesStore } from "./useTestCasesStore";
 import {
   cond,
+  type Condition,
   type ConditionExpr,
   type ConditionField,
   type ConditionOp,
@@ -23,8 +24,40 @@ function scopeSummary(scope: Scope): string {
   return `${scope.apps.length} 个应用`;
 }
 
+const EFFECT_LABELS: Record<RuleEffect, string> = {
+  pass: "出现→通过",
+  error: "出现→报错",
+  warn: "出现→警告",
+};
+
+const FIELD_LABELS: Record<ConditionField, string> = {
+  message: "消息",
+  tag: "Tag",
+  level: "级别",
+};
+
+const OP_LABELS: Record<ConditionOp, string> = {
+  contains: "包含",
+  not_contains: "不包含",
+  equals: "等于",
+  not_equals: "不等于",
+  regex: "匹配正则",
+};
+
+function condText(c: Condition): string {
+  return `${FIELD_LABELS[c.field]} ${OP_LABELS[c.op]} "${c.value}"`;
+}
+
+/** 把条件树翻译成中文摘要（只读预览用）。 */
+function exprText(expr: ConditionExpr): string {
+  if (expr.kind === "cond") return condText(expr.cond);
+  const op = expr.op === "and" ? "且" : "或";
+  return expr.children.map(exprText).join(` ${op} `);
+}
+
 export function TestCaseManager({ store, apps }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const newCase = () => {
     const tc: TestCase = {
@@ -45,10 +78,29 @@ export function TestCaseManager({ store, apps }: Props) {
         <button onClick={newCase}>新建用例</button>
       </div>
       <ul className="tc-list">
-        {store.cases.map((tc) => (
+        {store.cases.map((tc) => {
+          const expanded = expandedId === tc.id;
+          return (
           <li key={tc.id} className="tc-item">
-            <div className="tc-item-head">
-              <label className="checkbox">
+            <div
+              className="tc-item-head"
+              onClick={() => setExpandedId(expanded ? null : tc.id)}
+              title={expanded ? "点击收起" : "点击展开查看"}
+            >
+              <button
+                className="manage-move"
+                title={expanded ? "收起" : "展开查看"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedId(expanded ? null : tc.id);
+                }}
+              >
+                {expanded ? "▾" : "▸"}
+              </button>
+              <label
+                className="checkbox"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <input
                   type="checkbox"
                   checked={tc.enabled !== false}
@@ -60,15 +112,46 @@ export function TestCaseManager({ store, apps }: Props) {
               <span className="tc-name">{tc.name}</span>
               <span className="manage-badge">{scopeSummary(tc.scope)}</span>
               <span className="count">{tc.rules.length} 条规则</span>
-              <button onClick={() => setEditingId(tc.id)}>编辑</button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingId(tc.id);
+                  setExpandedId(tc.id);
+                }}
+              >
+                编辑
+              </button>
               <button
                 className="manage-del"
-                onClick={() => store.removeCase(tc.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  store.removeCase(tc.id);
+                }}
               >
                 删除
               </button>
             </div>
-            {tc.description && <div className="tc-desc">{tc.description}</div>}
+            {expanded && (
+              <div className="tc-preview">
+                {tc.description && <div className="tc-desc">{tc.description}</div>}
+                {tc.rules.length === 0 ? (
+                  <div className="tc-desc">（还没有规则）</div>
+                ) : (
+                  <ul className="tc-rules">
+                    {tc.rules.map((rule, i) => (
+                      <li key={i} className="tc-rule">
+                        <span className="tc-rule-dot">•</span>
+                        <span className="tc-rule-effect">
+                          {EFFECT_LABELS[rule.effect]}
+                        </span>
+                        <span>{rule.description}</span>
+                        <span className="count">{exprText(rule.expr)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {editingId === tc.id && (
               <TestCaseEditor
                 tc={tc}
@@ -81,7 +164,8 @@ export function TestCaseManager({ store, apps }: Props) {
               />
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );
