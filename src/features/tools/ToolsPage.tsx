@@ -33,6 +33,7 @@ export function ToolsPage(props: Props) {
   const [output, setOutput] = useState<Output | null>(null);
   const [recording, setRecording] = useState(false);
   const [bitrate, setBitrate] = useState("8");
+  const [tab, setTab] = useState<"app" | "device">("app");
 
   const appReady = props.hasDevice && !!pkg;
 
@@ -141,11 +142,27 @@ export function ToolsPage(props: Props) {
     <div className="manage-page">
       <div className="manage-header">
         <button onClick={props.onBack}>← 返回</button>
-        <h1>应用工具</h1>
+        <h1>工具</h1>
       </div>
 
-      <section className="manage-section">
-        <h2>应用操作</h2>
+      <div className="manage-tabs">
+        <button
+          className={tab === "app" ? "active" : ""}
+          onClick={() => setTab("app")}
+        >
+          应用操作
+        </button>
+        <button
+          className={tab === "device" ? "active" : ""}
+          onClick={() => setTab("device")}
+        >
+          设备操作
+        </button>
+      </div>
+
+      {tab === "app" && (
+        <section className="manage-section">
+          <h2>应用操作</h2>
         <div className="manage-add">
           <label>应用</label>
           <select value={pkg} onChange={(e) => setPkg(e.target.value)}>
@@ -191,9 +208,11 @@ export function ToolsPage(props: Props) {
           </button>
         </div>
       </section>
+      )}
 
-      <section className="manage-section">
-        <h2>设备操作</h2>
+      {tab === "device" && (
+        <section className="manage-section">
+          <h2>设备操作</h2>
         <div className="tools-actions">
           <button disabled={!props.hasDevice || busy} onClick={() => run(props.onScreenshot)}>
             截图
@@ -237,6 +256,7 @@ export function ToolsPage(props: Props) {
           {recording && <span className="manage-desc">录屏中…</span>}
         </div>
       </section>
+      )}
 
       {status && <div className="tools-status">{status}</div>}
 

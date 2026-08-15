@@ -220,6 +220,10 @@ export function usePrefs() {
     });
   }, []);
 
+  const replacePrefs = useCallback((p: Prefs) => {
+    setPrefs(p);
+  }, []);
+
   return {
     prefs,
     addHistory,
@@ -233,5 +237,6 @@ export function usePrefs() {
     removeApp,
     setAppOrder,
     setBackdoorOverride,
+    replacePrefs,
   };
 }

@@ -21,6 +21,7 @@ export interface TestCasesStore {
   addCase: (tc: TestCase) => void;
   updateCase: (tc: TestCase) => void;
   removeCase: (id: string) => void;
+  replaceCases: (cases: TestCase[]) => void;
 }
 
 /** 测试用例的持久化存储（localStorage，内置用例作为默认值）。 */
@@ -47,5 +48,9 @@ export function useTestCasesStore(): TestCasesStore {
     setCases((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
-  return { cases, addCase, updateCase, removeCase };
+  const replaceCases = useCallback((cases: TestCase[]) => {
+    setCases(cases);
+  }, []);
+
+  return { cases, addCase, updateCase, removeCase, replaceCases };
 }

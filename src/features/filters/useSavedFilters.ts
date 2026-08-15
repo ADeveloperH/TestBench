@@ -91,6 +91,10 @@ export function useSavedFilters() {
     });
   }, []);
 
+  const replaceFilters = useCallback((list: SavedFilter[]) => {
+    setSavedFilters(list);
+  }, []);
+
   return {
     savedFilters,
     saveFilter,
@@ -98,5 +102,6 @@ export function useSavedFilters() {
     renameFilter,
     updateFilter,
     moveFilter,
+    replaceFilters,
   };
 }

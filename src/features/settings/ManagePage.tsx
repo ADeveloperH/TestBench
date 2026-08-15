@@ -35,6 +35,8 @@ interface Props {
   onUpdateFilter: (id: string, filters: FilterState) => void;
   onDeleteFilter: (id: string) => void;
   onMoveFilter: (fromIndex: number, toIndex: number) => void;
+  onExportConfig: () => Promise<string>;
+  onImportConfig: () => Promise<string>;
   onBack: () => void;
 }
 
@@ -49,6 +51,15 @@ export function ManagePage(props: Props) {
   const [searchDesc, setSearchDesc] = useState("");
   const [tagFav, setTagFav] = useState("");
   const [tagDesc, setTagDesc] = useState("");
+  const [configMsg, setConfigMsg] = useState("");
+
+  const doExport = async () => {
+    setConfigMsg(await props.onExportConfig());
+  };
+
+  const doImport = async () => {
+    setConfigMsg(await props.onImportConfig());
+  };
 
   const isAdded = (pkg: string) =>
     props.prefs.addedApps.some((a) => a.package === pkg);
@@ -90,6 +101,11 @@ export function ManagePage(props: Props) {
       <div className="manage-header">
         <button onClick={props.onBack}>← 返回</button>
         <h1>设置</h1>
+        <div className="manage-header-actions">
+          <button onClick={doExport}>导出配置</button>
+          <button onClick={doImport}>导入配置</button>
+          {configMsg && <span className="count">{configMsg}</span>}
+        </div>
       </div>
 
       <div className="manage-tabs">
@@ -103,16 +119,16 @@ export function ManagePage(props: Props) {
           Tag
         </button>
         <button
-          className={tab === "testcases" ? "active" : ""}
-          onClick={() => setTab("testcases")}
-        >
-          测试用例
-        </button>
-        <button
           className={tab === "filters" ? "active" : ""}
           onClick={() => setTab("filters")}
         >
           过滤器
+        </button>
+        <button
+          className={tab === "testcases" ? "active" : ""}
+          onClick={() => setTab("testcases")}
+        >
+          测试用例
         </button>
       </div>
 

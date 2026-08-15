@@ -361,6 +361,50 @@ async fn export_logs(app: AppHandle, text: String) -> Result<Option<String>, Str
     }
 }
 
+#[tauri::command]
+async fn export_config(app: AppHandle, text: String) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    log::info!("收到前端命令 export_config，配置长度 {} 字节", text.len());
+    let picked = app
+        .dialog()
+        .file()
+        .set_file_name("testbench-config.json")
+        .add_filter("配置文件", &["json"])
+        .blocking_save_file();
+    match picked {
+        Some(path) => {
+            let p = path.into_path().map_err(|e| e.to_string())?;
+            std::fs::write(&p, text).map_err(|e| format!("写入文件失败：{e}"))?;
+            log::info!("配置已导出到：{}", p.display());
+            Ok(Some(p.display().to_string()))
+        }
+        None => {
+            log::debug!("用户取消了导出");
+            Ok(None)
+        }
+    }
+}
+
+#[tauri::command]
+async fn import_config(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    log::debug!("收到前端命令 import_config");
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("配置文件", &["json"])
+        .blocking_pick_file();
+    match picked {
+        Some(f) => {
+            let p = f.into_path().map_err(|e| e.to_string())?;
+            let text = std::fs::read_to_string(&p).map_err(|e| format!("读取文件失败：{e}"))?;
+            log::info!("读取到配置文件：{}（{} 字节）", p.display(), text.len());
+            Ok(Some(text))
+        }
+        None => Ok(None),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     log::info!("应用启动，初始化插件");
@@ -416,7 +460,9 @@ pub fn run() {
             mirror,
             app_alarm,
             app_performance,
-            export_logs
+            export_logs,
+            export_config,
+            import_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

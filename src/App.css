@@ -348,6 +348,13 @@ button.active {
   font-size: 18px;
 }
 
+.manage-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .manage-tabs {
   display: flex;
   gap: 8px;

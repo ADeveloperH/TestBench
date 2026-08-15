@@ -5,6 +5,11 @@ import { useLogcat } from "./features/logcat/useLogcat";
 import { usePrefs } from "./features/settings/usePrefs";
 import { useSavedFilters } from "./features/filters/useSavedFilters";
 import { useTestCasesStore } from "./features/testcases/useTestCasesStore";
+import {
+  buildExportConfig,
+  mergeConfig,
+  parseImportConfig,
+} from "./features/settings/config";
 import { HistoryInput } from "./components/HistoryInput";
 import { LogList } from "./features/logcat/LogList";
 import { ManagePage, type ManageTab } from "./features/settings/ManagePage";
@@ -58,6 +63,7 @@ export default function App() {
     renameFilter,
     updateFilter,
     moveFilter,
+    replaceFilters,
   } = useSavedFilters();
   const [activeFilterId, setActiveFilterId] = useState("");
   const [filterName, setFilterName] = useState("");
@@ -345,6 +351,41 @@ export default function App() {
     setActiveFilterId("");
   };
 
+  const handleExportConfig = async () => {
+    try {
+      const config = buildExportConfig(
+        prefs.prefs,
+        testCaseStore.cases,
+        savedFilters,
+      );
+      const json = JSON.stringify(config, null, 2);
+      const path = await invoke<string | null>("export_config", { text: json });
+      return path ? `配置已导出：${path}` : "已取消导出";
+    } catch (e) {
+      return `导出失败：${String(e)}`;
+    }
+  };
+
+  const handleImportConfig = async () => {
+    try {
+      const json = await invoke<string | null>("import_config");
+      if (!json) return "已取消导入";
+      const imported = parseImportConfig(json);
+      const local = buildExportConfig(
+        prefs.prefs,
+        testCaseStore.cases,
+        savedFilters,
+      );
+      const merged = mergeConfig(local, imported);
+      prefs.replacePrefs(merged.prefs);
+      testCaseStore.replaceCases(merged.testCases);
+      replaceFilters(merged.savedFilters);
+      return `已导入并合并（测试用例 ${merged.testCases.length} 条、过滤器 ${merged.savedFilters.length} 个）`;
+    } catch (e) {
+      return `导入失败：${String(e)}`;
+    }
+  };
+
   if (view === "manage") {
     return (
       <ManagePage
@@ -370,6 +411,8 @@ export default function App() {
         onUpdateFilter={updateFilter}
         onDeleteFilter={deleteFilter}
         onMoveFilter={moveFilter}
+        onExportConfig={handleExportConfig}
+        onImportConfig={handleImportConfig}
         onBack={() => setView("log")}
       />
     );
