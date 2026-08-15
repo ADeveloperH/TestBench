@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { notify } from "./core/notify";
 import { useLogcat } from "./features/logcat/useLogcat";
 import { usePrefs } from "./features/settings/usePrefs";
 import { useSavedFilters } from "./features/filters/useSavedFilters";
@@ -45,6 +48,7 @@ export default function App() {
     setFilters,
     error,
     setError,
+    waiting,
   } = useLogcat(prefs.prefs.mergeStack);
 
   const [view, setView] = useState<"log" | "manage" | "tools">("log");
@@ -205,6 +209,7 @@ export default function App() {
       device: selectedDevice,
       path,
     });
+    notify("APK 安装完成", out).catch(() => {});
     return `安装结果：${out}`;
   };
 
@@ -224,7 +229,9 @@ export default function App() {
   };
 
   const handleStopRecording = async () => {
-    return await invoke<string>("stop_recording");
+    const path = await invoke<string>("stop_recording");
+    notify("录屏完成", `视频已保存：${path}`).catch(() => {});
+    return path;
   };
 
   const handleMirror = async (mbps: number) => {
@@ -299,6 +306,86 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedEntry, setError]);
+
+  // 关闭窗口 → 隐藏到托盘（应用继续抓日志/录屏），退出走托盘菜单。
+  useEffect(() => {
+    const appWindow = getCurrentWindow();
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    appWindow
+      .onCloseRequested(async (event) => {
+        event.preventDefault();
+        await appWindow.hide();
+      })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // 拖拽 APK 到窗口 → 直接安装到当前设备。
+  useEffect(() => {
+    const wv = getCurrentWebview();
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    wv
+      .onDragDropEvent((event) => {
+        if (event.payload.type !== "drop") return;
+        const apk = event.payload.paths.find((p) =>
+          p.toLowerCase().endsWith(".apk"),
+        );
+        if (!apk || !selectedDevice) return;
+        invoke<string>("install_apk", { device: selectedDevice, path: apk })
+          .then((out) => {
+            notify("APK 安装完成", out).catch(() => {});
+            setSavedTip(`安装完成：${out}`);
+          })
+          .catch((e) => setError(`安装失败：${String(e)}`));
+      })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [selectedDevice, setError]);
+
+  // 快捷键：空格 暂停/继续，Cmd/Ctrl+L 清空，Cmd/Ctrl+E 导出。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT")
+      ) {
+        return;
+      }
+      if (e.key === " ") {
+        e.preventDefault();
+        if (running) setPaused(!paused);
+        return;
+      }
+      if (!e.metaKey && !e.ctrlKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "l") {
+        e.preventDefault();
+        clear();
+      } else if (k === "e") {
+        e.preventDefault();
+        exportLogs();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [running, paused, setPaused, clear, exportLogs]);
 
   const handleSelect = (id: number) => {
     setSelectedId((prev) => (prev === id ? null : id));
@@ -386,6 +473,20 @@ export default function App() {
     }
   };
 
+  const handleExportDebugLog = async () => {
+    try {
+      const path = await invoke<string | null>("export_debug_log");
+      return path ? `调试日志已导出：${path}` : "已取消导出";
+    } catch (e) {
+      return `导出失败：${String(e)}`;
+    }
+  };
+
+  // 主题切换：挂在 body 上，让日志/设置/工具所有页面共享变量。
+  useEffect(() => {
+    document.body.classList.toggle("light", prefs.prefs.theme === "light");
+  }, [prefs.prefs.theme]);
+
   if (view === "manage") {
     return (
       <ManagePage
@@ -413,6 +514,7 @@ export default function App() {
         onMoveFilter={moveFilter}
         onExportConfig={handleExportConfig}
         onImportConfig={handleImportConfig}
+        onExportDebugLog={handleExportDebugLog}
         onBack={() => setView("log")}
       />
     );
@@ -495,12 +597,17 @@ export default function App() {
             className={paused ? "active" : ""}
             onClick={() => setPaused(!paused)}
             disabled={!running}
+            title="暂停/继续抓取（空格）"
           >
             {paused ? "继续" : "暂停"}
           </button>
 
-          <button onClick={clear}>清空</button>
-          <button onClick={exportLogs}>导出</button>
+          <button onClick={clear} title="清空日志（⌘/Ctrl+L）">
+            清空
+          </button>
+          <button onClick={exportLogs} title="导出日志（⌘/Ctrl+E）">
+            导出
+          </button>
           <button onClick={copySelected} disabled={!selectedEntry}>
             复制所选
           </button>
@@ -523,6 +630,14 @@ export default function App() {
             }}
           >
             设置
+          </button>
+          <button
+            onClick={() =>
+              prefs.setTheme(prefs.prefs.theme === "light" ? "dark" : "light")
+            }
+            title="切换深色/浅色主题"
+          >
+            {prefs.prefs.theme === "light" ? "深色" : "浅色"}
           </button>
         </div>
 
@@ -632,6 +747,11 @@ export default function App() {
           />
           <button onClick={jumpToIndex}>跳转</button>
           <span className="count">共 {entries.length} 条</span>
+          {waiting && (
+            <span className="count" style={{ color: "#f5a623" }}>
+              等待设备连接…
+            </span>
+          )}
         </div>
 
         {showWifi && <WifiPanel onChanged={refreshDevices} />}

@@ -23,6 +23,8 @@ export interface Prefs {
   backdoorOverrides: Record<string, string>;
   /** 是否把 Unity 等引擎逐行输出的堆栈帧合并回上一条日志 */
   mergeStack: boolean;
+  /** 主题：dark 深色 / light 浅色 */
+  theme: "dark" | "light";
 }
 
 const KEY = "logcat-prefs-v1";
@@ -38,6 +40,7 @@ const DEFAULTS: Prefs = {
   appOrder: [],
   backdoorOverrides: {},
   mergeStack: true,
+  theme: "dark",
 };
 
 /** 兼容旧版：历史版本的常用是纯字符串，迁移成 { value, description }。 */
@@ -231,6 +234,10 @@ export function usePrefs() {
     setPrefs((p) => ({ ...p, mergeStack: v }));
   }, []);
 
+  const setTheme = useCallback((theme: "dark" | "light") => {
+    setPrefs((p) => ({ ...p, theme }));
+  }, []);
+
   return {
     prefs,
     addHistory,
@@ -246,5 +253,6 @@ export function usePrefs() {
     setBackdoorOverride,
     replacePrefs,
     setMergeStack,
+    setTheme,
   };
 }

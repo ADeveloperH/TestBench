@@ -9,6 +9,20 @@
   --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, "Courier New", monospace;
 }
 
+body.light {
+  --bg: #f7f7f7;
+  --bg-toolbar: #ececec;
+  --bg-input: #ffffff;
+  --border: #d0d0d0;
+  --text: #1f1f1f;
+  --text-dim: #6f6f6f;
+  --accent: #2f6bf0;
+}
+
+body.light .log-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
 * {
   box-sizing: border-box;
 }

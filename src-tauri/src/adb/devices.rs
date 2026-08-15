@@ -138,3 +138,22 @@ pub fn mdns_pairing_address() -> Result<Option<String>, String> {
     log::debug!("mDNS 尚未发现待配对设备");
     Ok(None)
 }
+
+/// 通过 mDNS 查找已配对设备的连接地址（ip:port），找不到返回 None。
+pub fn mdns_connect_address() -> Result<Option<String>, String> {
+    let output = Command::new(adb_path())
+        .args(["mdns", "services"])
+        .output()
+        .map_err(|e| format!("无法执行 adb mdns services：{e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    log::debug!("adb mdns services 输出：\n{stdout}");
+    for line in stdout.lines() {
+        if line.contains("_adb-tls-connect._tcp") {
+            let addr = line.split_whitespace().nth(2).map(|s| s.to_string());
+            log::info!("mDNS 发现可连接设备：{:?}", addr);
+            return Ok(addr);
+        }
+    }
+    log::debug!("mDNS 尚未发现可连接设备");
+    Ok(None)
+}

@@ -8,7 +8,13 @@ import type { FilterState } from "../../core/types";
 import { FilterManager } from "../filters/FilterManager";
 import { TestCaseManager } from "../testcases/TestCaseManager";
 
-export type ManageTab = "apps" | "search" | "tags" | "testcases" | "filters";
+export type ManageTab =
+  | "apps"
+  | "search"
+  | "tags"
+  | "testcases"
+  | "filters"
+  | "help";
 
 interface Props {
   prefs: Prefs;
@@ -37,6 +43,7 @@ interface Props {
   onMoveFilter: (fromIndex: number, toIndex: number) => void;
   onExportConfig: () => Promise<string>;
   onImportConfig: () => Promise<string>;
+  onExportDebugLog: () => Promise<string>;
   onBack: () => void;
 }
 
@@ -59,6 +66,10 @@ export function ManagePage(props: Props) {
 
   const doImport = async () => {
     setConfigMsg(await props.onImportConfig());
+  };
+
+  const doExportDebug = async () => {
+    setConfigMsg(await props.onExportDebugLog());
   };
 
   const isAdded = (pkg: string) =>
@@ -104,6 +115,7 @@ export function ManagePage(props: Props) {
         <div className="manage-header-actions">
           <button onClick={doExport}>导出配置</button>
           <button onClick={doImport}>导入配置</button>
+          <button onClick={doExportDebug}>导出调试日志</button>
           {configMsg && <span className="count">{configMsg}</span>}
         </div>
       </div>
@@ -129,6 +141,12 @@ export function ManagePage(props: Props) {
           onClick={() => setTab("testcases")}
         >
           测试用例
+        </button>
+        <button
+          className={tab === "help" ? "active" : ""}
+          onClick={() => setTab("help")}
+        >
+          帮助
         </button>
       </div>
 
@@ -312,6 +330,53 @@ export function ManagePage(props: Props) {
           onDelete={props.onDeleteFilter}
           onMove={props.onMoveFilter}
         />
+      )}
+
+      {tab === "help" && (
+        <section className="manage-section">
+          <h2>快捷键</h2>
+          <ul className="manage-list">
+            <li className="manage-item">
+              <span className="manage-name">暂停 / 继续抓取</span>
+              <span className="manage-pkg">空格</span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">复制所选日志</span>
+              <span className="manage-pkg">⌘ / Ctrl + C</span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">清空日志</span>
+              <span className="manage-pkg">⌘ / Ctrl + L</span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">导出日志</span>
+              <span className="manage-pkg">⌘ / Ctrl + E</span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">展开 / 收起长日志</span>
+              <span className="manage-pkg">双击日志行</span>
+            </li>
+          </ul>
+
+          <h2>小技巧</h2>
+          <ul className="manage-list">
+            <li className="manage-item">
+              <span className="manage-name">
+                把 APK 文件拖进窗口，即可安装到当前设备
+              </span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">
+                关闭窗口会最小化到系统托盘、抓日志不中断；退出请用托盘菜单
+              </span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">
+                遇到问题点右上角「导出调试日志」，把报告发给维护者排查
+              </span>
+            </li>
+          </ul>
+        </section>
       )}
     </div>
   );

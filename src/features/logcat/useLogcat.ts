@@ -49,6 +49,8 @@ export interface UseLogcatResult {
   setFilters: Dispatch<SetStateAction<FilterState>>;
   error: string | null;
   setError: (e: string | null) => void;
+  /** 设备未就绪（adb 输出 waiting for device），显示等待提示 */
+  waiting: boolean;
 }
 
 export function useLogcat(mergeStack = true): UseLogcatResult {
@@ -67,6 +69,7 @@ export function useLogcat(mergeStack = true): UseLogcatResult {
     app: "",
   });
   const [error, setError] = useState<string | null>(null);
+  const [waiting, setWaiting] = useState(false);
 
   const bufferRef = useRef<LogEntry[]>([]);
   const pendingRef = useRef<string[]>([]);
@@ -172,7 +175,13 @@ export function useLogcat(mergeStack = true): UseLogcatResult {
 
     listen<string>("logcat-line", (e) => {
       pendingRef.current.push(e.payload);
+      setWaiting(false);
     }).then((fn) => {
+      if (disposed) fn();
+      else cleanups.push(fn);
+    });
+
+    listen("logcat-waiting", () => setWaiting(true)).then((fn) => {
       if (disposed) fn();
       else cleanups.push(fn);
     });
@@ -350,6 +359,7 @@ export function useLogcat(mergeStack = true): UseLogcatResult {
     setFilters,
     error,
     setError,
+    waiting,
   };
 }
 

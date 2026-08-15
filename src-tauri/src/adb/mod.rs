@@ -107,8 +107,8 @@ pub use apps::{
     App,
 };
 pub use devices::{
-    connect, disconnect, generate_pairing, list_devices, mdns_pairing_address, pair, Device,
-    PairingInfo,
+    connect, disconnect, generate_pairing, list_devices, mdns_connect_address,
+    mdns_pairing_address, pair, Device, PairingInfo,
 };
 pub use info::{app_alarm, app_performance, current_activity, device_info, DeviceInfo};
 pub use install::{install_apk, screencap_png};

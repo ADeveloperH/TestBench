@@ -13,6 +13,7 @@ use adb::{
     device_info as adb_device_info, disconnect as adb_disconnect,
     fetch_remote_apps as adb_fetch_remote_apps, generate_pairing as adb_generate_pairing,
     install_apk as adb_install_apk, list_devices as adb_list_devices,
+    mdns_connect_address as adb_mdns_connect_address,
     mdns_pairing_address as adb_mdns_pairing_address, mirror as adb_mirror,
     open_backdoor as adb_open_backdoor, pair as adb_pair, resolve_pids as adb_resolve_pids,
     restart_app as adb_restart_app, screencap_png as adb_screencap_png,
@@ -87,6 +88,11 @@ fn start_logcat(
                     }
                     // lossy 转换：无效 UTF-8 字节替换为 �，避免中断整条读取线程
                     let text = String::from_utf8_lossy(&buf).into_owned();
+                    // adb 在设备未就绪时输出等待提示：不进日志流，转为状态事件
+                    if text.contains("waiting for device") {
+                        let _ = app_for_thread.emit("logcat-waiting", ());
+                        continue;
+                    }
                     count += 1;
                     let _ = app_for_thread.emit("logcat-line", text);
                 }
@@ -118,6 +124,10 @@ fn start_logcat(
                             buf.pop();
                         }
                         let text = String::from_utf8_lossy(&buf).into_owned();
+                        if text.contains("waiting for device") {
+                            let _ = app_for_err.emit("logcat-waiting", ());
+                            continue;
+                        }
                         log::warn!("logcat stderr：{text}");
                         let _ = app_for_err.emit("logcat-error", text);
                     }
@@ -176,6 +186,12 @@ fn generate_pairing() -> PairingInfo {
 async fn mdns_pairing_address() -> Result<Option<String>, String> {
     log::debug!("收到前端命令 mdns_pairing_address");
     adb_mdns_pairing_address()
+}
+
+#[tauri::command]
+async fn mdns_connect_address() -> Result<Option<String>, String> {
+    log::debug!("收到前端命令 mdns_connect_address");
+    adb_mdns_connect_address()
 }
 
 #[tauri::command]
@@ -405,6 +421,154 @@ async fn import_config(app: AppHandle) -> Result<Option<String>, String> {
     }
 }
 
+#[tauri::command]
+async fn export_debug_log(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    log::info!("收到前端命令 export_debug_log");
+
+    let mut report = String::new();
+    report.push_str("===== TestBench 调试报告 =====\n\n");
+
+    // 版本与系统
+    let version = app.package_info().version.to_string();
+    report.push_str(&format!(
+        "版本：{version}\n操作系统：{} {}\n",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    ));
+
+    // 设备列表
+    report.push_str("\n===== 设备列表 =====\n");
+    match adb_list_devices() {
+        Ok(devices) if devices.is_empty() => report.push_str("（无设备）\n"),
+        Ok(devices) => {
+            for d in devices {
+                report.push_str(&format!(
+                    "{}  状态={}  型号={}  连接={}\n",
+                    d.serial, d.state, d.model, d.transport
+                ));
+            }
+        }
+        Err(e) => report.push_str(&format!("获取失败：{e}\n")),
+    }
+
+    // 应用日志（tauri-plugin-log 写入的文件）
+    report.push_str("\n===== 应用日志 =====\n");
+    match app.path().app_log_dir() {
+        Ok(log_dir) => {
+            let log_file = log_dir.join("testbench.log");
+            match std::fs::read_to_string(&log_file) {
+                Ok(content) => report.push_str(&content),
+                Err(e) => report.push_str(&format!("（读取日志文件失败：{e}）\n")),
+            }
+        }
+        Err(e) => report.push_str(&format!("（获取日志目录失败：{e}）\n")),
+    }
+
+    // 保存对话框
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let picked = app
+        .dialog()
+        .file()
+        .set_file_name(&format!("testbench-debug-{ts}.txt"))
+        .add_filter("文本文件", &["txt"])
+        .blocking_save_file();
+    match picked {
+        Some(path) => {
+            let p = path.into_path().map_err(|e| e.to_string())?;
+            std::fs::write(&p, report).map_err(|e| format!("写入文件失败：{e}"))?;
+            log::info!("调试报告已导出到：{}", p.display());
+            Ok(Some(p.display().to_string()))
+        }
+        None => {
+            log::debug!("用户取消了导出");
+            Ok(None)
+        }
+    }
+}
+
+/// 显示并聚焦主窗口（托盘回调复用）。
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+/// 构建系统托盘：左键/「显示」恢复窗口，「退出」弹确认并优雅收尾。
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::TrayIconBuilder;
+
+    let show = MenuItem::with_id(app, "show", "显示测试工作台", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    TrayIconBuilder::with_id("main-tray")
+        .icon(app.default_window_icon().unwrap().clone())
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_main_window(app),
+            "quit" => quit_app(app),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::Click {
+                button: tauri::tray::MouseButton::Left,
+                button_state: tauri::tray::MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
+/// 退出入口：录屏中先确认；确认后优雅停止录屏与 logcat 再退出。
+fn quit_app(app: &tauri::AppHandle) {
+    use tauri_plugin_dialog::DialogExt;
+
+    let recording = {
+        let state = app.state::<RecordingState>();
+        let is_recording = state.session.lock().unwrap().is_some();
+        is_recording
+    };
+
+    if recording {
+        let app_for_quit = app.clone();
+        app.dialog()
+            .message("正在录屏，确定退出？退出会停止录屏。")
+            .title("确认退出")
+            .kind(tauri_plugin_dialog::MessageDialogKind::Warning)
+            .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancel)
+            .show(move |confirmed| {
+                if confirmed {
+                    stop_all_and_exit(&app_for_quit);
+                }
+            });
+    } else {
+        stop_all_and_exit(app);
+    }
+}
+
+/// 优雅停止录屏（SIGINT 收尾 mp4）与 logcat 后退出应用。
+fn stop_all_and_exit(app: &tauri::AppHandle) {
+    let state = app.state::<RecordingState>();
+    if let Some(mut session) = state.session.lock().unwrap().take() {
+        session.child.stop();
+        log::info!("退出前已停止录屏，文件：{}", session.path);
+    }
+    let logcat = app.state::<RunningLogcat>();
+    logcat.generation.fetch_add(1, Ordering::SeqCst);
+    if let Some(mut proc) = logcat.child.lock().unwrap().take() {
+        proc.stop();
+    }
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     log::info!("应用启动，初始化插件");
@@ -418,10 +582,20 @@ pub fn run() {
                     }),
                 ])
                 .level(log::LevelFilter::Debug)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // 已有实例在运行：聚焦已有窗口
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(RunningLogcat {
             child: Mutex::new(None),
             generation: Arc::new(AtomicU64::new(0)),
@@ -432,6 +606,7 @@ pub fn run() {
         .setup(|app| {
             let resource_dir = app.path().resource_dir().ok();
             adb::init_binary_paths(resource_dir);
+            build_tray(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -444,6 +619,7 @@ pub fn run() {
             disconnect_device,
             generate_pairing,
             mdns_pairing_address,
+            mdns_connect_address,
             resolve_pids,
             fetch_remote_apps,
             open_backdoor,
@@ -462,7 +638,8 @@ pub fn run() {
             app_performance,
             export_logs,
             export_config,
-            import_config
+            import_config,
+            export_debug_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

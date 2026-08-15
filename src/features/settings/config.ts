@@ -26,6 +26,7 @@ function defaultPrefs(): Prefs {
     appOrder: [],
     backdoorOverrides: {},
     mergeStack: true,
+    theme: "dark",
   };
 }
 
@@ -57,6 +58,7 @@ function normalizePrefs(p: Partial<Prefs> | undefined): Prefs {
     appOrder: Array.isArray(p.appOrder) ? p.appOrder : [],
     backdoorOverrides: p.backdoorOverrides ?? {},
     mergeStack: typeof p.mergeStack === "boolean" ? p.mergeStack : true,
+    theme: p.theme === "light" ? "light" : "dark",
   };
 }
 
@@ -128,6 +130,7 @@ function mergePrefs(local: Prefs, imported: Prefs): Prefs {
       ...local.backdoorOverrides,
     },
     mergeStack: local.mergeStack,
+    theme: local.theme,
   };
 }
 
