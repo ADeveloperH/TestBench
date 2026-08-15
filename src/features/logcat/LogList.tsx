@@ -86,7 +86,10 @@ export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props)
           const entry = entries[vi.index];
           const color = LEVEL_COLORS[entry.level] ?? "#9e9e9e";
           const selected = entry.id === selectedId;
-          const isLong = entry.raw.length > LONG_THRESHOLD;
+          // 只有「单行超长」才折叠；多行（如合并后的堆栈）直接完整显示
+          const isLong =
+            !entry.message.includes("\n") &&
+            entry.message.length > LONG_THRESHOLD;
           const isExpanded = expandedId === entry.id;
           const clamped = isLong && !isExpanded;
           return (

@@ -21,6 +21,8 @@ export interface Prefs {
   appOrder: string[];
   /** 按包名覆盖的后门 Activity（未覆盖则用默认值） */
   backdoorOverrides: Record<string, string>;
+  /** 是否把 Unity 等引擎逐行输出的堆栈帧合并回上一条日志 */
+  mergeStack: boolean;
 }
 
 const KEY = "logcat-prefs-v1";
@@ -35,6 +37,7 @@ const DEFAULTS: Prefs = {
   removedPackages: [],
   appOrder: [],
   backdoorOverrides: {},
+  mergeStack: true,
 };
 
 /** 兼容旧版：历史版本的常用是纯字符串，迁移成 { value, description }。 */
@@ -224,6 +227,10 @@ export function usePrefs() {
     setPrefs(p);
   }, []);
 
+  const setMergeStack = useCallback((v: boolean) => {
+    setPrefs((p) => ({ ...p, mergeStack: v }));
+  }, []);
+
   return {
     prefs,
     addHistory,
@@ -238,5 +245,6 @@ export function usePrefs() {
     setAppOrder,
     setBackdoorOverride,
     replacePrefs,
+    setMergeStack,
   };
 }

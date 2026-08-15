@@ -23,6 +23,8 @@ import type { DeviceInfo, LogLevel, ScrollCommand } from "./core/types";
 import "./App.css";
 
 export default function App() {
+  const prefs = usePrefs();
+
   const {
     devices,
     selectedDevice,
@@ -43,9 +45,7 @@ export default function App() {
     setFilters,
     error,
     setError,
-  } = useLogcat();
-
-  const prefs = usePrefs();
+  } = useLogcat(prefs.prefs.mergeStack);
 
   const [view, setView] = useState<"log" | "manage" | "tools">("log");
   const [showWifi, setShowWifi] = useState(false);
@@ -548,6 +548,17 @@ export default function App() {
             />
             正则
           </label>
+          <label
+            className="checkbox"
+            title="把 Unity 等引擎逐行输出的堆栈帧合并回上一条日志"
+          >
+            <input
+              type="checkbox"
+              checked={prefs.prefs.mergeStack}
+              onChange={(e) => prefs.setMergeStack(e.target.checked)}
+            />
+            合并堆栈
+          </label>
           <HistoryInput
             value={filters.tags}
             onChange={(v) => setFilters({ ...filters, tags: v })}
@@ -627,12 +638,24 @@ export default function App() {
       </div>
 
       <div className="log-main">
-        <LogList
-          entries={entries}
-          selectedId={selectedId}
-          onSelect={handleSelect}
-          scrollCommand={scrollCommand}
-        />
+        <div className="log-left">
+          <LogList
+            entries={entries}
+            selectedId={selectedId}
+            onSelect={handleSelect}
+            scrollCommand={scrollCommand}
+          />
+          {selectedEntry && (
+            <div className="log-detail">
+              <div className="log-detail-head">
+                <span className="log-detail-title">日志详情</span>
+                <button onClick={copySelected}>复制</button>
+                <button onClick={() => setSelectedId(null)}>关闭</button>
+              </div>
+              <pre className="log-detail-body">{selectedEntry.raw}</pre>
+            </div>
+          )}
+        </div>
         {showCases && (
           <TestCaseSidebar
             store={testCaseStore}

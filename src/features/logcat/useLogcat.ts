@@ -51,7 +51,7 @@ export interface UseLogcatResult {
   setError: (e: string | null) => void;
 }
 
-export function useLogcat(): UseLogcatResult {
+export function useLogcat(mergeStack = true): UseLogcatResult {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [buffer, setBuffer] = useState("main");
@@ -76,6 +76,7 @@ export function useLogcat(): UseLogcatResult {
   const manualStopRef = useRef(false);
   const selectedDeviceRef = useRef<string | null>(null);
   const bufferForResumeRef = useRef(buffer);
+  const mergeStackRef = useRef(mergeStack);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -92,6 +93,10 @@ export function useLogcat(): UseLogcatResult {
   useEffect(() => {
     bufferForResumeRef.current = buffer;
   }, [buffer]);
+
+  useEffect(() => {
+    mergeStackRef.current = mergeStack;
+  }, [mergeStack]);
 
   const refreshDevices = useCallback(async () => {
     log.info("刷新设备列表");
@@ -223,7 +228,19 @@ export function useLogcat(): UseLogcatResult {
         const clean = stripAnsi(line);
         const entry = parseLogLine(clean, idRef.current++);
         if (entry) {
-          bufferRef.current.push(entry);
+          const last = bufferRef.current[bufferRef.current.length - 1];
+          if (
+            mergeStackRef.current &&
+            last &&
+            isStackFrame(entry.message) &&
+            sameContext(last, entry)
+          ) {
+            // Unity 等引擎逐行输出的堆栈帧，合并回上一条（带缩进）
+            last.message += "\n  " + entry.message;
+            last.raw += "\n" + clean;
+          } else {
+            bufferRef.current.push(entry);
+          }
         } else if (bufferRef.current.length > 0) {
           const last = bufferRef.current[bufferRef.current.length - 1];
           last.message += "\n" + clean;
@@ -338,4 +355,27 @@ export function useLogcat(): UseLogcatResult {
 
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * 判断 message 是否为 C# 堆栈帧格式：类名:方法名(参数)
+ * 例：Network.HttpClient:Send(HttpRequest, Boolean)
+ * 普通日志（如 NetWorkLog:Response Url:...）不匹配，不会被误合并。
+ */
+const STACK_FRAME_RE = /^[A-Za-z_][\w.<>`]*:[A-Za-z_][\w<>`]*\(.*\)$/;
+
+function isStackFrame(message: string): boolean {
+  return STACK_FRAME_RE.test(message);
+}
+
+/** 同一条堆栈被逐行拆开的特征：tag/pid/tid/level 与时间戳（精确到毫秒）完全相同。 */
+function sameContext(a: LogEntry, b: LogEntry): boolean {
+  return (
+    a.tag === b.tag &&
+    a.pid === b.pid &&
+    a.tid === b.tid &&
+    a.level === b.level &&
+    a.date === b.date &&
+    a.time === b.time
+  );
 }

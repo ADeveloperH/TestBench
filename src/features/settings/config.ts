@@ -25,6 +25,7 @@ function defaultPrefs(): Prefs {
     removedPackages: [],
     appOrder: [],
     backdoorOverrides: {},
+    mergeStack: true,
   };
 }
 
@@ -55,6 +56,7 @@ function normalizePrefs(p: Partial<Prefs> | undefined): Prefs {
     removedPackages: Array.isArray(p.removedPackages) ? p.removedPackages : [],
     appOrder: Array.isArray(p.appOrder) ? p.appOrder : [],
     backdoorOverrides: p.backdoorOverrides ?? {},
+    mergeStack: typeof p.mergeStack === "boolean" ? p.mergeStack : true,
   };
 }
 
@@ -125,6 +127,7 @@ function mergePrefs(local: Prefs, imported: Prefs): Prefs {
       ...imported.backdoorOverrides,
       ...local.backdoorOverrides,
     },
+    mergeStack: local.mergeStack,
   };
 }
 
