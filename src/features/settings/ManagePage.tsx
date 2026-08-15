@@ -150,6 +150,7 @@ export function ManagePage(props: Props) {
         </button>
       </div>
 
+      <div className="manage-content">
       {tab === "apps" && (
         <section className="manage-section">
           <h2>应用清单（内置 + 手动）</h2>
@@ -378,6 +379,7 @@ export function ManagePage(props: Props) {
           </ul>
         </section>
       )}
+      </div>
     </div>
   );
 }

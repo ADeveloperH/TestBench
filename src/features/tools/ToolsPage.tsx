@@ -139,7 +139,7 @@ export function ToolsPage(props: Props) {
   };
 
   return (
-    <div className="manage-page">
+    <div className="manage-page page-scroll">
       <div className="manage-header">
         <button onClick={props.onBack}>← 返回</button>
         <h1>工具</h1>

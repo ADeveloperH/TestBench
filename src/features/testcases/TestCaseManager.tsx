@@ -40,7 +40,7 @@ export function TestCaseManager({ store, apps }: Props) {
   };
 
   return (
-    <div>
+    <div className="tc-manager">
       <div className="manage-add">
         <button onClick={newCase}>新建用例</button>
       </div>

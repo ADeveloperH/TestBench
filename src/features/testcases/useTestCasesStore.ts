@@ -8,7 +8,15 @@ function loadCases(): TestCase[] {
     const raw = localStorage.getItem(KEY);
     if (raw !== null) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return arr as TestCase[];
+      if (Array.isArray(arr)) {
+        // 内置用例以最新定义为准（框架更新用例后老缓存自动获得新规则），
+        // 用户自定义用例（id 不在内置集合内）保留在后。
+        const builtinIds = new Set(BUILTIN_TEST_CASES.map((c) => c.id));
+        const custom = arr.filter(
+          (c) => c && typeof c.id === "string" && !builtinIds.has(c.id),
+        );
+        return [...BUILTIN_TEST_CASES, ...custom];
+      }
     }
   } catch {
     // 忽略损坏的缓存
@@ -37,7 +45,8 @@ export function useTestCasesStore(): TestCasesStore {
   }, [cases]);
 
   const addCase = useCallback((tc: TestCase) => {
-    setCases((prev) => [...prev, tc]);
+    // 新建的用例放最上面，便于立即看到
+    setCases((prev) => [tc, ...prev]);
   }, []);
 
   const updateCase = useCallback((tc: TestCase) => {
