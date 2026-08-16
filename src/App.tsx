@@ -151,6 +151,29 @@ export default function App() {
     }
   };
 
+  // 应用进程 PID 变化自动刷新：杀掉进程重开应用后 PID 会变，
+  // 定期静默重解析，PID 变化即更新过滤，日志最多延迟几秒自动恢复。
+  useEffect(() => {
+    if (!selectedPackage || !selectedDevice) return;
+    const timer = setInterval(async () => {
+      try {
+        const pids = await invoke<string[]>("resolve_pids", {
+          device: selectedDevice,
+          package: selectedPackage,
+        });
+        const newPid = pids.join(",");
+        setFilters((f) => {
+          if (f.pid === newPid) return f;
+          // 应用被杀（无进程）时清空 PID 放行全部日志，重启后自动恢复过滤
+          return { ...f, pid: newPid, app: selectedPackage };
+        });
+      } catch {
+        // 静默失败，下个周期再试
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [selectedPackage, selectedDevice, setFilters]);
+
   const handleAppChange = (pkg: string) => {
     setSelectedPackage(pkg);
     applyAppFilter(pkg);
