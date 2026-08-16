@@ -138,6 +138,13 @@ export function ToolsPage(props: Props) {
     }
   };
 
+  const switchTab = (t: "app" | "device") => {
+    setTab(t);
+    // 切换 tab 时清空上个 tab 的结果展示，避免串台
+    setStatus("");
+    setOutput(null);
+  };
+
   return (
     <div className="manage-page page-scroll">
       <div className="manage-header">
@@ -148,13 +155,13 @@ export function ToolsPage(props: Props) {
       <div className="manage-tabs">
         <button
           className={tab === "app" ? "active" : ""}
-          onClick={() => setTab("app")}
+          onClick={() => switchTab("app")}
         >
           应用操作
         </button>
         <button
           className={tab === "device" ? "active" : ""}
-          onClick={() => setTab("device")}
+          onClick={() => switchTab("device")}
         >
           设备操作
         </button>
