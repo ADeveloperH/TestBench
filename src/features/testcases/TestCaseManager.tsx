@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { AppInfo } from "../../core/apps";
 import type { TestCasesStore } from "./useTestCasesStore";
 import {
   cond,
-  type Condition,
+  EFFECT_LABELS,
+  ruleSummary,
   type ConditionExpr,
   type ConditionField,
   type ConditionOp,
@@ -24,40 +25,31 @@ function scopeSummary(scope: Scope): string {
   return `${scope.apps.length} 个应用`;
 }
 
-const EFFECT_LABELS: Record<RuleEffect, string> = {
-  pass: "出现→通过",
-  error: "出现→报错",
-  warn: "出现→警告",
-};
 
-const FIELD_LABELS: Record<ConditionField, string> = {
-  message: "消息",
-  tag: "Tag",
-  level: "级别",
-};
-
-const OP_LABELS: Record<ConditionOp, string> = {
-  contains: "包含",
-  not_contains: "不包含",
-  equals: "等于",
-  not_equals: "不等于",
-  regex: "匹配正则",
-};
-
-function condText(c: Condition): string {
-  return `${FIELD_LABELS[c.field]} ${OP_LABELS[c.op]} "${c.value}"`;
-}
-
-/** 把条件树翻译成中文摘要（只读预览用）。 */
-function exprText(expr: ConditionExpr): string {
-  if (expr.kind === "cond") return condText(expr.cond);
-  const op = expr.op === "and" ? "且" : "或";
-  return expr.children.map(exprText).join(` ${op} `);
-}
 
 export function TestCaseManager({ store, apps }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [newGroup, setNewGroup] = useState("自定义");
+
+  const groupOf = (tc: TestCase) => tc.group?.trim() || "自定义";
+
+  // 组顺序：按用例出现顺序收集（内置模块组在前，新组追加在后）
+  const groups = useMemo(() => {
+    const list: string[] = [];
+    for (const tc of store.cases) {
+      const g = groupOf(tc);
+      if (!list.includes(g)) list.push(g);
+    }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.cases]);
+
+  const toggleGroup = (g: string) =>
+    setCollapsedGroups((m) => ({ ...m, [g]: !m[g] }));
 
   const newCase = () => {
     const tc: TestCase = {
@@ -67,6 +59,7 @@ export function TestCaseManager({ store, apps }: Props) {
       scope: { global: true, apps: [] },
       enabled: true,
       rules: [],
+      group: newGroup.trim() || "自定义",
     };
     store.addCase(tc);
     setEditingId(tc.id);
@@ -76,9 +69,31 @@ export function TestCaseManager({ store, apps }: Props) {
     <div className="tc-manager">
       <div className="manage-add">
         <button onClick={newCase}>新建用例</button>
+        <select
+          value={newGroup}
+          onChange={(e) => setNewGroup(e.target.value)}
+          title="新用例的分组"
+        >
+          {groups.map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </select>
       </div>
-      <ul className="tc-list">
-        {store.cases.map((tc) => {
+      {groups.map((g) => {
+        const groupCases = store.cases.filter((tc) => groupOf(tc) === g);
+        const collapsed = !!collapsedGroups[g];
+        return (
+          <div key={g} className="tc-group">
+            <div className="tc-group-head" onClick={() => toggleGroup(g)}>
+              <span className="tc-group-arrow">{collapsed ? "▸" : "▾"}</span>
+              <span className="tc-group-name">{g}</span>
+              <span className="count">{groupCases.length} 个用例</span>
+            </div>
+            {!collapsed && (
+              <ul className="tc-list">
+                {groupCases.map((tc) => {
           const expanded = expandedId === tc.id;
           return (
           <li key={tc.id} className="tc-item">
@@ -150,7 +165,7 @@ export function TestCaseManager({ store, apps }: Props) {
                           {EFFECT_LABELS[rule.effect]}
                         </span>
                         <span>{rule.description}</span>
-                        <span className="count">{exprText(rule.expr)}</span>
+                        <span className="count">{ruleSummary(rule)}</span>
                       </li>
                     ))}
                   </ul>
@@ -170,8 +185,12 @@ export function TestCaseManager({ store, apps }: Props) {
             )}
           </li>
           );
-        })}
-      </ul>
+                })}
+              </ul>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -234,6 +253,11 @@ function TestCaseEditor({ tc, apps, onSave, onCancel }: EditorProps) {
           placeholder="用例名称（必填）"
           value={draft.name}
           onChange={(e) => update({ name: e.target.value })}
+        />
+        <input
+          placeholder="分组（如：提现 / 网络 / 自定义）"
+          value={draft.group ?? ""}
+          onChange={(e) => update({ group: e.target.value })}
         />
         <input
           placeholder="用例描述（自然语言，必填）"
@@ -320,6 +344,18 @@ interface RuleEditorProps {
 function RuleEditor({ rule, onChange, onRemove }: RuleEditorProps) {
   const update = (patch: Partial<Rule>) => onChange({ ...rule, ...patch });
 
+  const setAbsence = (on: boolean) => {
+    if (on) {
+      update({
+        absence: { anchor: cond("message", "contains", ""), withinSec: 30 },
+      });
+    } else {
+      const next = { ...rule };
+      delete next.absence;
+      onChange(next);
+    }
+  };
+
   return (
     <div className="tc-rule-editor">
       <div className="manage-add">
@@ -345,6 +381,59 @@ function RuleEditor({ rule, onChange, onRemove }: RuleEditorProps) {
         onChange={(e) => update({ expr: e })}
         depth={0}
       />
+      <div className="manage-add" style={{ marginTop: 6 }}>
+        <label className="checkbox">
+          出现
+          <input
+            type="number"
+            min={1}
+            style={{ width: 56, minWidth: 0 }}
+            value={rule.minCount ?? 1}
+            disabled={!!rule.absence}
+            onChange={(e) =>
+              update({ minCount: Math.max(1, parseInt(e.target.value) || 1) })
+            }
+          />
+          次才触发
+        </label>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={!!rule.absence}
+            onChange={(e) => setAbsence(e.target.checked)}
+          />
+          缺失判定
+        </label>
+      </div>
+      {rule.absence && (
+        <div className="tc-absence">
+          <div className="manage-add">
+            <span>锚点出现后</span>
+            <input
+              type="number"
+              min={1}
+              style={{ width: 64, minWidth: 0 }}
+              value={rule.absence.withinSec}
+              onChange={(e) =>
+                update({
+                  absence: {
+                    ...rule.absence!,
+                    withinSec: Math.max(1, parseInt(e.target.value) || 30),
+                  },
+                })
+              }
+            />
+            <span>秒内未匹配则触发。锚点条件：</span>
+          </div>
+          <ExprEditor
+            expr={rule.absence.anchor}
+            onChange={(e) =>
+              update({ absence: { ...rule.absence!, anchor: e } })
+            }
+            depth={0}
+          />
+        </div>
+      )}
     </div>
   );
 }

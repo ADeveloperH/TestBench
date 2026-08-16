@@ -25,6 +25,13 @@ export interface Rule {
   effect: RuleEffect;
   description: string;
   expr: ConditionExpr;
+  /** 累计出现至少 N 次才触发（默认 1 = 出现即触发） */
+  minCount?: number;
+  /** 缺失判定：锚点条件匹配后，withinSec 秒内未匹配 expr 则触发 */
+  absence?: {
+    anchor: ConditionExpr;
+    withinSec: number;
+  };
 }
 
 export interface Scope {
@@ -40,6 +47,8 @@ export interface TestCase {
   rules: Rule[];
   /** 是否启用（默认 true） */
   enabled?: boolean;
+  /** 分组（管理页按组折叠显示，默认「自定义」） */
+  group?: string;
 }
 
 // —— 构造便捷函数 ——
@@ -80,6 +89,22 @@ function ieCase(
 }
 
 const IE_CASES: TestCase[] = [
+  ieCase(
+    "ie_sdk_init",
+    "激励框架初始化完成",
+    "哨兵：开始加载数据后 60 秒内应出现「所有SDK初始化完成」，未出现 = 初始化卡住或中断",
+    [
+      {
+        effect: "error",
+        description: "SDK 初始化未完成（缺失判定）",
+        expr: all(unityTag(), has("所有SDK初始化完成")),
+        absence: {
+          anchor: all(unityTag(), has("开始加载全部数据")),
+          withinSec: 60,
+        },
+      },
+    ],
+  ),
   ieCase(
     "ie_config_missing",
     "激励框架配置缺失",
@@ -272,6 +297,27 @@ const IE_CASES: TestCase[] = [
   ),
 ];
 
+// 内置激励框架用例按模块分组
+const IE_GROUPS: Record<string, string> = {
+  ie_sdk_init: "初始化",
+  ie_config_missing: "配置",
+  ie_network_fail: "网络",
+  ie_cheating: "反作弊",
+  ie_userinfo_fail: "用户数据",
+  ie_withdraw_fail: "提现",
+  ie_prop_fail: "道具",
+  ie_ad_fail: "广告",
+  ie_anticheat_fail: "反作弊",
+  ie_localization_fail: "本地化",
+  ie_ui_fail: "UI",
+  ie_save_fail: "存档",
+};
+
+const IE_CASES_GROUPED: TestCase[] = IE_CASES.map((tc) => ({
+  ...tc,
+  group: IE_GROUPS[tc.id] ?? "自定义",
+}));
+
 // 内置示例用例（阶段一/二占位，之后可远程更新）。
 export const BUILTIN_TEST_CASES: TestCase[] = [
   {
@@ -279,6 +325,7 @@ export const BUILTIN_TEST_CASES: TestCase[] = [
     name: "无崩溃",
     description: "不应出现 Android 崩溃（FATAL EXCEPTION）",
     scope: { global: true, apps: [] },
+    group: "稳定性",
     rules: [
       {
         effect: "error",
@@ -295,6 +342,7 @@ export const BUILTIN_TEST_CASES: TestCase[] = [
     name: "无 ANR",
     description: "不应出现应用无响应（ANR）",
     scope: { global: true, apps: [] },
+    group: "稳定性",
     rules: [
       {
         effect: "error",
@@ -307,10 +355,25 @@ export const BUILTIN_TEST_CASES: TestCase[] = [
     ],
   },
   {
+    id: "any_error_log",
+    name: "出现错误级别日志",
+    description: "任何 error 级别（E）的日志都视为疑似问题，应关注排查",
+    scope: { global: true, apps: [] },
+    group: "稳定性",
+    rules: [
+      {
+        effect: "warn",
+        description: "出现 error 级别日志",
+        expr: cond("level", "equals", "E"),
+      },
+    ],
+  },
+  {
     id: "network_error",
     name: "网络响应异常",
     description: "任一接口返回 result_code 不为 200 即视为异常",
     scope: { global: true, apps: [] },
+    group: "网络",
     rules: [
       {
         effect: "error",
@@ -327,7 +390,7 @@ export const BUILTIN_TEST_CASES: TestCase[] = [
       },
     ],
   },
-  ...IE_CASES,
+  ...IE_CASES_GROUPED,
 ];
 
 export function conditionMatches(cond: Condition, entry: LogEntry): boolean {
@@ -370,4 +433,49 @@ export function ruleMatches(rule: Rule, entry: LogEntry): boolean {
 export function caseAppliesTo(tc: TestCase, pkg: string): boolean {
   if (tc.scope.global) return true;
   return tc.scope.apps.includes(pkg);
+}
+
+// —— 规则摘要（UI 预览用）——
+
+export const EFFECT_LABELS: Record<RuleEffect, string> = {
+  pass: "出现→通过",
+  error: "出现→报错",
+  warn: "出现→警告",
+};
+
+const FIELD_LABELS: Record<ConditionField, string> = {
+  message: "消息",
+  tag: "Tag",
+  level: "级别",
+};
+
+const OP_LABELS: Record<ConditionOp, string> = {
+  contains: "包含",
+  not_contains: "不包含",
+  equals: "等于",
+  not_equals: "不等于",
+  regex: "匹配正则",
+};
+
+export function condText(c: Condition): string {
+  return `${FIELD_LABELS[c.field]} ${OP_LABELS[c.op]} "${c.value}"`;
+}
+
+/** 把条件树翻译成中文摘要。 */
+export function exprText(expr: ConditionExpr): string {
+  if (expr.kind === "cond") return condText(expr.cond);
+  const op = expr.op === "and" ? "且" : "或";
+  return expr.children.map(exprText).join(` ${op} `);
+}
+
+/** 规则的中文摘要（含出现次数 / 缺失判定语义）。 */
+export function ruleSummary(rule: Rule): string {
+  if (rule.absence) {
+    return `缺失判定：锚点[${exprText(rule.absence.anchor)}] 出现后 ${rule.absence.withinSec}s 内未匹配 ${exprText(rule.expr)}`;
+  }
+  const prefix =
+    rule.minCount && rule.minCount > 1
+      ? `出现 ${rule.minCount} 次触发：`
+      : "";
+  return prefix + exprText(rule.expr);
 }
