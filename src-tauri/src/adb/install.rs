@@ -1,13 +1,12 @@
 //! 截图与 APK 安装。
 
-use std::process::Command;
 
-use super::adb_path;
+use super::adb_command;
 
 /// 截图，返回 PNG 原始字节（`adb exec-out screencap -p`）。
 pub fn screencap_png(device: Option<&str>) -> Result<Vec<u8>, String> {
     log::info!("截图：device={:?}", device);
-    let mut cmd = Command::new(adb_path());
+    let mut cmd = adb_command();
     if let Some(d) = device {
         cmd.arg("-s").arg(d);
     }
@@ -26,7 +25,7 @@ pub fn screencap_png(device: Option<&str>) -> Result<Vec<u8>, String> {
 /// 覆盖安装 APK。
 pub fn install_apk(device: Option<&str>, path: &str) -> Result<String, String> {
     log::info!("安装 APK：device={:?} path={path}", device);
-    let mut cmd = Command::new(adb_path());
+    let mut cmd = adb_command();
     if let Some(d) = device {
         cmd.arg("-s").arg(d);
     }

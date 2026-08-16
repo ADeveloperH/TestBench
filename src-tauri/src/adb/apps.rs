@@ -1,15 +1,14 @@
 //! 应用清单（远程拉取）与应用级操作：PID 解析、打开后门、重启、清数据、卸载。
 
-use std::process::Command;
 
 use serde::Serialize;
 
-use super::adb_path;
+use super::adb_command;
 
 /// 解析指定包名当前运行的 PID 列表（`adb shell pidof`）。
 pub fn resolve_pids(device: Option<&str>, package: &str) -> Result<Vec<String>, String> {
     log::info!("解析包名 PID：device={:?} package={package}", device);
-    let mut cmd = Command::new(adb_path());
+    let mut cmd = adb_command();
     if let Some(d) = device {
         cmd.arg("-s").arg(d);
     }
@@ -87,7 +86,7 @@ pub fn open_backdoor(
 ) -> Result<String, String> {
     let component = format!("{package}/{activity}");
     log::info!("打开后门：device={:?} component={component}", device);
-    let mut cmd = Command::new(adb_path());
+    let mut cmd = adb_command();
     if let Some(d) = device {
         cmd.arg("-s").arg(d);
     }
@@ -109,7 +108,7 @@ pub fn open_backdoor(
 /// 重启应用：force-stop 后通过 Launcher 启动。
 pub fn restart_app(device: Option<&str>, package: &str) -> Result<(), String> {
     log::info!("重启应用：device={:?} package={package}", device);
-    let mut stop = Command::new(adb_path());
+    let mut stop = adb_command();
     if let Some(d) = device {
         stop.arg("-s").arg(d);
     }
@@ -121,7 +120,7 @@ pub fn restart_app(device: Option<&str>, package: &str) -> Result<(), String> {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
 
-    let mut launch = Command::new(adb_path());
+    let mut launch = adb_command();
     if let Some(d) = device {
         launch.arg("-s").arg(d);
     }
@@ -147,7 +146,7 @@ pub fn restart_app(device: Option<&str>, package: &str) -> Result<(), String> {
 /// 清除应用数据。
 pub fn clear_app_data(device: Option<&str>, package: &str) -> Result<String, String> {
     log::info!("清除应用数据：device={:?} package={package}", device);
-    let mut cmd = Command::new(adb_path());
+    let mut cmd = adb_command();
     if let Some(d) = device {
         cmd.arg("-s").arg(d);
     }
@@ -169,7 +168,7 @@ pub fn clear_app_data(device: Option<&str>, package: &str) -> Result<String, Str
 /// 卸载应用。
 pub fn uninstall_app(device: Option<&str>, package: &str) -> Result<String, String> {
     log::info!("卸载应用：device={:?} package={package}", device);
-    let mut cmd = Command::new(adb_path());
+    let mut cmd = adb_command();
     if let Some(d) = device {
         cmd.arg("-s").arg(d);
     }

@@ -1,13 +1,13 @@
 //! logcat 子进程封装。
 
-use std::process::{Child, ChildStderr, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStderr, ChildStdout, Stdio};
 
-use super::adb_path;
+use super::adb_command;
 
 /// 清除指定设备的 logcat 缓冲区。
 pub fn clear_log(device: Option<&str>) -> Result<(), String> {
     log::info!("清空 logcat 缓冲区，设备：{:?}", device);
-    let mut cmd = Command::new(adb_path());
+    let mut cmd = adb_command();
     if let Some(d) = device {
         cmd.arg("-s").arg(d);
     }
@@ -33,7 +33,7 @@ pub struct LogcatProcess {
 impl LogcatProcess {
     /// 启动 `adb [-s <device>] logcat -v threadtime [-b <buffer>]`。
     pub fn start(device: Option<&str>, buffer: Option<&str>) -> Result<Self, String> {
-        let mut cmd = Command::new(adb_path());
+        let mut cmd = adb_command();
         if let Some(d) = device {
             cmd.arg("-s").arg(d);
         }

@@ -1,10 +1,9 @@
 //! 设备枚举与 WiFi 配对 / 连接。
 
-use std::process::Command;
 
 use serde::Serialize;
 
-use super::{adb_path, run_adb_capture};
+use super::{adb_command, run_adb_capture};
 
 /// 一台连接的设备（USB 或 WiFi）。
 #[derive(Debug, Clone, Serialize)]
@@ -20,7 +19,7 @@ pub struct Device {
 /// 执行 `adb devices -l` 并解析结果。
 pub fn list_devices() -> Result<Vec<Device>, String> {
     log::debug!("执行 adb devices -l");
-    let output = Command::new(adb_path())
+    let output = adb_command()
         .args(["devices", "-l"])
         .output()
         .map_err(|e| format!("无法执行 adb，请确认已安装 Android Platform-Tools：{e}"))?;
@@ -121,7 +120,7 @@ pub fn generate_pairing() -> PairingInfo {
 
 /// 通过 mDNS 查找正在等待配对的设备地址（ip:port），找不到返回 None。
 pub fn mdns_pairing_address() -> Result<Option<String>, String> {
-    let output = Command::new(adb_path())
+    let output = adb_command()
         .args(["mdns", "services"])
         .output()
         .map_err(|e| format!("无法执行 adb mdns services：{e}"))?;
@@ -141,7 +140,7 @@ pub fn mdns_pairing_address() -> Result<Option<String>, String> {
 
 /// 通过 mDNS 查找已配对设备的连接地址（ip:port），找不到返回 None。
 pub fn mdns_connect_address() -> Result<Option<String>, String> {
-    let output = Command::new(adb_path())
+    let output = adb_command()
         .args(["mdns", "services"])
         .output()
         .map_err(|e| format!("无法执行 adb mdns services：{e}"))?;

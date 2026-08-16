@@ -1,10 +1,9 @@
 //! 设备信息、当前 Activity、Alarm 与性能监控。
 
-use std::process::Command;
 
 use serde::Serialize;
 
-use super::adb_path;
+use super::adb_command;
 
 /// 设备信息。
 #[derive(Debug, Clone, Serialize)]
@@ -22,7 +21,7 @@ pub struct DeviceInfo {
 }
 
 fn adb_shell_output(device: Option<&str>, args: &[&str]) -> Result<String, String> {
-    let mut cmd = Command::new(adb_path());
+    let mut cmd = adb_command();
     if let Some(d) = device {
         cmd.arg("-s").arg(d);
     }

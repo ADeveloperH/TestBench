@@ -61,6 +61,20 @@ pub(crate) fn adb_path() -> String {
     ADB_BIN.get().cloned().unwrap_or_else(|| "adb".to_string())
 }
 
+/// 构造 adb 命令（Windows 上隐藏控制台窗口，避免每次执行 adb 时弹黑框）。
+#[cfg(windows)]
+pub(crate) fn adb_command() -> Command {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = Command::new(adb_path());
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    cmd
+}
+
+#[cfg(not(windows))]
+pub(crate) fn adb_command() -> Command {
+    Command::new(adb_path())
+}
+
 pub(crate) fn scrcpy_path() -> String {
     SCRCPY_BIN.get().cloned().unwrap_or_else(|| "scrcpy".to_string())
 }
@@ -72,6 +86,11 @@ pub(crate) fn scrcpy_server_path() -> String {
 /// 构造 scrcpy 命令（带内置 adb / server 的环境变量）。
 pub(crate) fn scrcpy_command() -> Command {
     let mut cmd = Command::new(scrcpy_path());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
     cmd.env("ADB", adb_path());
     let server = scrcpy_server_path();
     if !server.is_empty() {
@@ -83,7 +102,7 @@ pub(crate) fn scrcpy_command() -> Command {
 /// 执行一个 adb 命令并捕获输出（用于 pair / connect / disconnect 等短命令）。
 pub(crate) fn run_adb_capture(args: &[&str]) -> Result<String, String> {
     log::debug!("执行 adb {}", args.join(" "));
-    let output = Command::new(adb_path())
+    let output = adb_command()
         .args(args)
         .output()
         .map_err(|e| format!("无法执行 adb：{e}"))?;
