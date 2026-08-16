@@ -23,7 +23,7 @@ const STATUS_META: Record<
   fail: { icon: "❌", label: "有问题", className: "status-fail" },
   suspected: { icon: "⚠️", label: "疑似", className: "status-warn" },
   pass: { icon: "✅", label: "通过", className: "status-pass" },
-  pending: { icon: "⏳", label: "没测到", className: "status-pending" },
+  pending: { icon: "⏳", label: "监控中", className: "status-pending" },
   disabled: { icon: "○", label: "未启用", className: "status-disabled" },
 };
 

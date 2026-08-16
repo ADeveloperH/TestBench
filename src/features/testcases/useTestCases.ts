@@ -25,6 +25,12 @@ interface RuleState extends RuleHit {
   anchorAt: number;
 }
 
+/** 每个用例的执行状态：自开始测试以来可见的日志数 + 各规则状态。 */
+interface CaseState {
+  seenLogs: number;
+  rules: RuleState[];
+}
+
 export interface TestCaseResult {
   testCase: TestCase;
   status: CaseStatus;
@@ -43,19 +49,31 @@ function initStates(tc: TestCase): RuleState[] {
   }));
 }
 
-function computeStatus(tc: TestCase, hits: RuleHit[]): CaseStatus {
+function initCaseState(tc: TestCase): CaseState {
+  return { seenLogs: 0, rules: initStates(tc) };
+}
+
+function computeStatus(tc: TestCase, cs: CaseState): CaseStatus {
   if (tc.enabled === false) return "disabled";
+  // 还没测到任何日志 → 监控中（而不是「通过」，避免误读）
+  if (cs.seenLogs === 0) return "pending";
   let hasError = false;
   let hasWarn = false;
+  let hasPassRule = false;
   let allPass = true;
   for (let i = 0; i < tc.rules.length; i++) {
-    if (tc.rules[i].effect === "error" && hits[i].hit) hasError = true;
-    if (tc.rules[i].effect === "warn" && hits[i].hit) hasWarn = true;
-    if (tc.rules[i].effect === "pass" && !hits[i].hit) allPass = false;
+    if (tc.rules[i].effect === "error" && cs.rules[i].hit) hasError = true;
+    if (tc.rules[i].effect === "warn" && cs.rules[i].hit) hasWarn = true;
+    if (tc.rules[i].effect === "pass") {
+      hasPassRule = true;
+      if (!cs.rules[i].hit) allPass = false;
+    }
   }
   if (hasError) return "fail";
   if (hasWarn) return "suspected";
-  if (allPass) return "pass";
+  // 「通过」只留给带 pass 规则（正向验证）且全部命中的用例；
+  // 纯监控类用例（只有 error/warn 规则）无异常时保持「监控中」。
+  if (hasPassRule && allPass) return "pass";
   return "pending";
 }
 
@@ -66,7 +84,7 @@ export function useTestCases(
   cases: TestCase[],
 ) {
   const [version, setVersion] = useState(0);
-  const hitsRef = useRef<Record<string, RuleState[]>>({});
+  const hitsRef = useRef<Record<string, CaseState>>({});
   const fingerprintRef = useRef<Record<string, string>>({});
   const processedRef = useRef(0);
   const contextRef = useRef("");
@@ -101,11 +119,11 @@ export function useTestCases(
       let changed = false;
       const now = Date.now();
       for (const tc of visibleCases) {
-        const states = hitsRef.current[tc.id];
-        if (!states) continue;
+        const cs = hitsRef.current[tc.id];
+        if (!cs) continue;
         for (let r = 0; r < tc.rules.length; r++) {
           const rule = tc.rules[r];
-          const st = states[r];
+          const st = cs.rules[r];
           if (
             rule.absence &&
             st.absence === "waiting" &&
@@ -149,12 +167,17 @@ export function useTestCases(
         const fp = JSON.stringify(tc.rules);
         if (fingerprintRef.current[tc.id] !== fp) {
           fingerprintRef.current[tc.id] = fp;
-          hitsRef.current[tc.id] = initStates(tc);
+          hitsRef.current[tc.id] = initCaseState(tc);
         }
-        const states = hitsRef.current[tc.id];
+        let cs = hitsRef.current[tc.id];
+        if (!cs) {
+          cs = initCaseState(tc);
+          hitsRef.current[tc.id] = cs;
+        }
+        cs.seenLogs += 1;
         for (let r = 0; r < tc.rules.length; r++) {
           const rule = tc.rules[r];
-          const st = states[r];
+          const st = cs.rules[r];
           if (st.hit) continue;
           if (rule.absence) {
             // 缺失判定：锚点出现即开始新的观察窗口；窗口内匹配 expr 则满足
@@ -183,11 +206,11 @@ export function useTestCases(
 
   const results = useMemo(() => {
     return visibleCases.map((tc) => {
-      const states = hitsRef.current[tc.id] ?? initStates(tc);
+      const cs = hitsRef.current[tc.id] ?? initCaseState(tc);
       return {
         testCase: tc,
-        status: computeStatus(tc, states),
-        ruleHits: states.map((s) => ({
+        status: computeStatus(tc, cs),
+        ruleHits: cs.rules.map((s) => ({
           hit: s.hit,
           entry: s.entry,
           missing: s.missing,
