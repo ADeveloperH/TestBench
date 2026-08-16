@@ -32,7 +32,6 @@
 
 ## 计划中的功能
 
-- [ ] Windows 优雅停止录屏（当前为强杀，可能损坏文件，需改为发送 Ctrl+C 信号）
 - [ ] macOS 签名/公证、Windows 签名（分发必需）
 - [ ] 自动更新（GitHub Releases + tauri-updater，发布后一键更新）
 - [ ] 应用图标（替换默认 Tauri 图标）

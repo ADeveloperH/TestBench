@@ -19,6 +19,13 @@ impl ScrcpyRecord {
             cmd.arg("-s").arg(d);
         }
         cmd.args(["--no-playback", "--record", output, "--video-bit-rate", &br]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            // CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP：
+            // 隐藏控制台，并让子进程成为新进程组 leader，停止时可发 CTRL_BREAK 优雅收尾
+            cmd.creation_flags(0x0800_0000 | 0x0000_0200);
+        }
         cmd.stdout(Stdio::null()).stderr(Stdio::piped());
         let mut child = cmd
             .spawn()
@@ -44,16 +51,39 @@ impl ScrcpyRecord {
         Ok(Self { child })
     }
 
-    /// 停止录屏：发送 SIGINT（相当于 Ctrl+C），让 scrcpy 正常收尾并保存文件。
+    /// 停止录屏：Unix 发 SIGINT（Ctrl+C）；Windows 发 CTRL_BREAK 事件，
+    /// 让 scrcpy 正常收尾并保存 mp4；等待超时后兜底强杀。
     pub fn stop(&mut self) {
         log::info!("停止 scrcpy 录屏，pid={}", self.child.id());
         #[cfg(unix)]
         unsafe {
             libc::kill(self.child.id() as i32, libc::SIGINT);
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         {
-            let _ = self.child.kill();
+            unsafe {
+                windows_sys::Win32::System::Console::GenerateConsoleCtrlEvent(
+                    windows_sys::Win32::System::Console::CTRL_BREAK_EVENT,
+                    self.child.id(),
+                );
+            }
+            // 等待优雅退出，最多 10 秒，超时强杀兜底
+            let deadline =
+                std::time::Instant::now() + std::time::Duration::from_secs(10);
+            loop {
+                match self.child.try_wait() {
+                    Ok(Some(_)) => break,
+                    Ok(None) => {
+                        if std::time::Instant::now() >= deadline {
+                            log::warn!("scrcpy 录屏未在 10 秒内优雅退出，强杀兜底");
+                            let _ = self.child.kill();
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                    }
+                    Err(_) => break,
+                }
+            }
         }
         let _ = self.child.wait();
         log::debug!("scrcpy 录屏已停止");
