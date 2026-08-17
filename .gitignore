@@ -13,7 +13,14 @@ dist-ssr
 *.local
 
 # 内置的 adb / scrcpy 二进制（由 scripts/bundle-binaries.sh 生成，不提交）
-src-tauri/bin/
+# 但目录本身提交 .gitkeep 占位，保证 tauri 构建时 bundle.resources 路径存在
+src-tauri/bin/*
+!src-tauri/bin/macos/
+!src-tauri/bin/windows/
+src-tauri/bin/macos/*
+src-tauri/bin/windows/*
+!src-tauri/bin/macos/.gitkeep
+!src-tauri/bin/windows/.gitkeep
 
 # Editor directories and files
 .vscode/*

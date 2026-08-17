@@ -2,7 +2,7 @@
 
 use std::process::{Child, Stdio};
 
-use super::scrcpy_command;
+use super::{scrcpy_command, scrcpy_select_device};
 
 /// 一个运行中的 scrcpy 无头录屏子进程。
 pub struct ScrcpyRecord {
@@ -15,9 +15,7 @@ impl ScrcpyRecord {
         let br = format!("{mbps}M");
         log::info!("开始 scrcpy 录屏：device={:?} output={output} bitrate={br}", device);
         let mut cmd = scrcpy_command();
-        if let Some(d) = device {
-            cmd.arg("-s").arg(d);
-        }
+        scrcpy_select_device(&mut cmd, device);
         cmd.args(["--no-playback", "--record", output, "--video-bit-rate", &br]);
         #[cfg(windows)]
         {
@@ -92,14 +90,48 @@ impl ScrcpyRecord {
 
 /// 启动 scrcpy 投屏（独立窗口，带鼠标/键盘/触控）。
 pub fn mirror(device: Option<&str>, mbps: u32) -> Result<(), String> {
+    use std::io::Read;
     let br = format!("{mbps}M");
     log::info!("启动 scrcpy 投屏：device={:?} bitrate={br}", device);
     let mut cmd = scrcpy_command();
-    if let Some(d) = device {
-        cmd.arg("-s").arg(d);
-    }
+    scrcpy_select_device(&mut cmd, device);
     cmd.args(["--video-bit-rate", &br, "--stay-awake"]);
-    cmd.stdout(Stdio::null()).stderr(Stdio::null());
-    cmd.spawn().map_err(|e| format!("无法启动 scrcpy 投屏：{e}"))?;
+    cmd.stdout(Stdio::null()).stderr(Stdio::piped());
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("无法启动 scrcpy 投屏：{e}"))?;
+
+    // 短暂等待，检测立即失败（scrcpy 缺失、参数不支持、设备离线等），
+    // 避免“点击没有反应”的静默失败。
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+    if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+        let mut stderr = String::new();
+        if let Some(mut se) = child.stderr.take() {
+            let _ = se.read_to_string(&mut stderr);
+        }
+        let msg = stderr.trim().to_string();
+        log::error!("scrcpy 投屏立即退出（exit={status}）：{msg}");
+        return Err(if msg.is_empty() {
+            format!("scrcpy 投屏启动失败（exit={status}）")
+        } else {
+            msg
+        });
+    }
+
+    // 持续把 scrcpy 的 stderr 写入日志，便于事后排查。
+    if let Some(se) = child.stderr.take() {
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            for line in BufReader::new(se).lines() {
+                if let Ok(l) = line {
+                    if !l.trim().is_empty() {
+                        log::debug!("scrcpy 投屏输出：{l}");
+                    }
+                }
+            }
+        });
+    }
+
+    log::info!("scrcpy 投屏已启动，pid={}", child.id());
     Ok(())
 }

@@ -10,14 +10,17 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Dest = Join-Path $Root "src-tauri\bin\windows"
 New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 
-# 1. Download latest scrcpy-win64
-Write-Host "Querying latest scrcpy-win64 ..."
-$release = Invoke-RestMethod -Uri "https://api.github.com/repos/Genymobile/scrcpy/releases/latest"
+# 1. Download scrcpy-win64 (pin to the newest v3.x line: v4.x changed the CLI
+#    and device selection too much, while the app relies on ANDROID_SERIAL + 3.x options)
+Write-Host "Querying scrcpy-win64 v3.x ..."
+$releases = Invoke-RestMethod -Uri "https://api.github.com/repos/Genymobile/scrcpy/releases"
+$release = $releases | Where-Object { $_.tag_name -match "^v3\." } | Select-Object -First 1
+if (-not $release) { throw "no scrcpy v3.x release found" }
 $asset = $release.assets | Where-Object { $_.name -match "scrcpy-win64.*\.zip$" } | Select-Object -First 1
-if (-not $asset) { throw "scrcpy-win64 zip asset not found" }
+if (-not $asset) { throw "scrcpy-win64 zip asset not found for $($release.tag_name)" }
 
 $tmpZip = Join-Path $env:TEMP "scrcpy-win64.zip"
-Write-Host "Downloading $($asset.name) ..."
+Write-Host "Downloading $($release.tag_name) / $($asset.name) ..."
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip
 
 $extract = Join-Path $env:TEMP "scrcpy-win64"

@@ -594,8 +594,31 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                // 只记忆尺寸/位置/最大化。不记忆 VISIBLE：窗口平时会隐藏到托盘，
+                // 若连同可见性一起保存，退出后下次启动会“记住”隐藏状态导致窗口不显示。
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED,
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_notification::init())
+        .on_window_event(|window, event| {
+            // 关闭按钮 → 隐藏到托盘（继续抓日志/录屏），真正退出走托盘菜单「退出」。
+            // 必须在 Rust 侧同步处理：JS 异步回调里调用 hide() 在 Windows 上会与
+            // 主线程事件循环互相等待而死锁，表现为“点关闭没有反应”。
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    if let Err(e) = window.hide() {
+                        log::error!("隐藏窗口失败：{e}");
+                    }
+                }
+            }
+        })
         .manage(RunningLogcat {
             child: Mutex::new(None),
             generation: Arc::new(AtomicU64::new(0)),

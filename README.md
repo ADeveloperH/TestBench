@@ -101,14 +101,17 @@ testbench/
 - 平台依赖：
   - **macOS**：`xcode-select --install`（Xcode Command Line Tools）
   - **Windows**：Visual Studio Build Tools（勾选「使用 C++ 的桌面开发」）+ WebView2 Runtime（Win11 自带）
-- 本机调试需要 adb / scrcpy 二进制：运行 `bash scripts/bundle-binaries.sh`（Windows 用 `scripts/bundle-binaries.ps1`）生成内置二进制，或安装 Android Platform-Tools 走 PATH 回退
+- 本机调试需要 adb / scrcpy 二进制：运行 `pnpm run setup`（或 `pnpm run bundle-bin`）生成内置二进制，或安装 Android Platform-Tools 走 PATH 回退
 
 ### 安装与启动
 
 ```bash
 pnpm install
+pnpm run setup     # 可选：一键检查 pnpm/cargo、安装依赖、打包内置 adb/scrcpy
 pnpm tauri dev
 ```
+
+`pnpm run setup` 做的事：检查 pnpm 与 cargo（缺失时打印对应安装命令）→ `pnpm install` → 打包内置 adb/scrcpy（macOS 依赖 brew 的 scrcpy 与 dylibbundler，缺失时仅告警不阻断）。跳过它也能直接 `pnpm tauri dev`：仓库已提交 `src-tauri/bin/` 的占位目录保证构建通过，运行时找不到内置二进制会自动回退到系统 PATH 的 adb/scrcpy；但要投屏/录屏或打包分发前建议先执行一次。
 
 首次启动会编译整个 Rust 工程，需等待几分钟。若 `pnpm install` 报 pnpm store 路径问题，可显式指定：`pnpm install --store-dir <本地可写目录>`。
 
@@ -123,6 +126,7 @@ pnpm tauri dev
   ```
 
   Windows 下 rustup 安装时会自动把 `%USERPROFILE%\.cargo\bin` 加入 PATH，通常不需要手动处理。
+- **`resource path 'bin' doesn't exist`（构建报错）**：`src-tauri/bin/` 目录不存在。正常 clone 不会出现（仓库提交了占位目录）；若手动删除了该目录，执行 `pnpm run setup` 或 `pnpm run bundle-bin` 重新生成。
 
 ## 构建与打包
 
@@ -147,9 +151,9 @@ pnpm tauri build
 
 应用内置了 adb 与 scrcpy 二进制（`src-tauri/bin/<平台>/`），运行时优先使用内置版本、找不到时回退到系统 PATH，因此终端用户无需自行安装 Android Platform-Tools 或 scrcpy。
 
-- 生成内置二进制：`bash scripts/bundle-binaries.sh`（macOS 依赖 brew 的 scrcpy 与 dylibbundler）
-- Windows 生成内置二进制：在 Windows 机器上运行 `scripts/bundle-binaries.ps1`（自动下载 scrcpy-win64 与 adb）
-- `src-tauri/bin/` 已加入 `.gitignore`，二进制不提交仓库，由脚本按需生成
+- 生成内置二进制：`pnpm run bundle-bin`（macOS 等价于 `bash scripts/bundle-binaries.sh`，依赖 brew 的 scrcpy 与 dylibbundler）
+- Windows 生成内置二进制：在 Windows 机器上运行 `pnpm run bundle-bin`（自动下载 scrcpy-win64 与 adb）
+- 二进制不提交仓库（`.gitignore`），目录本身提交了 `.gitkeep` 占位，保证 clone 后可直接构建运行
 
 ## 应用清单（远程更新）
 

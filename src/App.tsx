@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { notify } from "./core/notify";
 import { useLogcat } from "./features/logcat/useLogcat";
@@ -330,25 +329,8 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedEntry, setError]);
 
-  // 关闭窗口 → 隐藏到托盘（应用继续抓日志/录屏），退出走托盘菜单。
-  useEffect(() => {
-    const appWindow = getCurrentWindow();
-    let disposed = false;
-    let unlisten: (() => void) | null = null;
-    appWindow
-      .onCloseRequested(async (event) => {
-        event.preventDefault();
-        await appWindow.hide();
-      })
-      .then((fn) => {
-        if (disposed) fn();
-        else unlisten = fn;
-      });
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, []);
+  // 关闭窗口 → 隐藏到托盘：由 Rust 侧 on_window_event 同步处理
+  // （JS 异步回调在 Windows 上会死锁，见 src-tauri/src/lib.rs）。
 
   // 拖拽 APK 到窗口 → 直接安装到当前设备。
   useEffect(() => {

@@ -99,6 +99,15 @@ pub(crate) fn scrcpy_command() -> Command {
     cmd
 }
 
+/// 为 scrcpy 指定目标设备。
+/// scrcpy 3.0 起移除了 `-s/--serial` 参数，改用 `ANDROID_SERIAL` 环境变量
+/// （scrcpy ≥2.4 均支持，跨版本通用），因此这里不再传 `-s`。
+pub(crate) fn scrcpy_select_device(cmd: &mut Command, device: Option<&str>) {
+    if let Some(d) = device {
+        cmd.env("ANDROID_SERIAL", d);
+    }
+}
+
 /// 执行一个 adb 命令并捕获输出（用于 pair / connect / disconnect 等短命令）。
 pub(crate) fn run_adb_capture(args: &[&str]) -> Result<String, String> {
     log::debug!("执行 adb {}", args.join(" "));
