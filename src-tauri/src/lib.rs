@@ -224,20 +224,13 @@ async fn restart_app(device: Option<String>, package: String) -> Result<(), Stri
 
 #[tauri::command]
 async fn screenshot(app: AppHandle, device: Option<String>) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
     log::info!("收到前端命令 screenshot：device={:?}", device);
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let name = format!("screenshot_{ts}.png");
-    let picked = app
-        .dialog()
-        .file()
-        .set_file_name(&name)
-        .add_filter("图片", &["png"])
-        .blocking_save_file();
+    let picked = save_file_dialog(&app, &name, "图片", &["png"])?;
     let Some(path) = picked else {
         return Ok(None);
     };
-    let path = path.into_path().map_err(|e| e.to_string())?;
     let bytes = adb_screencap_png(device.as_deref())?;
     std::fs::write(&path, bytes).map_err(|e| format!("写入截图失败：{e}"))?;
     log::info!("截图已保存到：{}", path.display());
@@ -246,20 +239,10 @@ async fn screenshot(app: AppHandle, device: Option<String>) -> Result<Option<Str
 
 #[tauri::command]
 async fn pick_apk(app: AppHandle) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
     log::debug!("收到前端命令 pick_apk");
-    let picked = app
-        .dialog()
-        .file()
-        .add_filter("APK 安装包", &["apk"])
-        .blocking_pick_file();
+    let picked = pick_file_dialog(&app, "APK 安装包", &["apk"])?;
     match picked {
-        Some(f) => Ok(Some(
-            f.into_path()
-                .map_err(|e| e.to_string())?
-                .display()
-                .to_string(),
-        )),
+        Some(p) => Ok(Some(p.display().to_string())),
         None => Ok(None),
     }
 }
@@ -301,20 +284,13 @@ async fn start_recording(
     device: Option<String>,
     mbps: u32,
 ) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
     log::info!("收到前端命令 start_recording：device={:?} mbps={mbps}", device);
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let name = format!("recording_{ts}.mp4");
-    let picked = app
-        .dialog()
-        .file()
-        .set_file_name(&name)
-        .add_filter("视频", &["mp4"])
-        .blocking_save_file();
+    let picked = save_file_dialog(&app, &name, "视频", &["mp4"])?;
     let Some(path) = picked else {
         return Ok(None);
     };
-    let path = path.into_path().map_err(|e| e.to_string())?;
     let p = path.display().to_string();
 
     if let Some(mut old) = state.session.lock().unwrap().take() {
@@ -356,16 +332,9 @@ async fn app_performance(device: Option<String>, package: String) -> Result<Stri
 #[tauri::command]
 async fn export_logs(app: AppHandle, text: String) -> Result<Option<String>, String> {
     log::info!("收到前端命令 export_logs，日志长度 {} 字节", text.len());
-    use tauri_plugin_dialog::DialogExt;
-    let picked = app
-        .dialog()
-        .file()
-        .set_file_name("logcat.txt")
-        .add_filter("日志文件", &["txt", "log"])
-        .blocking_save_file();
+    let picked = save_file_dialog(&app, "logcat.txt", "日志文件", &["txt", "log"])?;
     match picked {
-        Some(path) => {
-            let p = path.into_path().map_err(|e| e.to_string())?;
+        Some(p) => {
             std::fs::write(&p, text).map_err(|e| format!("写入文件失败：{e}"))?;
             log::info!("日志已导出到：{}", p.display());
             Ok(Some(p.display().to_string()))
@@ -379,17 +348,10 @@ async fn export_logs(app: AppHandle, text: String) -> Result<Option<String>, Str
 
 #[tauri::command]
 async fn export_config(app: AppHandle, text: String) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
     log::info!("收到前端命令 export_config，配置长度 {} 字节", text.len());
-    let picked = app
-        .dialog()
-        .file()
-        .set_file_name("testbench-config.json")
-        .add_filter("配置文件", &["json"])
-        .blocking_save_file();
+    let picked = save_file_dialog(&app, "testbench-config.json", "配置文件", &["json"])?;
     match picked {
-        Some(path) => {
-            let p = path.into_path().map_err(|e| e.to_string())?;
+        Some(p) => {
             std::fs::write(&p, text).map_err(|e| format!("写入文件失败：{e}"))?;
             log::info!("配置已导出到：{}", p.display());
             Ok(Some(p.display().to_string()))
@@ -403,16 +365,10 @@ async fn export_config(app: AppHandle, text: String) -> Result<Option<String>, S
 
 #[tauri::command]
 async fn import_config(app: AppHandle) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
     log::debug!("收到前端命令 import_config");
-    let picked = app
-        .dialog()
-        .file()
-        .add_filter("配置文件", &["json"])
-        .blocking_pick_file();
+    let picked = pick_file_dialog(&app, "配置文件", &["json"])?;
     match picked {
-        Some(f) => {
-            let p = f.into_path().map_err(|e| e.to_string())?;
+        Some(p) => {
             let text = std::fs::read_to_string(&p).map_err(|e| format!("读取文件失败：{e}"))?;
             log::info!("读取到配置文件：{}（{} 字节）", p.display(), text.len());
             Ok(Some(text))
@@ -423,7 +379,6 @@ async fn import_config(app: AppHandle) -> Result<Option<String>, String> {
 
 #[tauri::command]
 async fn export_debug_log(app: AppHandle) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
     log::info!("收到前端命令 export_debug_log");
 
     let mut report = String::new();
@@ -467,15 +422,14 @@ async fn export_debug_log(app: AppHandle) -> Result<Option<String>, String> {
 
     // 保存对话框
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
-    let picked = app
-        .dialog()
-        .file()
-        .set_file_name(&format!("testbench-debug-{ts}.txt"))
-        .add_filter("文本文件", &["txt"])
-        .blocking_save_file();
+    let picked = save_file_dialog(
+        &app,
+        &format!("testbench-debug-{ts}.txt"),
+        "文本文件",
+        &["txt"],
+    )?;
     match picked {
-        Some(path) => {
-            let p = path.into_path().map_err(|e| e.to_string())?;
+        Some(p) => {
             std::fs::write(&p, report).map_err(|e| format!("写入文件失败：{e}"))?;
             log::info!("调试报告已导出到：{}", p.display());
             Ok(Some(p.display().to_string()))
@@ -484,6 +438,52 @@ async fn export_debug_log(app: AppHandle) -> Result<Option<String>, String> {
             log::debug!("用户取消了导出");
             Ok(None)
         }
+    }
+}
+
+/// 显示保存文件对话框（非阻塞回调 + channel）。
+/// 不用 blocking_*：它在 Windows 的异步线程上调用系统对话框会失败/挂起，
+/// 导致导出配置、导出日志、截图等功能不可用。
+fn save_file_dialog(
+    app: &AppHandle,
+    file_name: &str,
+    filter_name: &str,
+    extensions: &[&str],
+) -> Result<Option<std::path::PathBuf>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.dialog()
+        .file()
+        .set_file_name(file_name)
+        .add_filter(filter_name, extensions)
+        .save_file(move |picked| {
+            let _ = tx.send(picked);
+        });
+    match rx.recv() {
+        Ok(Some(path)) => Ok(Some(path.into_path().map_err(|e| e.to_string())?)),
+        Ok(None) => Ok(None),
+        Err(e) => Err(format!("对话框调用失败：{e}")),
+    }
+}
+
+/// 显示打开文件对话框（非阻塞回调 + channel，Windows 兼容）。
+fn pick_file_dialog(
+    app: &AppHandle,
+    filter_name: &str,
+    extensions: &[&str],
+) -> Result<Option<std::path::PathBuf>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.dialog()
+        .file()
+        .add_filter(filter_name, extensions)
+        .pick_file(move |picked| {
+            let _ = tx.send(picked);
+        });
+    match rx.recv() {
+        Ok(Some(path)) => Ok(Some(path.into_path().map_err(|e| e.to_string())?)),
+        Ok(None) => Ok(None),
+        Err(e) => Err(format!("对话框调用失败：{e}")),
     }
 }
 
