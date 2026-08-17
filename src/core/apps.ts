@@ -11,7 +11,7 @@ export const DEFAULT_BACKDOOR =
 
 // 远程配置地址（公开仓库 raw 链接，无需 token）
 export const APPS_URL =
-  "https://raw.githubusercontent.com/ADeveloperH/ADBTools/main/config/projects.json";
+  "https://raw.githubusercontent.com/ADeveloperH/TestBench/main/config/projects.json";
 
 const CACHE_KEY = "apps-config-cache-v1";
 

@@ -1,0 +1,117 @@
+# 双平台构建 TestBench 安装包（Windows + macOS）
+# 触发方式：
+#   1. 手动：仓库页面 → Actions → 本 workflow → Run workflow
+#   2. 自动：推送 v* 标签（如 v0.1.0）
+# 产物在每次运行的 Artifacts 里下载。
+name: 构建安装包
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-windows:
+    name: Windows 安装包
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 Rust 构建产物
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: testbench/src-tauri
+
+      - name: 安装前端依赖
+        run: pnpm install
+
+      - name: 生成内置 adb / scrcpy 二进制
+        run: powershell -ExecutionPolicy Bypass -File scripts/bundle-binaries.ps1
+
+      - name: 构建 Windows 安装包
+        run: pnpm tauri build
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: testbench-windows
+          if-no-files-found: error
+          path: |
+            testbench/src-tauri/target/release/bundle/msi/*.msi
+            testbench/src-tauri/target/release/bundle/nsis/*.exe
+
+  build-macos:
+    name: macOS 安装包（${{ matrix.arch }}）
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-latest
+          - arch: x64
+            runner: macos-13
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 Rust 构建产物
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: testbench/src-tauri
+
+      - name: 安装前端依赖
+        run: pnpm install
+
+      - name: 生成内置 adb / scrcpy 二进制
+        run: |
+          brew install scrcpy dylibbundler
+          mkdir -p src-tauri/bin/macos
+          curl -L -o /tmp/platform-tools.zip https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
+          unzip -o -q /tmp/platform-tools.zip -d /tmp
+          cp /tmp/platform-tools/adb src-tauri/bin/macos/adb
+          chmod +x src-tauri/bin/macos/adb
+          cp "$(brew --prefix)/bin/scrcpy" src-tauri/bin/macos/scrcpy
+          cp "$(brew --prefix)/share/scrcpy/scrcpy-server" src-tauri/bin/macos/scrcpy-server
+          chmod +x src-tauri/bin/macos/scrcpy
+          cd src-tauri/bin/macos
+          dylibbundler -od -b -x ./scrcpy -d ./lib/ -p @loader_path || true
+          mv lib/*.dylib . 2>/dev/null || true
+
+      - name: 构建 macOS 安装包
+        run: pnpm tauri build
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: testbench-macos-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            testbench/src-tauri/target/release/bundle/dmg/*.dmg
+            testbench/src-tauri/target/release/bundle/macos/*.app

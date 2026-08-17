@@ -129,7 +129,7 @@ pnpm tauri build
 
 「应用」下拉框的清单采用三级兜底：远程 → 本地缓存 → 内置默认。
 
-- 远程地址：`https://raw.githubusercontent.com/ADeveloperH/ADBTools/main/config/projects.json`
+- 远程地址：`https://raw.githubusercontent.com/ADeveloperH/TestBench/main/config/projects.json`
 - 新增应用只需修改该文件并 push，用户下次启动自动更新，无需重新打包/安装；
 - 离线时使用上次拉取的本地缓存；首次安装即离线则用内置的默认应用清单。
 
