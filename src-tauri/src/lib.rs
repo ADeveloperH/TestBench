@@ -392,6 +392,13 @@ async fn export_debug_log(app: AppHandle) -> Result<Option<String>, String> {
         std::env::consts::ARCH
     ));
 
+    // Windows 屏幕 DPI（影响 scrcpy 点击坐标映射的常见因素）
+    #[cfg(windows)]
+    {
+        let dpi = unsafe { windows_sys::Win32::UI::HiDpi::GetDpiForSystem() };
+        report.push_str(&format!("屏幕 DPI：{dpi}（缩放 {}%）\n", dpi * 100 / 96));
+    }
+
     // 设备列表
     report.push_str("\n===== 设备列表 =====\n");
     match adb_list_devices() {

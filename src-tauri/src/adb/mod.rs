@@ -55,6 +55,29 @@ pub fn init_binary_paths(resource_dir: Option<std::path::PathBuf>) {
         .map(|p| p.display().to_string())
         .unwrap_or_default();
     let _ = SCRCPY_SERVER_BIN.set(server);
+
+    // 记录实际使用的 adb / scrcpy 路径与版本：
+    // 可一眼看出走的是内置二进制还是 PATH 回退，以及具体版本（排查投屏问题关键）。
+    for (name, path) in [("adb", adb_path()), ("scrcpy", scrcpy_path())] {
+        let mut probe = Command::new(&path);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            probe.creation_flags(0x0800_0000); // CREATE_NO_WINDOW，避免版本探测闪黑框
+        }
+        match probe.arg("--version").output() {
+            Ok(out) => {
+                let text = format!(
+                    "{}{}",
+                    String::from_utf8_lossy(&out.stdout),
+                    String::from_utf8_lossy(&out.stderr)
+                );
+                let first = text.lines().next().unwrap_or("").trim().to_string();
+                log::info!("二进制 {name}：{path}（版本：{first}）");
+            }
+            Err(e) => log::warn!("无法获取 {name} 版本（{path}）：{e}"),
+        }
+    }
 }
 
 pub(crate) fn adb_path() -> String {

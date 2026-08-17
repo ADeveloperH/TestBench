@@ -17,6 +17,11 @@ impl ScrcpyRecord {
         let mut cmd = scrcpy_command();
         scrcpy_select_device(&mut cmd, device);
         cmd.args(["--no-playback", "--record", output, "--video-bit-rate", &br]);
+        log::debug!(
+            "scrcpy 录屏完整命令：{:?} {:?}",
+            cmd.get_program(),
+            cmd.get_args().collect::<Vec<_>>()
+        );
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -96,7 +101,12 @@ pub fn mirror(device: Option<&str>, mbps: u32) -> Result<(), String> {
     let mut cmd = scrcpy_command();
     scrcpy_select_device(&mut cmd, device);
     cmd.args(["--video-bit-rate", &br, "--stay-awake"]);
-    cmd.stdout(Stdio::null()).stderr(Stdio::piped());
+    log::debug!(
+        "scrcpy 投屏完整命令：{:?} {:?}",
+        cmd.get_program(),
+        cmd.get_args().collect::<Vec<_>>()
+    );
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("无法启动 scrcpy 投屏：{e}"))?;
@@ -118,20 +128,32 @@ pub fn mirror(device: Option<&str>, mbps: u32) -> Result<(), String> {
         });
     }
 
-    // 持续把 scrcpy 的 stderr 写入日志，便于事后排查。
-    if let Some(se) = child.stderr.take() {
-        std::thread::spawn(move || {
-            use std::io::{BufRead, BufReader};
-            for line in BufReader::new(se).lines() {
-                if let Ok(l) = line {
-                    if !l.trim().is_empty() {
-                        log::debug!("scrcpy 投屏输出：{l}");
-                    }
-                }
-            }
-        });
+    // 后台持续把 scrcpy 的 stdout/stderr 写入日志（scrcpy 的版本、分辨率、
+    // 帧率等启动信息都在这两条流里），并在退出时记录退出状态，便于事后排查。
+    if let Some(out) = child.stdout.take() {
+        std::thread::spawn(move || drain_pipe_to_log(out, "scrcpy 投屏 stdout"));
     }
+    if let Some(err) = child.stderr.take() {
+        std::thread::spawn(move || drain_pipe_to_log(err, "scrcpy 投屏 stderr"));
+    }
+    let pid = child.id();
+    std::thread::spawn(move || match child.wait() {
+        Ok(status) => log::info!("scrcpy 投屏进程退出，pid={pid}，status={status}"),
+        Err(e) => log::warn!("等待 scrcpy 投屏进程失败：{e}"),
+    });
 
-    log::info!("scrcpy 投屏已启动，pid={}", child.id());
+    log::info!("scrcpy 投屏已启动，pid={pid}");
     Ok(())
+}
+
+/// 把子进程输出逐行写入日志（供后台线程使用）。
+fn drain_pipe_to_log(reader: impl std::io::Read, tag: &'static str) {
+    use std::io::{BufRead, BufReader};
+    for line in BufReader::new(reader).lines() {
+        if let Ok(l) = line {
+            if !l.trim().is_empty() {
+                log::debug!("{tag}：{l}");
+            }
+        }
+    }
 }

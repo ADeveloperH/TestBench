@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { info as logInfo } from "@tauri-apps/plugin-log";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { notify } from "./core/notify";
@@ -257,6 +258,10 @@ export default function App() {
   };
 
   const handleMirror = async (mbps: number) => {
+    // 记录投屏时的主机环境（分辨率/DPI），排查“点击坐标错位”类问题用
+    logInfo(
+      `启动投屏：device=${selectedDevice} mbps=${mbps} screen=${screen.width}x${screen.height} devicePixelRatio=${window.devicePixelRatio}`,
+    ).catch(() => {});
     await invoke("mirror", { device: selectedDevice, mbps });
     return "投屏已启动，请在 scrcpy 窗口中操作";
   };
