@@ -7,7 +7,9 @@ use super::adb_command;
 
 /// 解析指定包名当前运行的 PID 列表（`adb shell pidof`）。
 pub fn resolve_pids(device: Option<&str>, package: &str) -> Result<Vec<String>, String> {
-    log::info!("解析包名 PID：device={:?} package={package}", device);
+    // 前端每 3 秒轮询一次，这里统一用 debug 级别，避免刷爆日志文件
+    // （曾因此把启动/投屏等关键日志挤掉，导致无法排查问题）。
+    log::debug!("解析包名 PID：device={:?} package={package}", device);
     let mut cmd = adb_command();
     if let Some(d) = device {
         cmd.arg("-s").arg(d);
@@ -26,7 +28,7 @@ pub fn resolve_pids(device: Option<&str>, package: &str) -> Result<Vec<String>, 
         .split_whitespace()
         .map(|s| s.to_string())
         .collect();
-    log::info!("包 {package} 的 PID：{pids:?}");
+    log::debug!("包 {package} 的 PID：{pids:?}");
     Ok(pids)
 }
 

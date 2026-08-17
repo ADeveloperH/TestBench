@@ -196,7 +196,7 @@ async fn mdns_connect_address() -> Result<Option<String>, String> {
 
 #[tauri::command]
 async fn resolve_pids(device: Option<String>, package: String) -> Result<Vec<String>, String> {
-    log::info!("收到前端命令 resolve_pids：device={:?} package={package}", device);
+    log::debug!("收到前端命令 resolve_pids：device={:?} package={package}", device);
     adb_resolve_pids(device.as_deref(), &package)
 }
 
@@ -590,6 +590,9 @@ pub fn run() {
                 ])
                 .level(log::LevelFilter::Debug)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                // 默认单文件上限仅 40KB，容易被轮询日志写爆；提高到 5MB，
+                // 保证启动/投屏等关键日志能完整保留到导出调试报告时。
+                .max_file_size(5 * 1024 * 1024)
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
