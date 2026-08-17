@@ -27,6 +27,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "macOS": {
+      "signingIdentity": "-"
+    },
     "resources": ["bin/"],
     "icon": [
       "icons/32x32.png",
