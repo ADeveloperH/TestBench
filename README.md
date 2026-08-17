@@ -1,13 +1,13 @@
 # TestBench（测试工作台）
 
-面向测试与开发的一站式 Android 设备工作台，覆盖日志查看、设备管理、常用调试工具、日志回归测试、投屏录屏与性能监控。面向 Windows 与 macOS 用户，基于 Tauri 2 构建，后端用 Rust 调用本机 `adb` / `scrcpy`，前端用 React + TypeScript。
+面向测试与开发的一站式 Android 设备工作台，覆盖日志查看、设备管理、常用调试工具、日志回归测试、投屏录屏与性能监控。面向 Windows 与 macOS 用户，基于 Tauri 2 构建，后端用 Rust 调用内置 `adb` / `scrcpy`，前端用 React + TypeScript。
 
 ## 技术栈
 
 - **框架**：Tauri 2（体积小、内存低，适合长时间挂着刷日志）
 - **后端**：Rust —— 枚举设备、启动 `adb logcat` 子进程、流式读取 stdout、通过事件推给前端
 - **前端**：React 19 + TypeScript + Vite，虚拟滚动用 `@tanstack/react-virtual`
-- **依赖**：本机需安装 Android Platform-Tools（`adb` 在 `PATH` 中）
+- **依赖**：内置 `adb` / `scrcpy` 二进制，终端用户无需安装 Android Platform-Tools
 
 ## 已实现功能
 
@@ -29,13 +29,13 @@
 - 单实例、窗口大小位置记忆、日志按天轮转、系统托盘（关窗口隐藏继续抓日志）
 - 拖拽 APK 安装、快捷键（空格暂停、Cmd/Ctrl+L 清空、Cmd/Ctrl+E 导出）
 - 录屏/安装完成系统通知、深色/浅色主题切换
+- 测试用例（规则引擎：AND/OR 条件树、出现 N 次阈值、缺失判定；按模块分组管理；侧边栏实时状态与问题优先排序）
 
 ## 计划中的功能
 
 - [ ] macOS 签名/公证、Windows 签名（分发必需）
 - [ ] 自动更新（GitHub Releases + tauri-updater，发布后一键更新）
 - [ ] 应用图标（替换默认 Tauri 图标）
-- [ ] CI 双平台构建（GitHub Actions 出 macOS + Windows 包）
 
 ## 架构
 
@@ -91,7 +91,7 @@ testbench/
 
 ## 开发
 
-前置：Rust 工具链、Node.js + pnpm、Android Platform-Tools。
+前置：Rust 工具链、Node.js + pnpm。本机调试需要 adb（可运行 `bash scripts/bundle-binaries.sh` 生成内置二进制，或安装 Android Platform-Tools 走 PATH 回退）；**终端用户不需要任何环境**。
 
 ```bash
 pnpm install
@@ -104,7 +104,7 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
-产物按当前操作系统生成（macOS 出 `.app`/`.dmg`，Windows 出 `.exe`/`.msi`）。跨平台产物建议用 CI（GitHub Actions）分别跑 macOS 与 Windows runner。
+产物按当前操作系统生成（macOS 出 `.app`/`.dmg`，Windows 出 `.exe`/`.msi`）。跨平台构建已配置 GitHub Actions（`.github/workflows/build.yml`）：仓库 Actions 页手动触发，自动产出 Windows（msi/exe）与 macOS（arm64/x64 dmg）安装包。
 
 ## 日志与调试
 
