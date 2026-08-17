@@ -21,7 +21,7 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
@@ -34,7 +34,7 @@ jobs:
       - name: 缓存 Rust 构建产物
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: testbench/src-tauri
+          workspaces: src-tauri
 
       - name: 安装前端依赖
         run: pnpm install
@@ -51,8 +51,8 @@ jobs:
           name: testbench-windows
           if-no-files-found: error
           path: |
-            testbench/src-tauri/target/release/bundle/msi/*.msi
-            testbench/src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
 
   build-macos:
     name: macOS 安装包（${{ matrix.arch }}）
@@ -71,7 +71,7 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
@@ -84,7 +84,7 @@ jobs:
       - name: 缓存 Rust 构建产物
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: testbench/src-tauri
+          workspaces: src-tauri
 
       - name: 安装前端依赖
         run: pnpm install
@@ -113,5 +113,5 @@ jobs:
           name: testbench-macos-${{ matrix.arch }}
           if-no-files-found: error
           path: |
-            testbench/src-tauri/target/release/bundle/dmg/*.dmg
-            testbench/src-tauri/target/release/bundle/macos/*.app
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app
