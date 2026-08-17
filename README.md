@@ -91,12 +91,38 @@ testbench/
 
 ## 开发
 
-前置：Rust 工具链、Node.js + pnpm。本机调试需要 adb（可运行 `bash scripts/bundle-binaries.sh` 生成内置二进制，或安装 Android Platform-Tools 走 PATH 回退）；**终端用户不需要任何环境**。
+> **终端用户不需要任何环境**，本节约环境搭建只针对开发者。
+
+### 环境要求
+
+- **Node.js 18+**（建议装最新 LTS）
+- **pnpm**：`npm install -g pnpm`
+- **Rust 工具链**：`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- 平台依赖：
+  - **macOS**：`xcode-select --install`（Xcode Command Line Tools）
+  - **Windows**：Visual Studio Build Tools（勾选「使用 C++ 的桌面开发」）+ WebView2 Runtime（Win11 自带）
+- 本机调试需要 adb / scrcpy 二进制：运行 `bash scripts/bundle-binaries.sh`（Windows 用 `scripts/bundle-binaries.ps1`）生成内置二进制，或安装 Android Platform-Tools 走 PATH 回退
+
+### 安装与启动
 
 ```bash
 pnpm install
 pnpm tauri dev
 ```
+
+首次启动会编译整个 Rust 工程，需等待几分钟。若 `pnpm install` 报 pnpm store 路径问题，可显式指定：`pnpm install --store-dir <本地可写目录>`。
+
+### 常见问题
+
+- **`sh: tauri: command not found` / `node_modules missing`**：先执行 `pnpm install` 再启动。
+- **`failed to run 'cargo metadata' ... No such file or directory`**：终端 PATH 里没有 cargo（macOS 新开终端常见，cargo 装在 `~/.cargo/bin`）。执行后再启动：
+
+  ```bash
+  export PATH="$HOME/.cargo/bin:$PATH"   # 可写入 ~/.zshrc 一劳永逸
+  pnpm tauri dev
+  ```
+
+  Windows 下 rustup 安装时会自动把 `%USERPROFILE%\.cargo\bin` 加入 PATH，通常不需要手动处理。
 
 ## 构建与打包
 
