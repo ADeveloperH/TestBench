@@ -190,7 +190,9 @@ export function TestCaseSidebar({
       </div>
 
       <div className="tc-sidebar-toolbar">
-        <button onClick={resetAll}>新测试</button>
+        <button onClick={resetAll} title="重置全部用例状态，重新开始一轮监测">
+          重置全部
+        </button>
         <button onClick={onManage}>管理</button>
       </div>
 
