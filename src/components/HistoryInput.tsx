@@ -210,6 +210,18 @@ export function HistoryInput({
           if (e.key === "Enter") onAddHistory(value);
         }}
       />
+      {value && (
+        <button
+          type="button"
+          className="history-clear"
+          aria-label="清除输入"
+          title="清除"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onChange("")}
+        >
+          ×
+        </button>
+      )}
       {dropdown && createPortal(dropdown, document.body)}
       {pinTarget &&
         createPortal(

@@ -2220,7 +2220,44 @@ body.light .tc-rule-editor {
 }
 
 .toolbar-search-with-regex input {
-  padding-right: 38px;
+  padding-right: 62px;
+}
+
+/* 输入框清除按钮：有内容时显示，点击清空 */
+.history-input input {
+  padding-right: 28px;
+}
+
+.history-clear {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.history-clear:hover {
+  background: var(--hover);
+  color: var(--text);
+  border: none;
+}
+
+/* 搜索框内清除按钮位于正则按钮左侧 */
+.toolbar-search-with-regex .history-clear {
+  right: 34px;
 }
 
 .toolbar-regex-toggle {
