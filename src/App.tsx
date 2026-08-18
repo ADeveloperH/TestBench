@@ -533,7 +533,7 @@ export default function App() {
             ]}
             onChange={(v) => setSelectedDevice(v)}
           />
-          <button onClick={refreshDevices} title="刷新设备列表">
+          <button onClick={() => refreshDevices()} title="刷新设备列表">
             刷新
           </button>
 

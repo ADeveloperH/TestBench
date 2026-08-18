@@ -32,7 +32,8 @@ export interface UseLogcatResult {
   devices: Device[];
   selectedDevice: string | null;
   setSelectedDevice: (s: string) => void;
-  refreshDevices: () => Promise<void>;
+  /** 刷新设备列表；silent=true 时失败不弹错误（供轮询使用） */
+  refreshDevices: (silent?: boolean) => Promise<void>;
   buffer: string;
   setBuffer: (b: string) => void;
   running: boolean;
@@ -101,12 +102,20 @@ export function useLogcat(mergeStack = true): UseLogcatResult {
     mergeStackRef.current = mergeStack;
   }, [mergeStack]);
 
-  const refreshDevices = useCallback(async () => {
+  const refreshDevices = useCallback(async (silent = false) => {
     log.info("刷新设备列表");
     try {
       const list = await invoke<Device[]>("list_devices");
       log.info(`设备列表返回 ${list.length} 台`);
-      setDevices(list);
+      setDevices((prev) => {
+        // 列表无变化时不触发重渲染（轮询每 3 秒一次）
+        const same =
+          prev.length === list.length &&
+          prev.every(
+            (d, i) => d.serial === list[i].serial && d.state === list[i].state,
+          );
+        return same ? prev : list;
+      });
       setSelectedDevice((prev) => {
         if (prev && list.some((d) => d.serial === prev)) return prev;
         const online = list.find((d) => d.state === "device");
@@ -114,7 +123,8 @@ export function useLogcat(mergeStack = true): UseLogcatResult {
       });
     } catch (e) {
       log.error(`刷新设备列表失败：${String(e)}`);
-      setError(String(e));
+      // 轮询时的瞬时失败静默处理，避免 adb 抖动反复弹错误横幅
+      if (!silent) setError(String(e));
     }
   }, []);
 
@@ -269,6 +279,15 @@ export function useLogcat(mergeStack = true): UseLogcatResult {
   // 首次加载设备。
   useEffect(() => {
     refreshDevices();
+  }, [refreshDevices]);
+
+  // 每 3 秒静默轮询设备列表：自动感知插拔（插入自动选中并开始采集，
+  // 拔出自动切换到其他在线设备或置空），无需手动刷新。
+  useEffect(() => {
+    const timer = setInterval(() => {
+      refreshDevices(true);
+    }, 3000);
+    return () => clearInterval(timer);
   }, [refreshDevices]);
 
   // 设备变化 → 自动开始抓取。
