@@ -247,6 +247,117 @@ button.active {
   max-width: 260px;
 }
 
+/* 日志区域：滚动容器 + 「回到最新」浮动按钮（Chrome DevTools Console 风格） */
+.log-pane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.back-latest {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.back-latest:hover {
+  background: #6b9fff;
+  border: none;
+}
+
+.back-arrow {
+  font-weight: 700;
+}
+
+/* Ctrl+F 查找条（Android Studio Logcat 风格） */
+.find-bar {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+.find-bar input {
+  min-width: 0;
+  width: 200px;
+  height: 26px;
+}
+
+.find-count {
+  min-width: 64px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.find-btn {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.find-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border: none;
+}
+
+body.light .find-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.find-btn.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 查找匹配高亮：普通命中淡黄，当前命中橙色 */
+mark.find-hit {
+  background: rgba(255, 193, 7, 0.35);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0;
+}
+
+mark.find-hit.current {
+  background: #ff9800;
+  color: #1a1a1a;
+}
+
 .log-list {
   flex: 1;
   overflow: auto;

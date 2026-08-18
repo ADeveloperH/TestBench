@@ -21,7 +21,7 @@ import { ToolsPage } from "./features/tools/ToolsPage";
 import { WifiPanel } from "./features/devices/WifiPanel";
 import { BUILTIN_APPS, DEFAULT_BACKDOOR, loadApps } from "./core/apps";
 import type { AppInfo } from "./core/apps";
-import { BUFFERS, LEVELS, LEVEL_LABELS } from "./core/types";
+import { LEVELS, LEVEL_LABELS } from "./core/types";
 import type { DeviceInfo, LogLevel, ScrollCommand } from "./core/types";
 import "./App.css";
 
@@ -33,8 +33,6 @@ export default function App() {
     selectedDevice,
     setSelectedDevice,
     refreshDevices,
-    buffer,
-    setBuffer,
     running,
     paused,
     setPaused,
@@ -49,14 +47,13 @@ export default function App() {
     error,
     setError,
     waiting,
-  } = useLogcat(prefs.prefs.mergeStack);
+  } = useLogcat(true); // 合并堆栈固定开启
 
   const [view, setView] = useState<"log" | "manage" | "tools">("log");
   const [showWifi, setShowWifi] = useState(false);
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [selectedPackage, setSelectedPackage] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [copied, setCopied] = useState(false);
   const [showCases, setShowCases] = useState(false);
   const [manageTab, setManageTab] = useState<ManageTab>("apps");
   const testCaseStore = useTestCasesStore();
@@ -71,7 +68,6 @@ export default function App() {
   } = useSavedFilters();
   const [activeFilterId, setActiveFilterId] = useState("");
   const [filterName, setFilterName] = useState("");
-  const [jumpInput, setJumpInput] = useState("");
   const [savedTip, setSavedTip] = useState("");
 
   const selectedEntry = entries.find((e) => e.id === selectedId) ?? null;
@@ -177,11 +173,6 @@ export default function App() {
   const handleAppChange = (pkg: string) => {
     setSelectedPackage(pkg);
     applyAppFilter(pkg);
-  };
-
-  const handleRefreshApps = async () => {
-    await loadAppsList();
-    if (selectedPackage) await applyAppFilter(selectedPackage);
   };
 
   const getBackdoor = (pkg: string) =>
@@ -295,30 +286,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDevice]);
 
-  const markCopied = () => {
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  const copySelected = async () => {
-    if (!selectedEntry) return;
-    try {
-      await writeText(selectedEntry.raw);
-      markCopied();
-    } catch (e) {
-      setError(`复制失败：${String(e)}`);
-    }
-  };
-
-  const copyAll = async () => {
-    try {
-      await writeText(entries.map((e) => e.raw).join("\n"));
-      markCopied();
-    } catch (e) {
-      setError(`复制失败：${String(e)}`);
-    }
-  };
-
   // 选中某行后，Cmd/Ctrl+C 复制该行；不干扰手动框选文本的复制。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -404,16 +371,6 @@ export default function App() {
   const locateEntry = (id: number) => {
     setSelectedId(id);
     setScrollCommand({ seq: Date.now(), kind: "id", id });
-  };
-
-  const jumpToTop = () => setScrollCommand({ seq: Date.now(), kind: "top" });
-  const jumpToBottom = () =>
-    setScrollCommand({ seq: Date.now(), kind: "bottom" });
-  const jumpToIndex = () => {
-    const n = parseInt(jumpInput, 10);
-    if (!Number.isNaN(n) && n >= 1) {
-      setScrollCommand({ seq: Date.now(), kind: "index", index: n - 1 });
-    }
   };
 
   const handleSaveFilter = () => {
@@ -572,15 +529,6 @@ export default function App() {
             刷新
           </button>
 
-          <label>缓冲区</label>
-          <select value={buffer} onChange={(e) => setBuffer(e.target.value)}>
-            {BUFFERS.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.label}
-              </option>
-            ))}
-          </select>
-
           <label>级别</label>
           <select
             value={filters.minLevel}
@@ -618,13 +566,6 @@ export default function App() {
           <button onClick={exportLogs} title="导出日志（⌘/Ctrl+E）">
             导出
           </button>
-          <button onClick={copySelected} disabled={!selectedEntry}>
-            复制所选
-          </button>
-          <button onClick={copyAll} disabled={entries.length === 0}>
-            复制全部
-          </button>
-          {copied && <span className="count">已复制 ✓</span>}
           <button onClick={() => setShowWifi(!showWifi)}>WiFi 连接</button>
           <button onClick={() => setView("tools")}>工具</button>
           <button
@@ -673,17 +614,6 @@ export default function App() {
             />
             正则
           </label>
-          <label
-            className="checkbox"
-            title="把 Unity 等引擎逐行输出的堆栈帧合并回上一条日志"
-          >
-            <input
-              type="checkbox"
-              checked={prefs.prefs.mergeStack}
-              onChange={(e) => prefs.setMergeStack(e.target.checked)}
-            />
-            合并堆栈
-          </label>
           <HistoryInput
             value={filters.tags}
             onChange={(v) => setFilters({ ...filters, tags: v })}
@@ -707,9 +637,6 @@ export default function App() {
               </option>
             ))}
           </select>
-          <button onClick={handleRefreshApps} title="重新拉取应用清单并刷新">
-            刷新
-          </button>
         </div>
 
         <div className="toolbar-row">
@@ -744,18 +671,6 @@ export default function App() {
 
           <span className="toolbar-sep" />
 
-          <button onClick={jumpToTop}>最早</button>
-          <button onClick={jumpToBottom}>最新</button>
-          <input
-            className="jump-input"
-            value={jumpInput}
-            onChange={(e) => setJumpInput(e.target.value)}
-            placeholder="行号"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") jumpToIndex();
-            }}
-          />
-          <button onClick={jumpToIndex}>跳转</button>
           <span className="count">共 {entries.length} 条</span>
           {waiting && (
             <span className="count" style={{ color: "#f5a623" }}>
@@ -779,7 +694,15 @@ export default function App() {
             <div className="log-detail">
               <div className="log-detail-head">
                 <span className="log-detail-title">日志详情</span>
-                <button onClick={copySelected}>复制</button>
+                <button
+                  onClick={() =>
+                    writeText(selectedEntry.raw).catch((e) =>
+                      setError(`复制失败：${String(e)}`),
+                    )
+                  }
+                >
+                  复制
+                </button>
                 <button onClick={() => setSelectedId(null)}>关闭</button>
               </div>
               <pre className="log-detail-body">{selectedEntry.raw}</pre>

@@ -1,9 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { LogEntry, LogLevel, ScrollCommand } from "../../core/types";
 
 const ROW_HEIGHT = 20;
 const LONG_THRESHOLD = 1200;
+// 跟随暂停的迟滞区间：距底部 < 48px 恢复跟随，> 160px 才判定为「滚离底部」暂停跟随，
+// 中间地带保持原状态，轻微滑动不会误触发暂停。
+const RESUME_DISTANCE = 48;
+const PAUSE_DISTANCE = 160;
+// Ctrl+F 查找索引的刷新周期：日志持续涌入时，匹配统计按此周期重算（避免每 80ms 全量扫描）。
+const FIND_REFRESH_MS = 400;
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
   V: "#9e9e9e",
@@ -15,6 +27,160 @@ const LEVEL_COLORS: Record<LogLevel, string> = {
   A: "#b084f7",
 };
 
+// ============ Ctrl+F 查找（Android Studio Logcat 风格） ============
+
+/** 某一行的匹配信息：start = 全列表起始匹配序号，count = 该行匹配数，msgCount = 消息部分匹配数。 */
+interface FindRowInfo {
+  rowIndex: number;
+  id: number;
+  start: number;
+  count: number;
+  msgCount: number;
+}
+
+interface FindIndex {
+  /** 查询是否有效（正则编译失败为 false） */
+  valid: boolean;
+  total: number;
+  rows: FindRowInfo[];
+  byId: Map<number, { start: number; count: number; msgCount: number }>;
+}
+
+const EMPTY_INDEX: FindIndex = { valid: true, total: 0, rows: [], byId: new Map() };
+
+function countRegexMatches(re: RegExp, text: string): number {
+  let n = 0;
+  re.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m[0].length > 0) n += 1;
+    if (m.index === re.lastIndex) re.lastIndex += 1; // 防止零宽匹配死循环
+  }
+  return n;
+}
+
+function countLiteralMatches(
+  text: string,
+  needle: string,
+  caseSensitive: boolean,
+): number {
+  if (!needle) return 0;
+  const hay = caseSensitive ? text : text.toLowerCase();
+  let n = 0;
+  let idx = hay.indexOf(needle);
+  while (idx >= 0) {
+    n += 1;
+    idx = hay.indexOf(needle, idx + needle.length);
+  }
+  return n;
+}
+
+/** 全量扫描当前日志，构建匹配索引（查找条打开时按 FIND_REFRESH_MS 节流重算）。 */
+function buildFindIndex(
+  rows: LogEntry[],
+  query: string,
+  caseSensitive: boolean,
+  useRegex: boolean,
+): FindIndex {
+  if (!query) return EMPTY_INDEX;
+  let re: RegExp | null = null;
+  if (useRegex) {
+    try {
+      re = new RegExp(query, caseSensitive ? "g" : "gi");
+    } catch {
+      return { valid: false, total: 0, rows: [], byId: new Map() };
+    }
+  }
+  const needle = caseSensitive ? query : query.toLowerCase();
+  const list: FindRowInfo[] = [];
+  const byId = new Map<number, { start: number; count: number; msgCount: number }>();
+  let total = 0;
+  rows.forEach((e, rowIndex) => {
+    const msgCount = re
+      ? countRegexMatches(re, e.message)
+      : countLiteralMatches(e.message, needle, caseSensitive);
+    const tagCount = re
+      ? countRegexMatches(re, e.tag)
+      : countLiteralMatches(e.tag, needle, caseSensitive);
+    const count = msgCount + tagCount;
+    if (count > 0) {
+      list.push({ rowIndex, id: e.id, start: total, count, msgCount });
+      byId.set(e.id, { start: total, count, msgCount });
+      total += count;
+    }
+  });
+  return { valid: true, total, rows: list, byId };
+}
+
+/** 二分查找某个匹配序号所在的行。 */
+function rowOfOccurrence(idx: FindIndex, occ: number): FindRowInfo | null {
+  const rows = idx.rows;
+  if (rows.length === 0) return null;
+  let lo = 0;
+  let hi = rows.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (rows[mid].start <= occ) lo = mid;
+    else hi = mid - 1;
+  }
+  return rows[lo];
+}
+
+/** 把 text 中的匹配片段渲染为高亮 <mark>（当前匹配用橙色、其余淡黄）。 */
+function highlightText(
+  text: string,
+  query: string,
+  caseSensitive: boolean,
+  useRegex: boolean,
+  rowInfo: { start: number; count: number; msgCount: number },
+  currentOccurrence: number,
+  isTag: boolean,
+): ReactNode {
+  const occStart = rowInfo.start + (isTag ? rowInfo.msgCount : 0);
+  let re: RegExp | null = null;
+  if (useRegex && query) {
+    try {
+      re = new RegExp(query, caseSensitive ? "g" : "gi");
+    } catch {
+      re = null;
+    }
+  }
+  const out: ReactNode[] = [];
+  let last = 0;
+  let occ = occStart;
+  let key = 0;
+  const push = (from: number, to: number, matched: string) => {
+    if (matched.length === 0) return; // 跳过零宽匹配
+    if (from > last) out.push(text.slice(last, from));
+    out.push(
+      <mark
+        key={key++}
+        className={occ === currentOccurrence ? "find-hit current" : "find-hit"}
+      >
+        {matched}
+      </mark>,
+    );
+    occ += 1;
+    last = to;
+  };
+  if (re) {
+    for (const m of text.matchAll(re)) {
+      const i = m.index ?? 0;
+      push(i, i + m[0].length, m[0]);
+    }
+  } else if (query) {
+    const needle = caseSensitive ? query : query.toLowerCase();
+    const hay = caseSensitive ? text : text.toLowerCase();
+    let i = hay.indexOf(needle);
+    while (i >= 0) {
+      push(i, i + needle.length, text.slice(i, i + needle.length));
+      i = hay.indexOf(needle, i + needle.length);
+    }
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
 interface Props {
   entries: LogEntry[];
   selectedId: number | null;
@@ -22,10 +188,28 @@ interface Props {
   scrollCommand: ScrollCommand | null;
 }
 
+/**
+ * 跟随最新日志采用 Chrome DevTools Console 风格：
+ * 默认一直跟随；向上滚动查看历史时自动暂停跟随，
+ * 并浮现「回到最新」浮动按钮；点击或滚回底部后恢复跟随。
+ * Ctrl/Cmd+F 打开 Android Studio Logcat 风格的查找条（高亮 + 上一个/下一个 + 计数 + 正则/大小写）。
+ */
 export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const autoScrollRef = useRef(true);
+  const atBottomRef = useRef(true);
+  const [stuck, setStuck] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  // —— Ctrl+F 查找状态 ——
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [useRegex, setUseRegex] = useState(false);
+  const [currentMatch, setCurrentMatch] = useState(0);
+  const [findSnapshot, setFindSnapshot] = useState<LogEntry[]>([]);
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
 
   const virtualizer = useVirtualizer({
     count: entries.length,
@@ -38,16 +222,34 @@ export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props)
   const onScroll = () => {
     const el = parentRef.current;
     if (!el) return;
-    autoScrollRef.current =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (dist < RESUME_DISTANCE) {
+      // 回到底部附近 → 恢复跟随
+      atBottomRef.current = true;
+      setStuck(false);
+    } else if (dist > PAUSE_DISTANCE) {
+      // 明显滚离底部 → 暂停跟随
+      atBottomRef.current = false;
+      setStuck(true);
+    }
+    // 中间地带保持当前状态（迟滞），轻微滑动不改变跟随状态
   };
 
+  // 视图在底部时，新日志到达自动贴底。
   useEffect(() => {
     const el = parentRef.current;
-    if (autoScrollRef.current && el) {
+    if (atBottomRef.current && el) {
       el.scrollTop = el.scrollHeight;
     }
   }, [entries]);
+
+  // 回到最新：滚到底部并恢复跟随。
+  const backToLatest = () => {
+    const el = parentRef.current;
+    atBottomRef.current = true;
+    setStuck(false);
+    if (el) el.scrollTop = el.scrollHeight;
+  };
 
   // 收到滚动指令时执行：定位到指定日志 / 跳到最早、最新、指定行号。
   useEffect(() => {
@@ -73,89 +275,274 @@ export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props)
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
+  // —— 查找：节流刷新快照 + 匹配索引 ——
+  useEffect(() => {
+    if (!searchOpen) return;
+    setFindSnapshot(entriesRef.current);
+    const t = setInterval(
+      () => setFindSnapshot(entriesRef.current),
+      FIND_REFRESH_MS,
+    );
+    return () => clearInterval(t);
+  }, [searchOpen]);
+
+  const findIndex = useMemo(
+    () =>
+      searchOpen
+        ? buildFindIndex(findSnapshot, query, caseSensitive, useRegex)
+        : EMPTY_INDEX,
+    [searchOpen, findSnapshot, query, caseSensitive, useRegex],
+  );
+
+  const closeFind = () => {
+    setSearchOpen(false);
+    setQuery("");
+    setCurrentMatch(0);
+    setCaseSensitive(false);
+    setUseRegex(false);
+  };
+
+  useEffect(() => {
+    if (searchOpen) findInputRef.current?.focus();
+  }, [searchOpen]);
+
+  // 全局快捷键：Ctrl/Cmd+F 打开查找，Esc 关闭。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const inField =
+        t &&
+        (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+      if (e.key === "Escape" && !inField && searchOpen) {
+        e.preventDefault();
+        closeFind();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchOpen]);
+
+  // 查询/选项变化时重置到第一个匹配并跳过去。
+  const queryKeyRef = useRef("");
+  useEffect(() => {
+    const key = `${query}\u0000${caseSensitive}\u0000${useRegex}`;
+    if (!searchOpen || queryKeyRef.current === key) return;
+    queryKeyRef.current = key;
+    setCurrentMatch(0);
+    if (findIndex.total > 0) scrollToOccurrence(0, findIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchOpen, query, caseSensitive, useRegex, findIndex]);
+
+  const scrollToOccurrence = (occ: number, idx: FindIndex = findIndex) => {
+    if (occ < 0 || occ >= idx.total) return;
+    const row = rowOfOccurrence(idx, occ);
+    if (!row) return;
+    // 快照可能略旧：优先用 id 定位到当前列表里的真实行。
+    const liveIdx = entries.findIndex((e) => e.id === row.id);
+    const target =
+      liveIdx >= 0 ? liveIdx : Math.min(row.rowIndex, entries.length - 1);
+    virtualizer.scrollToIndex(target, { align: "center" });
+  };
+
+  const goNext = () => {
+    if (!searchOpen || findIndex.total === 0) return;
+    const next = Math.min(currentMatch + 1, findIndex.total - 1);
+    setCurrentMatch(next);
+    scrollToOccurrence(next);
+  };
+
+  const goPrev = () => {
+    if (!searchOpen || findIndex.total === 0) return;
+    const next = Math.max(currentMatch - 1, 0);
+    setCurrentMatch(next);
+    scrollToOccurrence(next);
+  };
+
   return (
-    <div className="log-list" ref={parentRef} onScroll={onScroll}>
-      <div
-        style={{
-          height: virtualizer.getTotalSize(),
-          width: "100%",
-          position: "relative",
-        }}
-      >
-        {virtualizer.getVirtualItems().map((vi) => {
-          const entry = entries[vi.index];
-          const color = LEVEL_COLORS[entry.level] ?? "#9e9e9e";
-          const selected = entry.id === selectedId;
-          // 只有「单行超长」才折叠；多行（如合并后的堆栈）直接完整显示
-          const isLong =
-            !entry.message.includes("\n") &&
-            entry.message.length > LONG_THRESHOLD;
-          const isExpanded = expandedId === entry.id;
-          const clamped = isLong && !isExpanded;
-          return (
-            <div
-              key={entry.id}
-              ref={virtualizer.measureElement}
-              data-index={vi.index}
-              className={selected ? "log-row selected" : "log-row"}
-              onClick={() => onSelect(entry.id)}
-              onDoubleClick={() => {
-                if (isLong) toggleExpand(entry.id);
-              }}
-              title={
-                isLong
-                  ? isExpanded
-                    ? "双击收起"
-                    : `双击展开完整日志（${entry.raw.length} 字符）`
-                  : undefined
-              }
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                transform: `translateY(${vi.start}px)`,
-              }}
-            >
-              <span className="log-expand">
-                {isLong && (
-                  <button
-                    className="log-expand-btn"
-                    title={isExpanded ? "收起" : "展开完整日志"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleExpand(entry.id);
-                    }}
-                  >
-                    {isExpanded ? "▾" : "▸"}
-                  </button>
-                )}
-              </span>
-              <span className="log-time">
-                {entry.date} {entry.time}
-              </span>
-              <span className="log-pid">{entry.pid}</span>
-              <span className="log-tid">{entry.tid}</span>
-              <span className="log-level" style={{ color }}>
-                {entry.level}
-              </span>
-              <span className="log-tag" style={{ color }}>
-                {entry.tag}
-              </span>
-              <span
-                className={clamped ? "log-msg clamped" : "log-msg"}
+    <div className="log-pane">
+      <div className="log-list" ref={parentRef} onScroll={onScroll}>
+        <div
+          style={{
+            height: virtualizer.getTotalSize(),
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          {virtualizer.getVirtualItems().map((vi) => {
+            const entry = entries[vi.index];
+            const color = LEVEL_COLORS[entry.level] ?? "#9e9e9e";
+            const selected = entry.id === selectedId;
+            // 只有「单行超长」才折叠；多行（如合并后的堆栈）直接完整显示
+            const isLong =
+              !entry.message.includes("\n") &&
+              entry.message.length > LONG_THRESHOLD;
+            const isExpanded = expandedId === entry.id;
+            const clamped = isLong && !isExpanded;
+            const rowInfo = findIndex.byId.get(entry.id);
+            return (
+              <div
+                key={entry.id}
+                ref={virtualizer.measureElement}
+                data-index={vi.index}
+                className={selected ? "log-row selected" : "log-row"}
+                onClick={() => onSelect(entry.id)}
+                onDoubleClick={() => {
+                  if (isLong) toggleExpand(entry.id);
+                }}
                 title={
-                  clamped
-                    ? `双击展开完整日志（${entry.raw.length} 字符）`
+                  isLong
+                    ? isExpanded
+                      ? "双击收起"
+                      : `双击展开完整日志（${entry.raw.length} 字符）`
                     : undefined
                 }
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${vi.start}px)`,
+                }}
               >
-                {entry.message}
-              </span>
-            </div>
-          );
-        })}
+                <span className="log-expand">
+                  {isLong && (
+                    <button
+                      className="log-expand-btn"
+                      title={isExpanded ? "收起" : "展开完整日志"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpand(entry.id);
+                      }}
+                    >
+                      {isExpanded ? "▾" : "▸"}
+                    </button>
+                  )}
+                </span>
+                <span className="log-time">
+                  {entry.date} {entry.time}
+                </span>
+                <span className="log-pid">{entry.pid}</span>
+                <span className="log-tid">{entry.tid}</span>
+                <span className="log-level" style={{ color }}>
+                  {entry.level}
+                </span>
+                <span className="log-tag" style={{ color }}>
+                  {rowInfo
+                    ? highlightText(
+                        entry.tag,
+                        query,
+                        caseSensitive,
+                        useRegex,
+                        rowInfo,
+                        currentMatch,
+                        true,
+                      )
+                    : entry.tag}
+                </span>
+                <span
+                  className={clamped ? "log-msg clamped" : "log-msg"}
+                  title={
+                    clamped
+                      ? `双击展开完整日志（${entry.raw.length} 字符）`
+                      : undefined
+                  }
+                >
+                  {rowInfo
+                    ? highlightText(
+                        entry.message,
+                        query,
+                        caseSensitive,
+                        useRegex,
+                        rowInfo,
+                        currentMatch,
+                        false,
+                      )
+                    : entry.message}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
+      {searchOpen && (
+        <div className="find-bar">
+          <input
+            ref={findInputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (e.shiftKey) goPrev();
+                else goNext();
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                goPrev();
+              } else if (e.key === "ArrowDown") {
+                e.preventDefault();
+                goNext();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                closeFind();
+              }
+            }}
+            placeholder="查找"
+          />
+          <span className="find-count">
+            {!findIndex.valid
+              ? "无效正则"
+              : findIndex.total > 0
+                ? `${Math.min(currentMatch + 1, findIndex.total)} / ${findIndex.total}`
+                : "无匹配"}
+          </span>
+          <button
+            className="find-btn"
+            onClick={goPrev}
+            title="上一个匹配（Shift+Enter / ↑）"
+          >
+            ▲
+          </button>
+          <button
+            className="find-btn"
+            onClick={goNext}
+            title="下一个匹配（Enter / ↓）"
+          >
+            ▼
+          </button>
+          <button
+            className={`find-btn ${caseSensitive ? "on" : ""}`}
+            onClick={() => setCaseSensitive(!caseSensitive)}
+            title="区分大小写"
+          >
+            Aa
+          </button>
+          <button
+            className={`find-btn ${useRegex ? "on" : ""}`}
+            onClick={() => setUseRegex(!useRegex)}
+            title="正则表达式"
+          >
+            .*
+          </button>
+          <button className="find-btn" onClick={closeFind} title="关闭（Esc）">
+            ×
+          </button>
+        </div>
+      )}
+      {stuck && entries.length > 0 && (
+        <button
+          className="back-latest"
+          onClick={backToLatest}
+          title="回到最新日志"
+        >
+          <span className="back-arrow">↓</span> 回到最新日志
+        </button>
+      )}
     </div>
   );
 }

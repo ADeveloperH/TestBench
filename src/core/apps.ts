@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+// import { invoke } from "@tauri-apps/api/core"; // 远程配置请求停用，暂不需要
 
 export interface AppInfo {
   name: string;
@@ -10,10 +10,11 @@ export const DEFAULT_BACKDOOR =
   "com.foundation.unity.productdebugger.ProductSettingsActivity";
 
 // 远程配置地址（公开仓库 raw 链接，无需 token）
-export const APPS_URL =
-  "https://raw.githubusercontent.com/ADeveloperH/TestBench/main/config/projects.json";
+// TODO: 远程配置请求暂时停用，后续需要时恢复。
+// export const APPS_URL =
+//   "https://raw.githubusercontent.com/ADeveloperH/TestBench/main/config/projects.json";
 
-const CACHE_KEY = "apps-config-cache-v1";
+// const CACHE_KEY = "apps-config-cache-v1";
 
 // 内置默认清单：首次安装或离线时兜底，之后以远程配置为准。
 export const BUILTIN_APPS: AppInfo[] = [
@@ -38,29 +39,32 @@ export const BUILTIN_APPS: AppInfo[] = [
 ];
 
 /**
- * 加载应用清单：远程 → 本地缓存 → 内置默认，三级兜底。
+ * 加载应用清单。
+ * TODO: 已停用「远程 → 本地缓存」两级来源，目前直接返回内置默认清单，
+ * 不再请求远程接口；后续需要时恢复下面的三级兜底逻辑。
  */
 export async function loadApps(): Promise<AppInfo[]> {
-  // 1. 远程
-  try {
-    const apps = await invoke<AppInfo[]>("fetch_remote_apps", { url: APPS_URL });
-    if (apps.length > 0) {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(apps));
-      return apps;
-    }
-  } catch {
-    // 忽略，继续尝试缓存
-  }
-  // 2. 本地缓存
-  try {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-      const apps = JSON.parse(cached) as AppInfo[];
-      if (Array.isArray(apps) && apps.length > 0) return apps;
-    }
-  } catch {
-    // 忽略
-  }
+  // TODO: 以下远程配置 + 本地缓存逻辑暂时停用，后续再处理。
+  // // 1. 远程
+  // try {
+  //   const apps = await invoke<AppInfo[]>("fetch_remote_apps", { url: APPS_URL });
+  //   if (apps.length > 0) {
+  //     localStorage.setItem(CACHE_KEY, JSON.stringify(apps));
+  //     return apps;
+  //   }
+  // } catch {
+  //   // 忽略，继续尝试缓存
+  // }
+  // // 2. 本地缓存
+  // try {
+  //   const cached = localStorage.getItem(CACHE_KEY);
+  //   if (cached) {
+  //     const apps = JSON.parse(cached) as AppInfo[];
+  //     if (Array.isArray(apps) && apps.length > 0) return apps;
+  //   }
+  // } catch {
+  //   // 忽略
+  // }
   // 3. 内置默认
   return BUILTIN_APPS;
 }
