@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -16,6 +17,63 @@ const RESUME_DISTANCE = 48;
 const PAUSE_DISTANCE = 160;
 // Ctrl+F 查找索引的刷新周期：日志持续涌入时，匹配统计按此周期重算（避免每 80ms 全量扫描）。
 const FIND_REFRESH_MS = 400;
+
+// ============ 表头列宽（可拖拽调整，持久化） ============
+
+type ColKey = "time" | "pid" | "tid" | "level" | "tag";
+
+const COL_DEFAULTS: Record<ColKey, number> = {
+  time: 132,
+  pid: 72,
+  tid: 72,
+  level: 40,
+  tag: 200,
+};
+
+const COL_MIN: Record<ColKey, number> = {
+  time: 70,
+  pid: 44,
+  tid: 44,
+  level: 40,
+  tag: 70,
+};
+
+const COL_MAX: Record<ColKey, number> = {
+  time: 320,
+  pid: 140,
+  tid: 140,
+  level: 80,
+  tag: 420,
+};
+
+const COL_WIDTHS_KEY = "log-col-widths-v1";
+
+/** 列说明：表头文案与悬停提示。 */
+const COL_HEADERS: { key: ColKey; label: string; tip: string }[] = [
+  { key: "time", label: "时间", tip: "日志时间" },
+  { key: "pid", label: "PID", tip: "进程 ID" },
+  { key: "tid", label: "TID", tip: "线程 ID" },
+  { key: "level", label: "级别", tip: "日志级别" },
+  { key: "tag", label: "Tag", tip: "日志标签" },
+];
+
+function loadColWidths(): Record<ColKey, number> {
+  const out = { ...COL_DEFAULTS };
+  try {
+    const raw = localStorage.getItem(COL_WIDTHS_KEY);
+    if (raw) {
+      const d = JSON.parse(raw) as Partial<Record<ColKey, number>>;
+      for (const k of Object.keys(COL_DEFAULTS) as ColKey[]) {
+        if (typeof d[k] === "number") {
+          out[k] = Math.min(COL_MAX[k], Math.max(COL_MIN[k], d[k]));
+        }
+      }
+    }
+  } catch {
+    // 忽略损坏的缓存
+  }
+  return out;
+}
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
   V: "#9e9e9e",
@@ -212,6 +270,51 @@ export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props)
   const entriesRef = useRef(entries);
   entriesRef.current = entries;
 
+  // —— 表头列宽（拖拽调整） ——
+  const [colWidths, setColWidths] = useState(loadColWidths);
+  const colWidthsRef = useRef(colWidths);
+  colWidthsRef.current = colWidths;
+  const colDragRef = useRef<{
+    col: ColKey;
+    startX: number;
+    startW: number;
+  } | null>(null);
+
+  const startColResize = (col: ColKey) => (e: ReactMouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    colDragRef.current = { col, startX: e.clientX, startW: colWidths[col] };
+    const onMove = (ev: MouseEvent) => {
+      if (!colDragRef.current) return;
+      const w = Math.min(
+        COL_MAX[col],
+        Math.max(
+          COL_MIN[col],
+          colDragRef.current.startW + (ev.clientX - colDragRef.current.startX),
+        ),
+      );
+      setColWidths((prev) => ({ ...prev, [col]: w }));
+    };
+    const onUp = () => {
+      colDragRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.classList.remove("col-resizing");
+      try {
+        localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(colWidthsRef.current));
+      } catch {
+        // 忽略写入失败
+      }
+    };
+    document.body.classList.add("col-resizing");
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  const resetColWidth = (col: ColKey) => () => {
+    setColWidths((prev) => ({ ...prev, [col]: COL_DEFAULTS[col] }));
+  };
+
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => parentRef.current,
@@ -376,6 +479,31 @@ export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props)
   return (
     <div className="log-pane">
       <div className="log-list" ref={parentRef} onScroll={onScroll}>
+        {/* 固定表头：sticky 于滚动容器内，与数据行同宽，天然对齐；列宽可拖拽调整 */}
+        <div className="log-head-wrap">
+          <div className="log-head">
+            <span className="log-expand" />
+            {COL_HEADERS.map(({ key, label, tip }) => (
+              <span
+                key={key}
+                className="log-head-cell"
+                style={{ width: colWidths[key] }}
+                title={tip}
+              >
+                <span className="log-head-label">{label}</span>
+                <span
+                  className="col-resizer"
+                  title={`拖动调整「${label}」列宽（双击重置）`}
+                  onMouseDown={startColResize(key)}
+                  onDoubleClick={resetColWidth(key)}
+                />
+              </span>
+            ))}
+            <span className="log-msg log-head-cell" title="日志内容">
+              内容
+            </span>
+          </div>
+        </div>
         <div
           style={{
             height: virtualizer.getTotalSize(),
@@ -433,15 +561,22 @@ export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props)
                     </button>
                   )}
                 </span>
-                <span className="log-time">
+                <span className="log-time" style={{ width: colWidths.time }}>
                   {entry.date} {entry.time}
                 </span>
-                <span className="log-pid">{entry.pid}</span>
-                <span className="log-tid">{entry.tid}</span>
-                <span className="log-level" style={{ color }}>
+                <span className="log-pid" style={{ width: colWidths.pid }}>
+                  {entry.pid}
+                </span>
+                <span className="log-tid" style={{ width: colWidths.tid }}>
+                  {entry.tid}
+                </span>
+                <span
+                  className="log-level"
+                  style={{ color, width: colWidths.level }}
+                >
                   {entry.level}
                 </span>
-                <span className="log-tag" style={{ color }}>
+                <span className="log-tag" style={{ color, width: colWidths.tag }}>
                   {rowInfo
                     ? highlightText(
                         entry.tag,

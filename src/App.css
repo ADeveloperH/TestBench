@@ -613,6 +613,67 @@ mark.find-hit.current {
   line-height: 1.5;
 }
 
+/* 日志固定表头（sticky 于滚动容器内，与数据行同宽对齐） */
+.log-head-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.log-head {
+  display: table;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.log-head > span {
+  display: table-cell;
+  vertical-align: middle;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.log-head .log-msg {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-head-cell {
+  position: relative;
+}
+
+.log-head-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+/* 列宽拖拽手柄（表头列右侧边缘，双击重置） */
+.col-resizer {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.col-resizer:hover {
+  background: rgba(75, 139, 255, 0.35);
+}
+
+body.col-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
 .log-row {
   display: table;
   table-layout: fixed;
