@@ -120,6 +120,27 @@ export default function App() {
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showFilterSave, setShowFilterSave] = useState(false);
   const [manageTab, setManageTab] = useState<ManageTab>("apps");
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // 「更多」菜单：点击外部或按 Esc 关闭（与 Select/HistoryInput 行为一致）。
+  useEffect(() => {
+    if (!showMoreActions) return;
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (moreMenuRef.current && !moreMenuRef.current.contains(target)) {
+        setShowMoreActions(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowMoreActions(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [showMoreActions]);
   const testCaseStore = useTestCasesStore();
   const {
     savedFilters,
@@ -768,7 +789,7 @@ export default function App() {
               <ToolbarIcon name="tests" />
               测试用例
             </button>
-            <div className="toolbar-more">
+            <div className="toolbar-more" ref={moreMenuRef}>
               <button
                 className={`toolbar-icon-action ${showMoreActions ? "active" : ""}`}
                 onClick={() => setShowMoreActions((shown) => !shown)}

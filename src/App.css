@@ -94,6 +94,13 @@ body.light .toolbar {
   pointer-events: none;
 }
 
+/* 窄窗口：隐藏居中标题，避免与两侧工具栏按钮视觉重叠 */
+@media (max-width: 1280px) {
+  .workspace-title {
+    display: none;
+  }
+}
+
 .toolbar-group {
   display: inline-flex;
   align-items: center;
@@ -1687,10 +1694,6 @@ body.light .history-dropdown {
   border-radius: 4px;
 }
 
-.toolbar .history-input {
-  min-width: min(34vw, 330px);
-}
-
 .toolbar .history-input input {
   width: 100%;
   min-width: 0;
@@ -1699,6 +1702,13 @@ body.light .history-dropdown {
 
 body.light .toolbar .history-input input {
   background: #fff;
+}
+
+/* Tag 过滤框固定紧凑宽度（搜索框宽度由 .toolbar-search-with-regex 控制） */
+.toolbar-filter-row > .history-input {
+  width: 180px;
+  min-width: 0;
+  flex-shrink: 0;
 }
 
 .checkbox {
