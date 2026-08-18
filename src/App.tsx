@@ -811,17 +811,6 @@ export default function App() {
                     <ToolbarIcon name="settings" />
                     设置与配置
                   </button>
-                  <button
-                    className="toolbar-more-item"
-                    onClick={() => {
-                      setManageTab("filters");
-                      setView("manage");
-                      setShowMoreActions(false);
-                    }}
-                  >
-                    <ToolbarIcon name="bookmark" />
-                    管理过滤器
-                  </button>
                   <div className="toolbar-more-item toolbar-more-font">
                     <ToolbarIcon name="font" />
                     <span>日志字号</span>
