@@ -1,4 +1,9 @@
-import { useMemo, useState } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type { AppInfo } from "../../core/apps";
 import { useTestCases, type CaseStatus } from "./useTestCases";
 import { ruleSummary, type TestCase } from "./engine";
@@ -14,6 +19,21 @@ interface Props {
   onLocate: (id: number) => void;
   onManage: () => void;
   onClose: () => void;
+}
+
+// 侧栏宽度：可拖拽调整，持久化。
+const SIDEBAR_WIDTH_KEY = "tc-sidebar-width-v2";
+const SIDEBAR_MIN_WIDTH = 280;
+const SIDEBAR_MAX_WIDTH = 640;
+
+function loadSidebarWidth(): number {
+  try {
+    const v = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    if (v >= SIDEBAR_MIN_WIDTH && v <= SIDEBAR_MAX_WIDTH) return v;
+  } catch {
+    // 忽略损坏的缓存
+  }
+  return 340;
 }
 
 const STATUS_META: Record<
@@ -51,6 +71,7 @@ export function TestCaseSidebar({
   onClose,
 }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [width, setWidth] = useState<number>(loadSidebarWidth);
   const { results, resetAll, resetCase } = useTestCases(
     allEntries,
     scopePkg,
@@ -58,6 +79,46 @@ export function TestCaseSidebar({
     store.cases,
   );
   const appName = apps.find((a) => a.package === scopePkg)?.name;
+
+  // 拖拽调整侧栏宽度（左边缘手柄，向左拖 = 加宽）。
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+  const onResizeStart = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startW: width };
+    let finalW = width;
+    // 不超过父容器（日志区）的 70%，保证日志列表始终可见
+    const maxByArea = Math.max(
+      SIDEBAR_MIN_WIDTH,
+      Math.floor((sidebarRef.current?.parentElement?.clientWidth ?? 0) * 0.7),
+    );
+    const maxW = Math.min(SIDEBAR_MAX_WIDTH, maxByArea);
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      finalW = Math.min(
+        maxW,
+        Math.max(
+          SIDEBAR_MIN_WIDTH,
+          dragRef.current.startW + (dragRef.current.startX - ev.clientX),
+        ),
+      );
+      setWidth(finalW);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.classList.remove("tc-resizing");
+      try {
+        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(finalW));
+      } catch {
+        // 忽略写入失败
+      }
+    };
+    document.body.classList.add("tc-resizing");
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
 
   const groupOf = (tc: TestCase) => tc.group?.trim() || "自定义";
 
@@ -115,7 +176,12 @@ export function TestCaseSidebar({
   }, [sortedResults]);
 
   return (
-    <div className="tc-sidebar">
+    <div className="tc-sidebar" style={{ width }} ref={sidebarRef}>
+      <div
+        className="tc-resizer"
+        onMouseDown={onResizeStart}
+        title="拖动调整测试用例面板宽度"
+      />
       <div className="tc-sidebar-head">
         <span className="tc-sidebar-title">测试用例</span>
         <button className="tc-sidebar-close" onClick={onClose}>

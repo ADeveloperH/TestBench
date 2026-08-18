@@ -1838,11 +1838,33 @@ body.light .log-detail {
 }
 
 .tc-sidebar {
-  width: 340px;
+  position: relative;
+  flex-shrink: 0;
+  width: 340px; /* 默认宽，拖拽后由组件内联样式覆盖 */
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: linear-gradient(135deg, #182230, #151e29);
+}
+
+/* 侧栏左边缘拖拽手柄：向左拖加宽、向右拖收窄 */
+.tc-resizer {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.tc-resizer:hover {
+  background: rgba(63, 130, 244, 0.4);
+}
+
+body.tc-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 body.light .tc-sidebar {
