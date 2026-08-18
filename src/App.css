@@ -1706,7 +1706,7 @@ body.light .toolbar .history-input input {
 
 /* Tag 过滤框固定紧凑宽度（搜索框宽度由 .toolbar-search-with-regex 控制） */
 .toolbar-filter-row > .history-input {
-  width: 180px;
+  width: 240px;
   min-width: 0;
   flex-shrink: 0;
 }

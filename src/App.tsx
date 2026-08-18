@@ -887,7 +887,7 @@ export default function App() {
               }
             onUnpin={(v) => prefs.removeFavorite("tags", v)}
             onRemoveHistory={(v) => prefs.removeHistory("tags", v)}
-            placeholder="Tag 过滤（逗号分隔，!前缀排除）"
+            placeholder="Tag（逗号分隔，!排除）"
             protectedValues={BUILTIN_TAG_VALUES}
           />
           <label>应用</label>
