@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { info as logInfo } from "@tauri-apps/plugin-log";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -26,6 +32,21 @@ import { BUILTIN_FILTER_IDS, BUILTIN_SEARCH_VALUES, BUILTIN_TAG_VALUES } from ".
 import { LEVELS, LEVEL_LABELS } from "./core/types";
 import type { DeviceInfo, LogLevel, ScrollCommand } from "./core/types";
 import "./App.css";
+
+// 日志详情面板高度：可拖动调整，持久化记住上次高度。
+const DETAIL_HEIGHT_KEY = "log-detail-height-v1";
+const DETAIL_MIN_HEIGHT = 80;
+const DETAIL_MAX_HEIGHT = 600;
+
+function loadDetailHeight(): number {
+  try {
+    const v = Number(localStorage.getItem(DETAIL_HEIGHT_KEY));
+    if (v >= DETAIL_MIN_HEIGHT && v <= DETAIL_MAX_HEIGHT) return v;
+  } catch {
+    // 忽略损坏的缓存
+  }
+  return 220;
+}
 
 export default function App() {
   const prefs = usePrefs();
@@ -56,6 +77,7 @@ export default function App() {
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [selectedPackage, setSelectedPackage] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [detailHeight, setDetailHeight] = useState<number>(loadDetailHeight);
   const [showCases, setShowCases] = useState(false);
   const [manageTab, setManageTab] = useState<ManageTab>("apps");
   const testCaseStore = useTestCasesStore();
@@ -446,6 +468,46 @@ export default function App() {
     setScrollCommand({ seq: Date.now(), kind: "id", id });
   };
 
+  // 拖拽调整日志详情面板高度（顶部边缘手柄，向上拖 = 加高）。
+  // 详情最多占日志区 70%，保证日志列表始终可见（不遮挡）。
+  const logLeftRef = useRef<HTMLDivElement>(null);
+  const detailDragRef = useRef<{ startY: number; startH: number } | null>(null);
+  const onDetailResizeStart = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    detailDragRef.current = { startY: e.clientY, startH: detailHeight };
+    let finalH = detailHeight;
+    const maxByArea = Math.max(
+      DETAIL_MIN_HEIGHT,
+      Math.floor((logLeftRef.current?.clientHeight ?? 0) * 0.7),
+    );
+    const maxH = Math.min(DETAIL_MAX_HEIGHT, maxByArea);
+    const onMove = (ev: MouseEvent) => {
+      if (!detailDragRef.current) return;
+      finalH = Math.min(
+        maxH,
+        Math.max(
+          DETAIL_MIN_HEIGHT,
+          detailDragRef.current.startH + (detailDragRef.current.startY - ev.clientY),
+        ),
+      );
+      setDetailHeight(finalH);
+    };
+    const onUp = () => {
+      detailDragRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.classList.remove("detail-resizing");
+      try {
+        localStorage.setItem(DETAIL_HEIGHT_KEY, String(finalH));
+      } catch {
+        // 忽略写入失败
+      }
+    };
+    document.body.classList.add("detail-resizing");
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
   const handleSaveFilter = () => {
     const name = filterName.trim();
     if (!name) return;
@@ -786,7 +848,7 @@ export default function App() {
       </div>
 
       <div className="log-main">
-        <div className="log-left">
+        <div className="log-left" ref={logLeftRef}>
           <LogList
             entries={entries}
             selectedId={selectedId}
@@ -794,7 +856,12 @@ export default function App() {
             scrollCommand={scrollCommand}
           />
           {selectedEntry && (
-            <div className="log-detail">
+            <div className="log-detail" style={{ height: detailHeight }}>
+              <div
+                className="log-detail-resizer"
+                onMouseDown={onDetailResizeStart}
+                title="拖动调整详情高度"
+              />
               <div className="log-detail-head">
                 <span className="log-detail-title">日志详情</span>
                 <button

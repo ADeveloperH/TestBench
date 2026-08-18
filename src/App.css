@@ -1228,12 +1228,32 @@ button.danger:hover {
 }
 
 .log-detail {
-  height: 220px;
+  position: relative;
   flex-shrink: 0;
   border-top: 1px solid var(--border);
   background: var(--bg-toolbar);
   display: flex;
   flex-direction: column;
+}
+
+/* 详情面板顶部拖拽手柄：向上拖加高、向下拖降低 */
+.log-detail-resizer {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 10;
+}
+
+.log-detail-resizer:hover {
+  background: rgba(75, 139, 255, 0.35);
+}
+
+body.detail-resizing {
+  cursor: row-resize;
+  user-select: none;
 }
 
 .log-detail-head {
