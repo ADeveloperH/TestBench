@@ -1027,6 +1027,14 @@ export default function App() {
               <div className="log-detail-head">
                 <span className="log-detail-title">日志详情</span>
                 <button
+                  title={`只显示 Tag 为「${selectedEntry.tag}」的日志`}
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, tags: selectedEntry.tag }))
+                  }
+                >
+                  只看此 Tag
+                </button>
+                <button
                   onClick={() =>
                     writeText(selectedEntry.raw).catch((e) =>
                       setError(`复制失败：${String(e)}`),
