@@ -109,7 +109,7 @@ export function ManagePage(props: Props) {
   };
 
   return (
-    <div className="manage-page">
+    <div className="manage-page settings-page">
       <div className="manage-header">
         <button onClick={props.onBack}>← 返回</button>
         <h1>设置</h1>

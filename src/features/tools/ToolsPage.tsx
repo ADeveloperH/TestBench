@@ -147,7 +147,7 @@ export function ToolsPage(props: Props) {
   };
 
   return (
-    <div className="manage-page page-scroll">
+    <div className="manage-page tools-page page-scroll">
       <div className="manage-header">
         <button onClick={props.onBack}>← 返回</button>
         <h1>工具</h1>
@@ -177,6 +177,8 @@ export function ToolsPage(props: Props) {
             className="tools-app-select"
             title="选择应用"
             value={pkg}
+            searchable
+            searchPlaceholder="搜索应用名或包名…"
             options={[
               { value: "", label: "选择应用", fullLabel: "选择应用" },
               ...props.apps.map((a) => ({

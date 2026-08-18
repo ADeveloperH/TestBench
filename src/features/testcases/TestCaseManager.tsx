@@ -85,7 +85,10 @@ export function TestCaseManager({ store, apps }: Props) {
         return (
           <div key={g} className="tc-group">
             <div className="tc-group-head" onClick={() => toggleGroup(g)}>
-              <span className="tc-group-arrow">{collapsed ? "▸" : "▾"}</span>
+              <span
+                className={`tc-group-arrow ${collapsed ? "collapsed" : ""}`}
+                aria-hidden="true"
+              />
               <span className="tc-group-name">{g}</span>
               <span className="count">{groupCases.length} 个用例</span>
             </div>
@@ -101,14 +104,14 @@ export function TestCaseManager({ store, apps }: Props) {
               title={expanded ? "点击收起" : "点击展开查看"}
             >
               <button
-                className="manage-move"
+                className={`manage-move tc-item-toggle ${expanded ? "expanded" : ""}`}
                 title={expanded ? "收起" : "展开查看"}
                 onClick={(e) => {
                   e.stopPropagation();
                   setExpandedId(expanded ? null : tc.id);
                 }}
               >
-                {expanded ? "▾" : "▸"}
+                <span aria-hidden="true" />
               </button>
               <label
                 className="checkbox"

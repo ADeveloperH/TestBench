@@ -5,7 +5,9 @@ import {
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { info as logInfo } from "@tauri-apps/plugin-log";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -29,7 +31,7 @@ import { ToolsPage } from "./features/tools/ToolsPage";
 import { WifiPanel } from "./features/devices/WifiPanel";
 import { BUILTIN_APPS, DEFAULT_BACKDOOR, loadApps } from "./core/apps";
 import type { AppInfo } from "./core/apps";
-import { BUILTIN_FILTER_IDS, BUILTIN_SEARCH_VALUES, BUILTIN_TAG_VALUES } from "./core/builtins";
+import { BUILTIN_SEARCH_VALUES, BUILTIN_TAG_VALUES } from "./core/builtins";
 import { LEVELS, LEVEL_LABELS } from "./core/types";
 import type { DeviceInfo, LogLevel, ScrollCommand } from "./core/types";
 import "./App.css";
@@ -47,6 +49,41 @@ function loadDetailHeight(): number {
     // 忽略损坏的缓存
   }
   return 220;
+}
+
+type ToolbarIconName =
+  | "play"
+  | "stop"
+  | "pause"
+  | "trash"
+  | "export"
+  | "wifi"
+  | "tools"
+  | "tests"
+  | "more"
+  | "settings"
+  | "bookmark"
+  | "font"
+  | "theme";
+
+function ToolbarIcon({ name }: { name: ToolbarIconName }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.8 };
+  const paths: Record<ToolbarIconName, ReactNode> = {
+    play: <path d="m9 7 7 5-7 5V7Z" />,
+    stop: <rect x="8" y="8" width="8" height="8" rx="1" />,
+    pause: <><path d="M9 7v10M15 7v10" /></>,
+    trash: <><path d="M5 7h14M9 7V5h6v2M7 7l1 12h8l1-12" /></>,
+    export: <><path d="M12 3v12M7 8l5-5 5 5" /><path d="M5 14v5h14v-5" /></>,
+    wifi: <><path d="M3.5 9.5a12 12 0 0 1 17 0M6.8 12.8a7.4 7.4 0 0 1 10.4 0M10.1 16.1a2.7 2.7 0 0 1 3.8 0" /><circle cx="12" cy="19" r=".8" fill="currentColor" stroke="none" /></>,
+    tools: <><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17a2 2 0 1 0 3 3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.2-2.2 2.6-2.6Z" /></>,
+    tests: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="m9 11 2 2 4-4M9 16h6" /></>,
+    more: <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></>,
+    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1-2.1 2.1-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5v.1h-3v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1-2.1-2.1.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1h-.1v-3h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1 2.1-2.1.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5v-.1h3v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1 2.1 2.1-.1.1a1.6 1.6 0 0 0-.3 1.8 1.6 1.6 0 0 0 1.5 1h.1v3h-.1a1.6 1.6 0 0 0-1.5 1Z" /></>,
+    bookmark: <><path d="M7 4.5A1.5 1.5 0 0 1 8.5 3h7A1.5 1.5 0 0 1 17 4.5V21l-5-3-5 3V4.5Z" /><path d="M12 7v6M9 10h6" /></>,
+    font: <><path d="M5 19 10 5h4l5 14M7 14h10" /></>,
+    theme: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
+  };
+  return <svg className="toolbar-icon" viewBox="0 0 24 24" {...common}>{paths[name]}</svg>;
 }
 
 export default function App() {
@@ -80,6 +117,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detailHeight, setDetailHeight] = useState<number>(loadDetailHeight);
   const [showCases, setShowCases] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
+  const [showFilterSave, setShowFilterSave] = useState(false);
   const [manageTab, setManageTab] = useState<ManageTab>("apps");
   const testCaseStore = useTestCasesStore();
   const {
@@ -535,12 +574,6 @@ export default function App() {
     setTimeout(() => setSavedTip(""), 2000);
   };
 
-  const handleDeleteFilter = () => {
-    if (!activeFilterId) return;
-    deleteFilter(activeFilterId);
-    setActiveFilterId("");
-  };
-
   const handleExportConfig = async () => {
     try {
       const config = buildExportConfig(
@@ -656,8 +689,10 @@ export default function App() {
       }
     >
       <div className="toolbar">
-        <div className="toolbar-row">
-          <Select
+        <div className="workspace-title">测试工作台</div>
+        <div className="toolbar-row toolbar-primary">
+          <div className="toolbar-group toolbar-device-group">
+            <Select
             className="device-select"
             title="选择设备"
             value={selectedDevice ?? ""}
@@ -673,132 +708,173 @@ export default function App() {
             ]}
             onChange={(v) => setSelectedDevice(v)}
           />
-          <button onClick={() => refreshDevices()} title="刷新设备列表">
-            刷新
-          </button>
-
-          <label>级别</label>
-          <Select
-            className="level-select"
-            title="最低日志级别"
-            value={filters.minLevel}
-            options={LEVELS.map((l) => ({
-              value: l,
-              label: LEVEL_LABELS[l],
-            }))}
-            onChange={(v) =>
-              setFilters({ ...filters, minLevel: v as LogLevel })
-            }
-          />
-
-          {running ? (
-            <button onClick={stop}>停止</button>
-          ) : (
-            <button onClick={start} disabled={!selectedDevice}>
-              开始
+            <button onClick={() => refreshDevices()} title="刷新设备列表">
+              刷新
             </button>
-          )}
+          </div>
 
-          <button
-            className={paused ? "active" : ""}
-            onClick={() => setPaused(!paused)}
-            disabled={!running}
-            title="暂停/继续抓取（空格）"
-          >
-            {paused ? "继续" : "暂停"}
-          </button>
+          <div className="toolbar-group toolbar-capture-group">
+            {running ? (
+              <button className="toolbar-icon-action active" onClick={stop}>
+                <ToolbarIcon name="stop" />
+                停止采集
+              </button>
+            ) : (
+              <button
+                className="toolbar-icon-action primary-action"
+                onClick={start}
+                disabled={!selectedDevice}
+              >
+                <ToolbarIcon name="play" />
+                开始采集
+              </button>
+            )}
 
-          <button onClick={clear} title="清空日志（⌘/Ctrl+L）">
-            清空
-          </button>
-          <button onClick={exportLogs} title="导出日志（⌘/Ctrl+E）">
-            导出
-          </button>
-          <button onClick={() => setShowWifi(!showWifi)}>WiFi 连接</button>
-          <button onClick={() => setView("tools")}>工具</button>
-          <button
-            className={showCases ? "active" : ""}
-            onClick={() => setShowCases(!showCases)}
-          >
-            测试用例
-          </button>
-          <button
-            onClick={() => {
-              setManageTab("apps");
-              setView("manage");
-            }}
-          >
-            设置
-          </button>
-          <span className="font-size-group" title="调整日志字号">
             <button
-              className="font-size-btn"
-              onClick={() =>
-                prefs.setLogFontSize(prefs.prefs.logFontSize - 1)
-              }
-              disabled={prefs.prefs.logFontSize <= 9}
-              title="缩小日志字号"
+              className={`toolbar-icon-action ${paused ? "active" : ""}`}
+              onClick={() => setPaused(!paused)}
+              disabled={!running}
+              title="暂停/继续抓取（空格）"
             >
-              A−
+              <ToolbarIcon name="pause" />
+              {paused ? "继续" : "暂停"}
+            </button>
+
+            <button className="toolbar-icon-action" onClick={clear} title="清空日志（⌘/Ctrl+L）">
+              <ToolbarIcon name="trash" />
+              清空
+            </button>
+          </div>
+
+          <span className="toolbar-spacer" />
+
+          <div className="toolbar-group toolbar-actions-group">
+            <button className="toolbar-icon-action" onClick={exportLogs} title="导出日志（⌘/Ctrl+E）">
+              <ToolbarIcon name="export" />
+              导出
+            </button>
+            <button className="toolbar-icon-action" onClick={() => setShowWifi(!showWifi)}>
+              <ToolbarIcon name="wifi" />
+              WiFi 连接
+            </button>
+            <button className="toolbar-icon-action" onClick={() => setView("tools")}>
+              <ToolbarIcon name="tools" />
+              工具
             </button>
             <button
-              className="font-size-btn font-size-value"
-              onClick={() => prefs.setLogFontSize(12)}
-              title="重置为默认 12px"
+              className={`toolbar-icon-action ${showCases ? "active" : ""}`}
+              onClick={() => setShowCases(!showCases)}
             >
-              {prefs.prefs.logFontSize}px
+              <ToolbarIcon name="tests" />
+              测试用例
             </button>
-            <button
-              className="font-size-btn"
-              onClick={() =>
-                prefs.setLogFontSize(prefs.prefs.logFontSize + 1)
-              }
-              disabled={prefs.prefs.logFontSize >= 20}
-              title="放大日志字号"
-            >
-              A+
-            </button>
-          </span>
-          <button
-            onClick={() =>
-              prefs.setTheme(prefs.prefs.theme === "light" ? "dark" : "light")
-            }
-            title="切换深色/浅色主题"
-          >
-            {prefs.prefs.theme === "light" ? "深色" : "浅色"}
-          </button>
+            <div className="toolbar-more">
+              <button
+                className={`toolbar-icon-action ${showMoreActions ? "active" : ""}`}
+                onClick={() => setShowMoreActions((shown) => !shown)}
+                aria-expanded={showMoreActions}
+              >
+                <ToolbarIcon name="more" />
+                更多
+              </button>
+              {showMoreActions && (
+                <div className="toolbar-more-menu">
+                  <button
+                    className="toolbar-more-item"
+                    onClick={() => {
+                      setManageTab("apps");
+                      setView("manage");
+                      setShowMoreActions(false);
+                    }}
+                  >
+                    <ToolbarIcon name="settings" />
+                    设置与配置
+                  </button>
+                  <button
+                    className="toolbar-more-item"
+                    onClick={() => {
+                      setManageTab("filters");
+                      setView("manage");
+                      setShowMoreActions(false);
+                    }}
+                  >
+                    <ToolbarIcon name="bookmark" />
+                    管理过滤器
+                  </button>
+                  <div className="toolbar-more-item toolbar-more-font">
+                    <ToolbarIcon name="font" />
+                    <span>日志字号</span>
+                    <span className="font-size-group" title="调整日志字号">
+                      <button
+                        className="font-size-btn"
+                        onClick={() => prefs.setLogFontSize(prefs.prefs.logFontSize - 1)}
+                        disabled={prefs.prefs.logFontSize <= 9}
+                        title="缩小日志字号"
+                      >
+                        A−
+                      </button>
+                      <button className="font-size-btn font-size-value" onClick={() => prefs.setLogFontSize(12)} title="重置为默认 12px">
+                        {prefs.prefs.logFontSize}px
+                      </button>
+                      <button
+                        className="font-size-btn"
+                        onClick={() => prefs.setLogFontSize(prefs.prefs.logFontSize + 1)}
+                        disabled={prefs.prefs.logFontSize >= 20}
+                        title="放大日志字号"
+                      >
+                        A+
+                      </button>
+                    </span>
+                  </div>
+                  <button
+                    className="toolbar-more-item"
+                    onClick={() => prefs.setTheme(prefs.prefs.theme === "light" ? "dark" : "light")}
+                  >
+                    <ToolbarIcon name="theme" />
+                    切换到{prefs.prefs.theme === "light" ? "深色" : "浅色"}主题
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="toolbar-row">
-          <HistoryInput
-            value={filters.search}
-            onChange={(v) => setFilters({ ...filters, search: v })}
-            favorites={prefs.prefs.searchFavorites}
-            history={prefs.prefs.searchHistory}
-            onAddHistory={(v) => prefs.addHistory("search", v)}
-            onPin={(v) => prefs.addFavorite("search", v)}
-            onUnpin={(v) => prefs.removeFavorite("search", v)}
-            onRemoveHistory={(v) => prefs.removeHistory("search", v)}
-            placeholder="搜索（消息或 Tag）"
-            protectedValues={BUILTIN_SEARCH_VALUES}
-          />
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={filters.regex}
-              onChange={(e) =>
-                setFilters({ ...filters, regex: e.target.checked })
+        <div className="toolbar-row toolbar-filter-row">
+          <div className="toolbar-search-with-regex">
+            <HistoryInput
+              value={filters.search}
+              onChange={(v) => setFilters({ ...filters, search: v })}
+              favorites={prefs.prefs.searchFavorites}
+              history={prefs.prefs.searchHistory}
+              onAddHistory={(v) => prefs.addHistory("search", v)}
+              onPin={(v, description) =>
+                prefs.addFavorite("search", v, description)
               }
+              onUnpin={(v) => prefs.removeFavorite("search", v)}
+              onRemoveHistory={(v) => prefs.removeHistory("search", v)}
+              placeholder="搜索（消息或 Tag）"
+              protectedValues={BUILTIN_SEARCH_VALUES}
             />
-            正则
-          </label>
+            <button
+              type="button"
+              className={`toolbar-regex-toggle ${filters.regex ? "on" : ""}`}
+              aria-pressed={filters.regex}
+              title="正则表达式"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setFilters({ ...filters, regex: !filters.regex })}
+            >
+              .*
+            </button>
+          </div>
           <HistoryInput
             value={filters.tags}
             onChange={(v) => setFilters({ ...filters, tags: v })}
             favorites={prefs.prefs.tagFavorites}
             history={prefs.prefs.tagHistory}
             onAddHistory={(v) => prefs.addHistory("tags", v)}
-            onPin={(v) => prefs.addFavorite("tags", v)}
+              onPin={(v, description) =>
+                prefs.addFavorite("tags", v, description)
+              }
             onUnpin={(v) => prefs.removeFavorite("tags", v)}
             onRemoveHistory={(v) => prefs.removeHistory("tags", v)}
             placeholder="Tag 过滤（逗号分隔）"
@@ -829,9 +905,19 @@ export default function App() {
             ]}
             onChange={(v) => handleAppChange(v)}
           />
-        </div>
-
-        <div className="toolbar-row">
+          <label className="toolbar-filter-label">级别</label>
+          <Select
+            className="level-select"
+            title="最低日志级别"
+            value={filters.minLevel}
+            options={LEVELS.map((l) => ({
+              value: l,
+              label: LEVEL_LABELS[l],
+            }))}
+            onChange={(v) =>
+              setFilters({ ...filters, minLevel: v as LogLevel })
+            }
+          />
           <label>过滤器</label>
           <Select
             className="filter-select"
@@ -846,32 +932,18 @@ export default function App() {
             ]}
             onChange={(v) => handleApplyFilter(v)}
           />
-          <input
-            className="filter-name"
-            value={filterName}
-            onChange={(e) => setFilterName(e.target.value)}
-            placeholder="保存为过滤器（名称）"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSaveFilter();
-            }}
-          />
-          <button onClick={handleSaveFilter} disabled={!filterName.trim()}>
-            保存
-          </button>
-          <button
-            onClick={handleDeleteFilter}
-            disabled={!activeFilterId || BUILTIN_FILTER_IDS.has(activeFilterId)}
-            title={
-              BUILTIN_FILTER_IDS.has(activeFilterId)
-                ? "内置过滤器不可删除"
-                : "删除当前过滤器"
-            }
-          >
-            删除
-          </button>
+          <div className="toolbar-filter-save">
+            <button
+              className={`toolbar-icon-action ${showFilterSave ? "active" : ""}`}
+              onClick={() => setShowFilterSave((shown) => !shown)}
+              title="保存当前筛选"
+              aria-expanded={showFilterSave}
+            >
+              <ToolbarIcon name="bookmark" />
+              保存筛选
+            </button>
+          </div>
           {savedTip && <span className="count">{savedTip}</span>}
-
-          <span className="toolbar-sep" />
 
           <span className="count">共 {entries.length} 条</span>
           {waiting && (
@@ -883,6 +955,49 @@ export default function App() {
 
         {showWifi && <WifiPanel onChanged={refreshDevices} />}
       </div>
+
+      {showFilterSave &&
+        createPortal(
+          <div
+            className="save-description-backdrop"
+            role="presentation"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setShowFilterSave(false);
+            }}
+          >
+            <div className="save-description-dialog" role="dialog" aria-modal="true" aria-label="保存筛选">
+              <h3>保存当前筛选</h3>
+              <p>为这组搜索、Tag、应用与级别条件添加一个描述。</p>
+              <input
+                value={filterName}
+                autoFocus
+                placeholder="筛选描述，例如：激励框架错误"
+                onChange={(e) => setFilterName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && filterName.trim()) {
+                    handleSaveFilter();
+                    setShowFilterSave(false);
+                  }
+                  if (e.key === "Escape") setShowFilterSave(false);
+                }}
+              />
+              <div className="save-description-actions">
+                <button onClick={() => setShowFilterSave(false)}>取消</button>
+                <button
+                  className="primary-action"
+                  onClick={() => {
+                    handleSaveFilter();
+                    setShowFilterSave(false);
+                  }}
+                  disabled={!filterName.trim()}
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       <div className="log-main">
         <div className="log-left" ref={logLeftRef}>
