@@ -469,7 +469,7 @@ export default function App() {
   };
 
   // 拖拽调整日志详情面板高度（顶部边缘手柄，向上拖 = 加高）。
-  // 详情最多占日志区 70%，保证日志列表始终可见（不遮挡）。
+  // 详情最多占日志区 50%，保证日志列表始终可见（不遮挡）。
   const logLeftRef = useRef<HTMLDivElement>(null);
   const detailDragRef = useRef<{ startY: number; startH: number } | null>(null);
   const onDetailResizeStart = (e: ReactMouseEvent) => {
@@ -478,7 +478,7 @@ export default function App() {
     let finalH = detailHeight;
     const maxByArea = Math.max(
       DETAIL_MIN_HEIGHT,
-      Math.floor((logLeftRef.current?.clientHeight ?? 0) * 0.7),
+      Math.floor((logLeftRef.current?.clientHeight ?? 0) * 0.5),
     );
     const maxH = Math.min(DETAIL_MAX_HEIGHT, maxByArea);
     const onMove = (ev: MouseEvent) => {
