@@ -23,7 +23,7 @@ const FIND_REFRESH_MS = 400;
 type ColKey = "time" | "pid" | "tid" | "level" | "tag";
 
 const COL_DEFAULTS: Record<ColKey, number> = {
-  time: 132,
+  time: 150,
   pid: 72,
   tid: 72,
   level: 40,
@@ -68,6 +68,9 @@ function loadColWidths(): Record<ColKey, number> {
           out[k] = Math.min(COL_MAX[k], Math.max(COL_MIN[k], d[k]));
         }
       }
+      // 旧默认时间列 132px 放不下完整时间（08-18 05:37:14.241），迁移到新默认；
+      // 用户手动拖过的其他宽度原样保留。
+      if (out.time === 132) out.time = COL_DEFAULTS.time;
     }
   } catch {
     // 忽略损坏的缓存
