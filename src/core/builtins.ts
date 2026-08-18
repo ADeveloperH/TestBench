@@ -10,26 +10,37 @@ import type { SavedFilter } from "../features/filters/useSavedFilters";
 
 /**
  * 内置搜索常用（value 为唯一键）。
- * 例：{ value: "Connection reset", description: "网络断连相关日志" }
  */
-export const BUILTIN_SEARCH_FAVORITES: Favorite[] = [];
+export const BUILTIN_SEARCH_FAVORITES: Favorite[] = [
+  { value: "NetWorkLog", description: "过滤接口请求" },
+];
 
 /**
  * 内置 Tag 常用（value 为唯一键）。
- * 例：{ value: "Unity", description: "Unity 引擎日志" }
  */
-export const BUILTIN_TAG_FAVORITES: Favorite[] = [];
+export const BUILTIN_TAG_FAVORITES: Favorite[] = [
+  { value: "Unity", description: "游戏日志" },
+];
 
 /**
  * 内置过滤器（id 为唯一键，建议使用 builtin_ 前缀；filters 结构与保存的过滤器一致）。
- * 例：
- * {
- *   id: "builtin_error_only",
- *   name: "只看 Error",
- *   filters: { minLevel: "E", search: "", regex: false, tags: "", pid: "", app: "" },
- * }
+ * 注意：pid 是设备相关的一次性进程号，内置过滤器不要填 pid；
+ * 需要按应用过滤时填 app 包名，应用时会自动重新解析 PID。
  */
-export const BUILTIN_FILTERS: SavedFilter[] = [];
+export const BUILTIN_FILTERS: SavedFilter[] = [
+  {
+    id: "builtin_network_request",
+    name: "网络请求",
+    filters: {
+      minLevel: "V",
+      search: "NetWorkLog",
+      regex: false,
+      tags: "Unity",
+      pid: "",
+      app: "com.lucky.tilematch",
+    },
+  },
+];
 
 /** 内置搜索常用的 value 集合（判定「不可取消常用」用）。 */
 export const BUILTIN_SEARCH_VALUES = new Set(

@@ -14,6 +14,7 @@ import {
   parseImportConfig,
 } from "./features/settings/config";
 import { HistoryInput } from "./components/HistoryInput";
+import { Select } from "./components/Select";
 import { LogList } from "./features/logcat/LogList";
 import { ManagePage, type ManageTab } from "./features/settings/ManagePage";
 import { TestCaseSidebar } from "./features/testcases/TestCaseSidebar";
@@ -342,7 +343,8 @@ export default function App() {
         t &&
         (t.tagName === "INPUT" ||
           t.tagName === "TEXTAREA" ||
-          t.tagName === "SELECT")
+          t.tagName === "SELECT" ||
+          t.tagName === "BUTTON")
       ) {
         return;
       }
@@ -515,34 +517,39 @@ export default function App() {
     <div className="app">
       <div className="toolbar">
         <div className="toolbar-row">
-          <select
+          <Select
+            className="device-select"
+            title="选择设备"
             value={selectedDevice ?? ""}
-            onChange={(e) => setSelectedDevice(e.target.value)}
-          >
-            {devices.length === 0 && <option value="">无设备</option>}
-            {devices.map((d) => (
-              <option key={d.serial} value={d.serial}>
-                {d.model || d.serial}（{d.transport === "wifi" ? "WiFi" : "USB"}）
-              </option>
-            ))}
-          </select>
+            options={[
+              ...(devices.length === 0
+                ? [{ value: "", label: "无设备", fullLabel: "无设备" }]
+                : []),
+              ...devices.map((d) => ({
+                value: d.serial,
+                label: `${d.model || d.serial}（${d.transport === "wifi" ? "WiFi" : "USB"}）`,
+                fullLabel: `${d.model || d.serial}（${d.transport === "wifi" ? "WiFi" : "USB"}）`,
+              })),
+            ]}
+            onChange={(v) => setSelectedDevice(v)}
+          />
           <button onClick={refreshDevices} title="刷新设备列表">
             刷新
           </button>
 
           <label>级别</label>
-          <select
+          <Select
+            className="level-select"
+            title="最低日志级别"
             value={filters.minLevel}
-            onChange={(e) =>
-              setFilters({ ...filters, minLevel: e.target.value as LogLevel })
+            options={LEVELS.map((l) => ({
+              value: l,
+              label: LEVEL_LABELS[l],
+            }))}
+            onChange={(v) =>
+              setFilters({ ...filters, minLevel: v as LogLevel })
             }
-          >
-            {LEVELS.map((l) => (
-              <option key={l} value={l}>
-                {LEVEL_LABELS[l]}
-              </option>
-            ))}
-          </select>
+          />
 
           {running ? (
             <button onClick={stop}>停止</button>
@@ -629,32 +636,37 @@ export default function App() {
             protectedValues={BUILTIN_TAG_VALUES}
           />
           <label>应用</label>
-          <select
+          <Select
+            className="app-select"
+            title="按应用过滤（自动解析 PID）"
             value={selectedPackage}
-            onChange={(e) => handleAppChange(e.target.value)}
-          >
-            <option value="">全部应用</option>
-            {effectiveApps.map((a) => (
-              <option key={a.package} value={a.package}>
-                {a.name}（{a.package}）
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "全部应用", fullLabel: "全部应用" },
+              ...effectiveApps.map((a) => ({
+                value: a.package,
+                label: `${a.name}（${a.package}）`,
+                fullLabel: `${a.name}（${a.package}）`,
+              })),
+            ]}
+            onChange={(v) => handleAppChange(v)}
+          />
         </div>
 
         <div className="toolbar-row">
           <label>过滤器</label>
-          <select
+          <Select
+            className="filter-select"
+            title="已保存的过滤器"
             value={activeFilterId}
-            onChange={(e) => handleApplyFilter(e.target.value)}
-          >
-            <option value="">（当前过滤）</option>
-            {savedFilters.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "（当前过滤）", fullLabel: "（当前过滤）" },
+              ...savedFilters.map((f) => ({
+                value: f.id,
+                label: f.name,
+              })),
+            ]}
+            onChange={(v) => handleApplyFilter(v)}
+          />
           <input
             className="filter-name"
             value={filterName}
