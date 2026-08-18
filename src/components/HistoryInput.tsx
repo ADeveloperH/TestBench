@@ -12,6 +12,8 @@ interface Props {
   onUnpin: (v: string) => void;
   onRemoveHistory: (v: string) => void;
   placeholder?: string;
+  /** 内置常用的 value 集合：内置项不可取消常用。 */
+  protectedValues?: Set<string>;
 }
 
 /** 受控的「历史 + 常用」输入框，数据由外部（usePrefs）提供。 */
@@ -25,6 +27,7 @@ export function HistoryInput({
   onUnpin,
   onRemoveHistory,
   placeholder,
+  protectedValues,
 }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -65,30 +68,36 @@ export function HistoryInput({
           {favorites.length > 0 && (
             <>
               <div className="history-title">常用</div>
-              {favorites.map((f) => (
-                <div key={f.value} className="history-item">
-                  <Tip
-                    className="history-text"
-                    text={f.description || undefined}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      select(f.value);
-                    }}
-                  >
-                    {f.value}
-                  </Tip>
-                  <button
-                    className="history-btn"
-                    title="取消常用"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      onUnpin(f.value);
-                    }}
-                  >
-                    ★
-                  </button>
-                </div>
-              ))}
+              {favorites.map((f) => {
+                const builtin = protectedValues?.has(f.value);
+                return (
+                  <div key={f.value} className="history-item">
+                    <Tip
+                      className="history-text"
+                      text={f.description || undefined}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        select(f.value);
+                      }}
+                    >
+                      {f.value}
+                    </Tip>
+                    <button
+                      className="history-btn"
+                      title={
+                        builtin ? "内置常用，不可取消" : "取消常用"
+                      }
+                      disabled={builtin}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onUnpin(f.value);
+                      }}
+                    >
+                      ★
+                    </button>
+                  </div>
+                );
+              })}
             </>
           )}
           {history.length > 0 && (

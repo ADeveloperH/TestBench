@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AppInfo } from "../../core/apps";
+import { isBuiltinApp } from "../../core/apps";
+import {
+  BUILTIN_SEARCH_FAVORITES,
+  BUILTIN_SEARCH_VALUES,
+  BUILTIN_TAG_FAVORITES,
+  BUILTIN_TAG_VALUES,
+} from "../../core/builtins";
 
 export type ListKind = "search" | "tags";
 
@@ -62,29 +69,52 @@ function normalizeFavorites(x: unknown): Favorite[] {
 }
 
 function load(): Prefs {
+  const base = { ...DEFAULTS };
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const d = JSON.parse(raw) as Partial<Prefs>;
-      return {
-        ...DEFAULTS,
-        ...d,
-        searchFavorites: normalizeFavorites(d.searchFavorites),
-        tagFavorites: normalizeFavorites(d.tagFavorites),
-      };
+      Object.assign(base, d);
+      base.searchFavorites = normalizeFavorites(d.searchFavorites);
+      base.tagFavorites = normalizeFavorites(d.tagFavorites);
     }
   } catch {
     // 忽略损坏的缓存
   }
-  return { ...DEFAULTS };
+  // 内置常用排在最前；过滤掉存储里与内置重复的旧副本。
+  base.searchFavorites = [
+    ...BUILTIN_SEARCH_FAVORITES,
+    ...base.searchFavorites.filter((f) => !BUILTIN_SEARCH_VALUES.has(f.value)),
+  ];
+  base.tagFavorites = [
+    ...BUILTIN_TAG_FAVORITES,
+    ...base.tagFavorites.filter((f) => !BUILTIN_TAG_VALUES.has(f.value)),
+  ];
+  // 兼容旧数据：内置应用现在不可删除，清理历史版本记录的隐藏项
+  base.removedPackages = base.removedPackages.filter(
+    (pkg) => !isBuiltinApp(pkg),
+  );
+  return base;
 }
 
 export function usePrefs() {
   const [prefs, setPrefs] = useState<Prefs>(load);
 
+  // 持久化时过滤内置常用（内置以代码为准，不写入本地存储）。
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify(prefs));
+      localStorage.setItem(
+        KEY,
+        JSON.stringify({
+          ...prefs,
+          searchFavorites: prefs.searchFavorites.filter(
+            (f) => !BUILTIN_SEARCH_VALUES.has(f.value),
+          ),
+          tagFavorites: prefs.tagFavorites.filter(
+            (f) => !BUILTIN_TAG_VALUES.has(f.value),
+          ),
+        }),
+      );
     } catch {
       // 忽略写入失败
     }
@@ -120,6 +150,10 @@ export function usePrefs() {
     (kind: ListKind, value: string, description = "") => {
       const v = value.trim();
       if (!v) return;
+      // 内置常用已存在，忽略重复添加
+      const builtin =
+        kind === "search" ? BUILTIN_SEARCH_VALUES : BUILTIN_TAG_VALUES;
+      if (builtin.has(v)) return;
       const desc = description.trim();
       setPrefs((p) => {
         const upd = (list: Favorite[]) => {
@@ -140,6 +174,10 @@ export function usePrefs() {
   );
 
   const removeFavorite = useCallback((kind: ListKind, value: string) => {
+    // 内置常用不可删除
+    const builtin =
+      kind === "search" ? BUILTIN_SEARCH_VALUES : BUILTIN_TAG_VALUES;
+    if (builtin.has(value)) return;
     setPrefs((p) =>
       kind === "search"
         ? {
@@ -201,6 +239,8 @@ export function usePrefs() {
   }, []);
 
   const removeApp = useCallback((pkg: string) => {
+    // 内置应用不可删除
+    if (isBuiltinApp(pkg)) return;
     setPrefs((p) => {
       if (p.addedApps.some((a) => a.package === pkg)) {
         return { ...p, addedApps: p.addedApps.filter((a) => a.package !== pkg) };

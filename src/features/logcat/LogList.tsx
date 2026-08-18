@@ -197,6 +197,7 @@ interface Props {
 export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
   const [stuck, setStuck] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -223,25 +224,33 @@ export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props)
     const el = parentRef.current;
     if (!el) return;
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // 只有用户主动向上滚动（scrollTop 变小）才视为「滚离底部」；
+    // 行高测量导致的内容增长（scrollTop 不变或变大）不会误触发暂停。
+    const scrolledUp = el.scrollTop < lastScrollTopRef.current;
+    lastScrollTopRef.current = el.scrollTop;
     if (dist < RESUME_DISTANCE) {
       // 回到底部附近 → 恢复跟随
       atBottomRef.current = true;
       setStuck(false);
-    } else if (dist > PAUSE_DISTANCE) {
-      // 明显滚离底部 → 暂停跟随
+    } else if (dist > PAUSE_DISTANCE && scrolledUp) {
+      // 明显向上滚动 → 暂停跟随
       atBottomRef.current = false;
       setStuck(true);
     }
     // 中间地带保持当前状态（迟滞），轻微滑动不改变跟随状态
   };
 
-  // 视图在底部时，新日志到达自动贴底。
+  // 视图在底部时保持贴底：
+  // - 新日志到达（entries 变化）重新锚定；
+  // - 行高测量更新（总高度变化）也会重新锚定，避免估计高度与实际高度
+  //   的差值把视图「顶」到真实底部上方导致跟随中断。
+  const totalSize = virtualizer.getTotalSize();
   useEffect(() => {
     const el = parentRef.current;
     if (atBottomRef.current && el) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [entries]);
+  }, [entries, totalSize]);
 
   // 回到最新：滚到底部并恢复跟随。
   const backToLatest = () => {

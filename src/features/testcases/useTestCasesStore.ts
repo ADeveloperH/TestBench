@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { BUILTIN_TEST_CASES, type TestCase } from "./engine";
+import {
+  BUILTIN_TEST_CASES,
+  isBuiltinTestCase,
+  type TestCase,
+} from "./engine";
 
 const KEY = "logcat-testcases-v4";
 
@@ -54,6 +58,8 @@ export function useTestCasesStore(): TestCasesStore {
   }, []);
 
   const removeCase = useCallback((id: string) => {
+    // 内置用例不可删除
+    if (isBuiltinTestCase(id)) return;
     setCases((prev) => prev.filter((c) => c.id !== id));
   }, []);
 

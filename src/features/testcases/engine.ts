@@ -393,6 +393,14 @@ export const BUILTIN_TEST_CASES: TestCase[] = [
   ...IE_CASES_GROUPED,
 ];
 
+/** 内置用例 id 集合（内置用例在设置页不可删除）。 */
+export const BUILTIN_TEST_CASE_IDS = new Set(BUILTIN_TEST_CASES.map((c) => c.id));
+
+/** 是否为内置测试用例。 */
+export function isBuiltinTestCase(id: string): boolean {
+  return BUILTIN_TEST_CASE_IDS.has(id);
+}
+
 export function conditionMatches(cond: Condition, entry: LogEntry): boolean {
   const fieldValue =
     cond.field === "message"

@@ -3,6 +3,7 @@ import type { AppInfo } from "../../core/apps";
 import type { SavedFilter } from "./useSavedFilters";
 import type { FilterState, LogLevel } from "../../core/types";
 import { LEVELS, LEVEL_LABELS } from "../../core/types";
+import { BUILTIN_FILTER_IDS } from "../../core/builtins";
 
 interface Props {
   savedFilters: SavedFilter[];
@@ -90,6 +91,7 @@ export function FilterManager(props: Props) {
         {props.savedFilters.map((f, i) => {
           const last = props.savedFilters.length - 1;
           const editing = editingId === f.id;
+          const builtin = BUILTIN_FILTER_IDS.has(f.id);
           return (
             <li
               key={f.id}
@@ -169,47 +171,51 @@ export function FilterManager(props: Props) {
                   <span className="manage-desc" title={summary(f)}>
                     {summary(f)}
                   </span>
+                  {builtin && <span className="manage-badge">内置</span>}
                   <button
                     className="manage-move"
-                    title="编辑"
+                    disabled={builtin}
+                    title={builtin ? "内置过滤器不可编辑" : "编辑"}
                     onClick={() => startEdit(f)}
                   >
                     ✎
                   </button>
                   <button
                     className="manage-move"
-                    disabled={i === 0}
-                    title="置顶"
+                    disabled={i === 0 || builtin}
+                    title={builtin ? "内置过滤器不可移动" : "置顶"}
                     onClick={() => props.onMove(i, 0)}
                   >
                     ⏫
                   </button>
                   <button
                     className="manage-move"
-                    disabled={i === 0}
-                    title="上移"
+                    disabled={i === 0 || builtin}
+                    title={builtin ? "内置过滤器不可移动" : "上移"}
                     onClick={() => props.onMove(i, i - 1)}
                   >
                     ↑
                   </button>
                   <button
                     className="manage-move"
-                    disabled={i === last}
-                    title="下移"
+                    disabled={i === last || builtin}
+                    title={builtin ? "内置过滤器不可移动" : "下移"}
                     onClick={() => props.onMove(i, i + 1)}
                   >
                     ↓
                   </button>
                   <button
                     className="manage-move"
-                    disabled={i === last}
-                    title="置底"
+                    disabled={i === last || builtin}
+                    title={builtin ? "内置过滤器不可移动" : "置底"}
                     onClick={() => props.onMove(i, last)}
                   >
                     ⏬
                   </button>
                   <button
                     className="manage-del"
+                    disabled={builtin}
+                    title={builtin ? "内置过滤器不可删除" : "删除"}
                     onClick={() => props.onDelete(f.id)}
                   >
                     删除

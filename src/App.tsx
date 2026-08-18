@@ -21,6 +21,7 @@ import { ToolsPage } from "./features/tools/ToolsPage";
 import { WifiPanel } from "./features/devices/WifiPanel";
 import { BUILTIN_APPS, DEFAULT_BACKDOOR, loadApps } from "./core/apps";
 import type { AppInfo } from "./core/apps";
+import { BUILTIN_FILTER_IDS, BUILTIN_SEARCH_VALUES, BUILTIN_TAG_VALUES } from "./core/builtins";
 import { LEVELS, LEVEL_LABELS } from "./core/types";
 import type { DeviceInfo, LogLevel, ScrollCommand } from "./core/types";
 import "./App.css";
@@ -603,6 +604,7 @@ export default function App() {
             onUnpin={(v) => prefs.removeFavorite("search", v)}
             onRemoveHistory={(v) => prefs.removeHistory("search", v)}
             placeholder="搜索（消息或 Tag）"
+            protectedValues={BUILTIN_SEARCH_VALUES}
           />
           <label className="checkbox">
             <input
@@ -624,6 +626,7 @@ export default function App() {
             onUnpin={(v) => prefs.removeFavorite("tags", v)}
             onRemoveHistory={(v) => prefs.removeHistory("tags", v)}
             placeholder="Tag 过滤（逗号分隔）"
+            protectedValues={BUILTIN_TAG_VALUES}
           />
           <label>应用</label>
           <select
@@ -664,7 +667,15 @@ export default function App() {
           <button onClick={handleSaveFilter} disabled={!filterName.trim()}>
             保存
           </button>
-          <button onClick={handleDeleteFilter} disabled={!activeFilterId}>
+          <button
+            onClick={handleDeleteFilter}
+            disabled={!activeFilterId || BUILTIN_FILTER_IDS.has(activeFilterId)}
+            title={
+              BUILTIN_FILTER_IDS.has(activeFilterId)
+                ? "内置过滤器不可删除"
+                : "删除当前过滤器"
+            }
+          >
             删除
           </button>
           {savedTip && <span className="count">{savedTip}</span>}

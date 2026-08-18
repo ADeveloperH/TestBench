@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { DEFAULT_BACKDOOR } from "../../core/apps";
+import { DEFAULT_BACKDOOR, isBuiltinApp } from "../../core/apps";
 import type { AppInfo } from "../../core/apps";
+import { BUILTIN_SEARCH_VALUES, BUILTIN_TAG_VALUES } from "../../core/builtins";
 import type { Favorite, ListKind, Prefs } from "./usePrefs";
 import type { SavedFilter } from "../filters/useSavedFilters";
 import type { TestCasesStore } from "../testcases/useTestCasesStore";
@@ -196,6 +197,9 @@ export function ManagePage(props: Props) {
                   <div className="manage-app-main">
                     <span className="manage-name">{a.name}</span>
                     <span className="manage-pkg">{a.package}</span>
+                    {isBuiltinApp(a.package) && (
+                      <span className="manage-badge">内置</span>
+                    )}
                     {isAdded(a.package) && (
                       <span className="manage-badge">手动</span>
                     )}
@@ -233,7 +237,12 @@ export function ManagePage(props: Props) {
                     </button>
                     <button
                       className="manage-del"
-                      title="删除"
+                      disabled={isBuiltinApp(a.package)}
+                      title={
+                        isBuiltinApp(a.package)
+                          ? "内置应用不可删除"
+                          : "删除"
+                      }
                       onClick={() => props.onRemoveApp(a.package)}
                     >
                       删除
@@ -293,6 +302,7 @@ export function ManagePage(props: Props) {
           onMoveFavorite={(from, to) => props.onMoveFavorite("search", from, to)}
           onRemoveHistory={(v) => props.onRemoveHistory("search", v)}
           onClearHistory={() => props.onClearHistory("search")}
+          builtinValues={BUILTIN_SEARCH_VALUES}
         />
       )}
 
@@ -314,6 +324,7 @@ export function ManagePage(props: Props) {
           onMoveFavorite={(from, to) => props.onMoveFavorite("tags", from, to)}
           onRemoveHistory={(v) => props.onRemoveHistory("tags", v)}
           onClearHistory={() => props.onClearHistory("tags")}
+          builtinValues={BUILTIN_TAG_VALUES}
         />
       )}
 
@@ -399,6 +410,8 @@ interface ListSectionProps {
   onMoveFavorite: (fromIndex: number, toIndex: number) => void;
   onRemoveHistory: (value: string) => void;
   onClearHistory: () => void;
+  /** 内置常用的 value 集合：内置项不可删除/移动/编辑。 */
+  builtinValues: Set<string>;
 }
 
 function ListSection(p: ListSectionProps) {
@@ -445,11 +458,13 @@ function ListSection(p: ListSectionProps) {
         {p.favorites.map((f, i) => {
           const last = p.favorites.length - 1;
           const editing = editingValue === f.value;
+          const builtin = p.builtinValues.has(f.value);
           return (
             <li key={f.value} className="manage-item">
               <span className="manage-name" title={f.description || f.value}>
                 {f.value}
               </span>
+              {builtin && <span className="manage-badge">内置</span>}
               {editing ? (
                 <input
                   className="manage-desc-input"
@@ -472,7 +487,8 @@ function ListSection(p: ListSectionProps) {
                   )}
                   <button
                     className="manage-move"
-                    title="编辑描述"
+                    disabled={builtin}
+                    title={builtin ? "内置常用不可编辑" : "编辑描述"}
                     onClick={() => startEdit(f)}
                   >
                     ✎
@@ -481,37 +497,42 @@ function ListSection(p: ListSectionProps) {
               )}
               <button
                 className="manage-move"
-                disabled={i === 0}
-                title="置顶"
+                disabled={i === 0 || builtin}
+                title={builtin ? "内置常用不可移动" : "置顶"}
                 onClick={() => p.onMoveFavorite(i, 0)}
               >
                 ⏫
               </button>
               <button
                 className="manage-move"
-                disabled={i === 0}
-                title="上移"
+                disabled={i === 0 || builtin}
+                title={builtin ? "内置常用不可移动" : "上移"}
                 onClick={() => p.onMoveFavorite(i, i - 1)}
               >
                 ↑
               </button>
               <button
                 className="manage-move"
-                disabled={i === last}
-                title="下移"
+                disabled={i === last || builtin}
+                title={builtin ? "内置常用不可移动" : "下移"}
                 onClick={() => p.onMoveFavorite(i, i + 1)}
               >
                 ↓
               </button>
               <button
                 className="manage-move"
-                disabled={i === last}
-                title="置底"
+                disabled={i === last || builtin}
+                title={builtin ? "内置常用不可移动" : "置底"}
                 onClick={() => p.onMoveFavorite(i, last)}
               >
                 ⏬
               </button>
-              <button className="manage-del" onClick={() => p.onRemoveFavorite(f.value)}>
+              <button
+                className="manage-del"
+                disabled={builtin}
+                title={builtin ? "内置常用不可删除" : "删除"}
+                onClick={() => p.onRemoveFavorite(f.value)}
+              >
                 删除
               </button>
             </li>

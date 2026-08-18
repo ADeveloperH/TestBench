@@ -38,6 +38,14 @@ export const BUILTIN_APPS: AppInfo[] = [
   { name: "Watermelon Merge Fun", package: "com.yuhuitech.fruitgarden" },
 ];
 
+/** 内置应用包名集合（内置应用在设置页不可删除）。 */
+export const BUILTIN_APP_PACKAGES = new Set(BUILTIN_APPS.map((a) => a.package));
+
+/** 是否为内置应用。 */
+export function isBuiltinApp(pkg: string): boolean {
+  return BUILTIN_APP_PACKAGES.has(pkg);
+}
+
 /**
  * 加载应用清单。
  * TODO: 已停用「远程 → 本地缓存」两级来源，目前直接返回内置默认清单，

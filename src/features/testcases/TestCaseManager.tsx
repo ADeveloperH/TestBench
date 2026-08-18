@@ -4,6 +4,7 @@ import type { TestCasesStore } from "./useTestCasesStore";
 import {
   cond,
   EFFECT_LABELS,
+  isBuiltinTestCase,
   ruleSummary,
   type ConditionExpr,
   type ConditionField,
@@ -125,6 +126,9 @@ export function TestCaseManager({ store, apps }: Props) {
                 />
               </label>
               <span className="tc-name">{tc.name}</span>
+              {isBuiltinTestCase(tc.id) && (
+                <span className="manage-badge">内置</span>
+              )}
               <span className="manage-badge">{scopeSummary(tc.scope)}</span>
               <span className="count">{tc.rules.length} 条规则</span>
               <button
@@ -143,6 +147,10 @@ export function TestCaseManager({ store, apps }: Props) {
               </button>
               <button
                 className="manage-del"
+                disabled={isBuiltinTestCase(tc.id)}
+                title={
+                  isBuiltinTestCase(tc.id) ? "内置用例不可删除" : "删除"
+                }
                 onClick={(e) => {
                   e.stopPropagation();
                   store.removeCase(tc.id);
