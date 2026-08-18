@@ -313,6 +313,12 @@ export function useLogcat(mergeStack = true): UseLogcatResult {
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
+    // Tag 过滤语法：普通项 = 包含匹配；`!` 前缀项 = 排除匹配（如 Unity, !Audio）
+    const includeTags = tags.filter((t) => !t.startsWith("!"));
+    const excludeTags = tags
+      .filter((t) => t.startsWith("!"))
+      .map((t) => t.slice(1).trim())
+      .filter(Boolean);
     const pids = filters.pid
       .split(",")
       .map((t) => t.trim())
@@ -331,8 +337,14 @@ export function useLogcat(mergeStack = true): UseLogcatResult {
       if (LEVEL_SEVERITY[e.level] < minSev) return false;
       if (pids.length && !pids.includes(e.pid)) return false;
       if (
-        tags.length &&
-        !tags.some((t) => e.tag.toLowerCase().includes(t.toLowerCase()))
+        includeTags.length &&
+        !includeTags.some((t) => e.tag.toLowerCase().includes(t.toLowerCase()))
+      ) {
+        return false;
+      }
+      if (
+        excludeTags.length &&
+        excludeTags.some((t) => e.tag.toLowerCase().includes(t.toLowerCase()))
       ) {
         return false;
       }

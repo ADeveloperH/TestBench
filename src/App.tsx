@@ -887,7 +887,7 @@ export default function App() {
               }
             onUnpin={(v) => prefs.removeFavorite("tags", v)}
             onRemoveHistory={(v) => prefs.removeHistory("tags", v)}
-            placeholder="Tag 过滤（逗号分隔）"
+            placeholder="Tag 过滤（逗号分隔，!前缀排除）"
             protectedValues={BUILTIN_TAG_VALUES}
           />
           <label>应用</label>
@@ -1033,6 +1033,24 @@ export default function App() {
                   }
                 >
                   只看此 Tag
+                </button>
+                <button
+                  title={`排除 Tag 为「${selectedEntry.tag}」的日志（在 Tag 过滤中追加 !${selectedEntry.tag}）`}
+                  onClick={() =>
+                    setFilters((f) => {
+                      const parts = f.tags
+                        .split(",")
+                        .map((t) => t.trim())
+                        .filter(Boolean);
+                      if (parts.includes(`!${selectedEntry.tag}`)) return f;
+                      return {
+                        ...f,
+                        tags: [...parts, `!${selectedEntry.tag}`].join(", "),
+                      };
+                    })
+                  }
+                >
+                  排除此 Tag
                 </button>
                 <button
                   onClick={() =>
