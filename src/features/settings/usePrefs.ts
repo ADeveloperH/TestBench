@@ -32,10 +32,21 @@ export interface Prefs {
   mergeStack: boolean;
   /** 主题：dark 深色 / light 浅色 */
   theme: "dark" | "light";
+  /** 日志字号（px，9~20，默认 12） */
+  logFontSize: number;
 }
 
 const KEY = "logcat-prefs-v1";
 const MAX_HISTORY = 30;
+export const LOG_FONT_MIN = 9;
+export const LOG_FONT_MAX = 20;
+export const LOG_FONT_DEFAULT = 12;
+
+function clampFontSize(v: unknown): number {
+  return typeof v === "number" && v >= LOG_FONT_MIN && v <= LOG_FONT_MAX
+    ? Math.round(v)
+    : LOG_FONT_DEFAULT;
+}
 
 const DEFAULTS: Prefs = {
   searchFavorites: [],
@@ -48,6 +59,7 @@ const DEFAULTS: Prefs = {
   backdoorOverrides: {},
   mergeStack: true,
   theme: "dark",
+  logFontSize: LOG_FONT_DEFAULT,
 };
 
 /** 兼容旧版：历史版本的常用是纯字符串，迁移成 { value, description }。 */
@@ -94,6 +106,8 @@ function load(): Prefs {
   base.removedPackages = base.removedPackages.filter(
     (pkg) => !isBuiltinApp(pkg),
   );
+  // 旧数据可能没有日志字号字段或值非法，统一兜底
+  base.logFontSize = clampFontSize(base.logFontSize);
   return base;
 }
 
@@ -278,6 +292,10 @@ export function usePrefs() {
     setPrefs((p) => ({ ...p, theme }));
   }, []);
 
+  const setLogFontSize = useCallback((v: number) => {
+    setPrefs((p) => ({ ...p, logFontSize: clampFontSize(v) }));
+  }, []);
+
   return {
     prefs,
     addHistory,
@@ -294,5 +312,6 @@ export function usePrefs() {
     replacePrefs,
     setMergeStack,
     setTheme,
+    setLogFontSize,
   };
 }

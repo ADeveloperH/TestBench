@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -646,7 +647,14 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      style={
+        {
+          "--log-font-size": `${prefs.prefs.logFontSize}px`,
+        } as CSSProperties
+      }
+    >
       <div className="toolbar">
         <div className="toolbar-row">
           <Select
@@ -722,6 +730,35 @@ export default function App() {
           >
             设置
           </button>
+          <span className="font-size-group" title="调整日志字号">
+            <button
+              className="font-size-btn"
+              onClick={() =>
+                prefs.setLogFontSize(prefs.prefs.logFontSize - 1)
+              }
+              disabled={prefs.prefs.logFontSize <= 9}
+              title="缩小日志字号"
+            >
+              A−
+            </button>
+            <button
+              className="font-size-btn font-size-value"
+              onClick={() => prefs.setLogFontSize(12)}
+              title="重置为默认 12px"
+            >
+              {prefs.prefs.logFontSize}px
+            </button>
+            <button
+              className="font-size-btn"
+              onClick={() =>
+                prefs.setLogFontSize(prefs.prefs.logFontSize + 1)
+              }
+              disabled={prefs.prefs.logFontSize >= 20}
+              title="放大日志字号"
+            >
+              A+
+            </button>
+          </span>
           <button
             onClick={() =>
               prefs.setTheme(prefs.prefs.theme === "light" ? "dark" : "light")

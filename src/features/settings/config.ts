@@ -27,6 +27,7 @@ function defaultPrefs(): Prefs {
     backdoorOverrides: {},
     mergeStack: true,
     theme: "dark",
+    logFontSize: 12,
   };
 }
 
@@ -59,6 +60,10 @@ function normalizePrefs(p: Partial<Prefs> | undefined): Prefs {
     backdoorOverrides: p.backdoorOverrides ?? {},
     mergeStack: typeof p.mergeStack === "boolean" ? p.mergeStack : true,
     theme: p.theme === "light" ? "light" : "dark",
+    logFontSize:
+      typeof p.logFontSize === "number" && p.logFontSize >= 9 && p.logFontSize <= 20
+        ? Math.round(p.logFontSize)
+        : 12,
   };
 }
 
@@ -131,6 +136,7 @@ function mergePrefs(local: Prefs, imported: Prefs): Prefs {
     },
     mergeStack: local.mergeStack,
     theme: local.theme,
+    logFontSize: local.logFontSize,
   };
 }
 
