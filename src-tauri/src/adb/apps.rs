@@ -39,6 +39,65 @@ pub struct App {
     pub package: String,
 }
 
+/// 设备应用运行状态快照：已安装包名 + 正在运行的进程名。
+/// 前端用于应用下拉的三态显示（运行中 / 已安装未运行 / 未安装）。
+#[derive(Debug, Clone, Serialize)]
+pub struct AppRuntimeStatus {
+    pub installed: Vec<String>,
+    pub running: Vec<String>,
+}
+
+/// 一次性收集设备上的已安装包名（pm list packages）与运行中进程名（ps -A）。
+/// 前端每 3 秒轮询一次，这里统一用 debug 级别日志。
+pub fn list_app_runtime_status(device: Option<&str>) -> Result<AppRuntimeStatus, String> {
+    log::debug!("采集应用运行状态：device={:?}", device);
+    let run = |args: &[&str]| -> Result<String, String> {
+        let mut cmd = adb_command();
+        if let Some(d) = device {
+            cmd.arg("-s").arg(d);
+        }
+        let output = cmd
+            .args(args)
+            .output()
+            .map_err(|e| format!("无法执行 adb：{e}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "adb 命令失败：{}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    };
+
+    let pkgs_out = run(&["shell", "pm", "list", "packages"])?;
+    let mut installed: Vec<String> = pkgs_out
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| l.starts_with("package:"))
+        .map(|l| l["package:".len()..].to_string())
+        .filter(|p| !p.is_empty())
+        .collect();
+    installed.sort();
+    installed.dedup();
+
+    let ps_out = run(&["shell", "ps", "-A"])?;
+    let mut running: Vec<String> = ps_out
+        .lines()
+        .skip(1) // 跳过表头
+        .filter_map(|l| l.split_whitespace().last().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .collect();
+    running.sort();
+    running.dedup();
+
+    log::debug!(
+        "应用运行状态：已安装 {} 个，运行进程 {} 个",
+        installed.len(),
+        running.len()
+    );
+    Ok(AppRuntimeStatus { installed, running })
+}
+
 /// 从远程 URL 拉取并解析应用清单（支持 `{ projects: [...] }` 或 `{ apps: [...] }`）。
 pub fn fetch_remote_apps(url: &str) -> Result<Vec<App>, String> {
     log::info!("拉取远程应用清单：{url}");

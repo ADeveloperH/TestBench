@@ -154,8 +154,8 @@ pub(crate) fn run_adb_capture(args: &[&str]) -> Result<String, String> {
 }
 
 pub use apps::{
-    clear_app_data, fetch_remote_apps, open_backdoor, resolve_pids, restart_app, uninstall_app,
-    App,
+    clear_app_data, fetch_remote_apps, list_app_runtime_status, open_backdoor, resolve_pids,
+    restart_app, uninstall_app, App, AppRuntimeStatus,
 };
 pub use devices::{
     connect, disconnect, generate_pairing, list_devices, mdns_connect_address,

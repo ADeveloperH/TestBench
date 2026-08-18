@@ -127,6 +127,76 @@ export default function App() {
     }
   };
 
+  // —— 应用运行状态（运行中 / 已安装未运行 / 未安装），每 3 秒轮询 ——
+  const [appRuntime, setAppRuntime] = useState<{
+    installed: string[];
+    running: string[];
+  } | null>(null);
+
+  const installedSet = useMemo(
+    () => new Set(appRuntime?.installed ?? []),
+    [appRuntime],
+  );
+  const runningSet = useMemo(() => {
+    // 进程名可能带 :xxx 服务后缀，归一化成主包名
+    const s = new Set<string>();
+    for (const p of appRuntime?.running ?? []) {
+      const i = p.indexOf(":");
+      s.add(i > 0 ? p.slice(0, i) : p);
+    }
+    return s;
+  }, [appRuntime]);
+
+  const appRunState = (
+    pkg: string,
+  ): "running" | "installed" | "missing" | "unknown" => {
+    // 尚未取到设备状态时返回 unknown（不显示状态点，避免首次闪烁误导）
+    if (!appRuntime) return "unknown";
+    if (runningSet.has(pkg)) return "running";
+    if (installedSet.has(pkg)) return "installed";
+    return "missing";
+  };
+
+  useEffect(() => {
+    let disposed = false;
+    const poll = async () => {
+      if (!selectedDevice) {
+        if (!disposed) setAppRuntime(null);
+        return;
+      }
+      try {
+        const status = await invoke<{ installed: string[]; running: string[] }>(
+          "app_runtime_status",
+          { device: selectedDevice },
+        );
+        if (!disposed) setAppRuntime(status);
+      } catch {
+        // 静默：瞬时失败保留上次结果，避免状态闪烁
+      }
+    };
+    poll();
+    const timer = setInterval(poll, 3000);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [selectedDevice]);
+
+  // 日志页应用下拉排序：运行中 → 已安装未运行 → 未安装，
+  // 组内保持设置页排序（effectiveApps 已按 appOrder 排好）。
+  const logPageApps = useMemo(() => {
+    if (!appRuntime) return effectiveApps;
+    const running: AppInfo[] = [];
+    const installed: AppInfo[] = [];
+    const missing: AppInfo[] = [];
+    for (const a of effectiveApps) {
+      if (runningSet.has(a.package)) running.push(a);
+      else if (installedSet.has(a.package)) installed.push(a);
+      else missing.push(a);
+    }
+    return [...running, ...installed, ...missing];
+  }, [effectiveApps, appRuntime, runningSet, installedSet]);
+
   const applyAppFilter = async (pkg: string) => {
     if (!pkg) {
       setFilters((f) => ({ ...f, pid: "", app: "" }));
@@ -642,11 +712,19 @@ export default function App() {
             value={selectedPackage}
             options={[
               { value: "", label: "全部应用", fullLabel: "全部应用" },
-              ...effectiveApps.map((a) => ({
-                value: a.package,
-                label: `${a.name}（${a.package}）`,
-                fullLabel: `${a.name}（${a.package}）`,
-              })),
+              ...logPageApps.map((a) => {
+                const state = appRunState(a.package);
+                return {
+                  value: a.package,
+                  label: (
+                    <span className={`app-opt app-opt-${state}`}>
+                      <i className="app-dot" />
+                      {a.name}（{a.package}）
+                    </span>
+                  ),
+                  fullLabel: `${a.name}（${a.package}）`,
+                };
+              }),
             ]}
             onChange={(v) => handleAppChange(v)}
           />

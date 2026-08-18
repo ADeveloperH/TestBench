@@ -12,13 +12,14 @@ use adb::{
     connect as adb_connect, current_activity as adb_current_activity,
     device_info as adb_device_info, disconnect as adb_disconnect,
     fetch_remote_apps as adb_fetch_remote_apps, generate_pairing as adb_generate_pairing,
-    install_apk as adb_install_apk, list_devices as adb_list_devices,
+    install_apk as adb_install_apk, list_app_runtime_status as adb_list_app_runtime_status,
+    list_devices as adb_list_devices,
     mdns_connect_address as adb_mdns_connect_address,
     mdns_pairing_address as adb_mdns_pairing_address, mirror as adb_mirror,
     open_backdoor as adb_open_backdoor, pair as adb_pair, resolve_pids as adb_resolve_pids,
     restart_app as adb_restart_app, screencap_png as adb_screencap_png,
-    uninstall_app as adb_uninstall_app, App, Device, DeviceInfo, LogcatProcess, PairingInfo,
-    ScrcpyRecord,
+    uninstall_app as adb_uninstall_app, App, AppRuntimeStatus, Device, DeviceInfo,
+    LogcatProcess, PairingInfo, ScrcpyRecord,
 };
 
 /// 全局运行状态：当前 logcat 进程 + 代号（用于识别过期读取线程）。
@@ -198,6 +199,12 @@ async fn mdns_connect_address() -> Result<Option<String>, String> {
 async fn resolve_pids(device: Option<String>, package: String) -> Result<Vec<String>, String> {
     log::debug!("收到前端命令 resolve_pids：device={:?} package={package}", device);
     adb_resolve_pids(device.as_deref(), &package)
+}
+
+#[tauri::command]
+async fn app_runtime_status(device: Option<String>) -> Result<AppRuntimeStatus, String> {
+    log::debug!("收到前端命令 app_runtime_status：device={:?}", device);
+    adb_list_app_runtime_status(device.as_deref())
 }
 
 #[tauri::command]
@@ -654,6 +661,7 @@ pub fn run() {
             mdns_pairing_address,
             mdns_connect_address,
             resolve_pids,
+            app_runtime_status,
             fetch_remote_apps,
             open_backdoor,
             restart_app,

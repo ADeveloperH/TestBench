@@ -240,6 +240,40 @@ body.light .select-option:hover {
   max-width: 280px;
 }
 
+/* 应用三态：运行中（绿点）/ 已安装未运行（灰）/ 未安装（空心淡灰） */
+.app-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.app-opt .app-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ok);
+}
+
+.app-opt-installed {
+  color: var(--text-dim);
+}
+
+.app-opt-installed .app-dot {
+  background: #8a8f98;
+}
+
+.app-opt-missing {
+  color: var(--text-dim);
+  opacity: 0.55;
+}
+
+.app-opt-missing .app-dot {
+  background: transparent;
+  border: 1px solid var(--text-dim);
+}
+
 .select-wrap.level-select .select-trigger {
   min-width: 110px;
 }
