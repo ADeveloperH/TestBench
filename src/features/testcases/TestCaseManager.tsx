@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { AppInfo } from "../../core/apps";
+import { Select } from "../../components/Select";
 import type { TestCasesStore } from "./useTestCasesStore";
 import {
   cond,
@@ -70,17 +71,13 @@ export function TestCaseManager({ store, apps }: Props) {
     <div className="tc-manager">
       <div className="manage-add">
         <button onClick={newCase}>新建用例</button>
-        <select
-          value={newGroup}
-          onChange={(e) => setNewGroup(e.target.value)}
+        <Select
+          className="tc-group-select"
           title="新用例的分组"
-        >
-          {groups.map((g) => (
-            <option key={g} value={g}>
-              {g}
-            </option>
-          ))}
-        </select>
+          value={newGroup}
+          options={groups.map((g) => ({ value: g, label: g }))}
+          onChange={(v) => setNewGroup(v)}
+        />
       </div>
       {groups.map((g) => {
         const groupCases = store.cases.filter((tc) => groupOf(tc) === g);
@@ -290,14 +287,20 @@ function TestCaseEditor({ tc, apps, onSave, onCancel }: EditorProps) {
       {!draft.scope.global && (
         <div className="scope-apps">
           <div className="manage-add">
-            <select value={addPkg} onChange={(e) => setAddPkg(e.target.value)}>
-              <option value="">选择应用</option>
-              {availableApps.map((a) => (
-                <option key={a.package} value={a.package}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+            <Select
+              className="tc-scope-select"
+              title="选择应用"
+              value={addPkg}
+              options={[
+                { value: "", label: "选择应用", fullLabel: "选择应用" },
+                ...availableApps.map((a) => ({
+                  value: a.package,
+                  label: a.name,
+                  fullLabel: `${a.name}（${a.package}）`,
+                })),
+              ]}
+              onChange={(v) => setAddPkg(v)}
+            />
             <button onClick={addApp} disabled={!addPkg}>
               添加
             </button>
@@ -367,14 +370,17 @@ function RuleEditor({ rule, onChange, onRemove }: RuleEditorProps) {
   return (
     <div className="tc-rule-editor">
       <div className="manage-add">
-        <select
+        <Select
+          className="tc-effect-select"
+          title="规则效果"
           value={rule.effect}
-          onChange={(e) => update({ effect: e.target.value as RuleEffect })}
-        >
-          <option value="pass">出现→通过</option>
-          <option value="error">出现→报错</option>
-          <option value="warn">出现→警告</option>
-        </select>
+          options={[
+            { value: "pass", label: "出现→通过" },
+            { value: "error", label: "出现→报错" },
+            { value: "warn", label: "出现→警告" },
+          ]}
+          onChange={(v) => update({ effect: v as RuleEffect })}
+        />
         <input
           placeholder="规则描述（必填）"
           value={rule.description}
@@ -461,30 +467,34 @@ function ExprEditor({ expr, onChange, onRemove, depth }: ExprEditorProps) {
         className="manage-add tc-condition"
         style={{ paddingLeft: depth * 16 }}
       >
-        <select
+        <Select
+          className="tc-field-select"
+          title="匹配字段"
           value={c.field}
-          onChange={(e) =>
-            onChange(
-              cond(e.target.value as ConditionField, c.op, c.value),
-            )
+          options={[
+            { value: "message", label: "日志内容" },
+            { value: "tag", label: "Tag" },
+            { value: "level", label: "级别" },
+          ]}
+          onChange={(v) =>
+            onChange(cond(v as ConditionField, c.op, c.value))
           }
-        >
-          <option value="message">日志内容</option>
-          <option value="tag">Tag</option>
-          <option value="level">级别</option>
-        </select>
-        <select
+        />
+        <Select
+          className="tc-op-select"
+          title="匹配方式"
           value={c.op}
-          onChange={(e) =>
-            onChange(cond(c.field, e.target.value as ConditionOp, c.value))
+          options={[
+            { value: "contains", label: "包含" },
+            { value: "not_contains", label: "不包含" },
+            { value: "equals", label: "等于" },
+            { value: "not_equals", label: "不等于" },
+            { value: "regex", label: "正则" },
+          ]}
+          onChange={(v) =>
+            onChange(cond(c.field, v as ConditionOp, c.value))
           }
-        >
-          <option value="contains">包含</option>
-          <option value="not_contains">不包含</option>
-          <option value="equals">等于</option>
-          <option value="not_equals">不等于</option>
-          <option value="regex">正则</option>
-        </select>
+        />
         <input
           placeholder="值"
           value={c.value}
@@ -527,19 +537,22 @@ function ExprEditor({ expr, onChange, onRemove, depth }: ExprEditorProps) {
   return (
     <div className="expr-group" style={{ paddingLeft: depth * 16 }}>
       <div className="manage-add">
-        <select
+        <Select
+          className="tc-groupop-select"
+          title="条件组合方式"
           value={expr.op}
-          onChange={(e) =>
+          options={[
+            { value: "and", label: "全部满足(AND)" },
+            { value: "or", label: "任一满足(OR)" },
+          ]}
+          onChange={(v) =>
             onChange({
               kind: "group",
-              op: e.target.value as GroupOp,
+              op: v as GroupOp,
               children: expr.children,
             })
           }
-        >
-          <option value="and">全部满足(AND)</option>
-          <option value="or">任一满足(OR)</option>
-        </select>
+        />
         {onRemove && (
           <button className="manage-del" onClick={onRemove}>
             删除此组

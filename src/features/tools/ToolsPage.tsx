@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import type { AppInfo } from "../../core/apps";
 import type { DeviceInfo } from "../../core/types";
+import { Select } from "../../components/Select";
 
 interface Props {
   apps: AppInfo[];
@@ -172,14 +173,20 @@ export function ToolsPage(props: Props) {
           <h2>应用操作</h2>
         <div className="manage-add">
           <label>应用</label>
-          <select value={pkg} onChange={(e) => setPkg(e.target.value)}>
-            <option value="">选择应用</option>
-            {props.apps.map((a) => (
-              <option key={a.package} value={a.package}>
-                {a.name}（{a.package}）
-              </option>
-            ))}
-          </select>
+          <Select
+            className="tools-app-select"
+            title="选择应用"
+            value={pkg}
+            options={[
+              { value: "", label: "选择应用", fullLabel: "选择应用" },
+              ...props.apps.map((a) => ({
+                value: a.package,
+                label: `${a.name}（${a.package}）`,
+                fullLabel: `${a.name}（${a.package}）`,
+              })),
+            ]}
+            onChange={(v) => setPkg(v)}
+          />
         </div>
         {!props.hasDevice && <p className="manage-desc">请先在日志页连接设备。</p>}
         <div className="tools-actions">

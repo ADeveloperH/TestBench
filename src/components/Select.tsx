@@ -62,22 +62,27 @@ export function Select({ value, options, onChange, title, className }: Props) {
       </button>
       {open && (
         <div className="select-menu">
-          {options.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              className={`select-option ${o.value === value ? "selected" : ""}`}
-              title={
-                o.fullLabel ?? (typeof o.label === "string" ? o.label : undefined)
-              }
-              onClick={() => {
-                onChange(o.value);
-                setOpen(false);
-              }}
-            >
-              {o.label}
-            </button>
-          ))}
+          {options.map((o) => {
+            const selected = o.value === value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                className={`select-option ${selected ? "selected" : ""}`}
+                title={
+                  o.fullLabel ??
+                  (typeof o.label === "string" ? o.label : undefined)
+                }
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+              >
+                <span className="select-check">{selected ? "✓" : ""}</span>
+                <span className="select-option-label">{o.label}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

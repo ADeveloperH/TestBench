@@ -176,7 +176,7 @@ button.active {
   top: calc(100% + 4px);
   left: 0;
   min-width: 100%;
-  max-width: 340px;
+  max-width: 400px;
   max-height: 320px;
   overflow-y: auto;
   background: var(--bg-toolbar);
@@ -188,7 +188,9 @@ button.active {
 }
 
 .select-option {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
   height: auto;
   padding: 5px 10px;
@@ -199,9 +201,6 @@ button.active {
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .select-option:hover {
@@ -213,7 +212,21 @@ body.light .select-option:hover {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.select-option.selected {
+.select-check {
+  width: 14px;
+  flex-shrink: 0;
+  font-size: 12px;
+  text-align: center;
+  color: var(--accent);
+}
+
+.select-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-option.selected .select-option-label {
   color: var(--accent);
 }
 
@@ -223,8 +236,8 @@ body.light .select-option:hover {
 }
 
 .select-wrap.app-select .select-trigger {
-  min-width: 110px;
-  max-width: 180px;
+  min-width: 180px;
+  max-width: 280px;
 }
 
 .select-wrap.level-select .select-trigger {
@@ -234,6 +247,46 @@ body.light .select-option:hover {
 .select-wrap.filter-select .select-trigger {
   min-width: 130px;
   max-width: 200px;
+}
+
+/* 管理页 / 工具页 / 用例编辑器里的下拉宽度 */
+.select-wrap.tools-app-select .select-trigger {
+  min-width: 180px;
+  max-width: 280px;
+}
+
+.select-wrap.filter-level-select .select-trigger {
+  min-width: 110px;
+}
+
+.select-wrap.filter-app-select .select-trigger {
+  min-width: 150px;
+  max-width: 240px;
+}
+
+.select-wrap.tc-group-select .select-trigger {
+  min-width: 110px;
+}
+
+.select-wrap.tc-scope-select .select-trigger {
+  min-width: 130px;
+  max-width: 220px;
+}
+
+.select-wrap.tc-effect-select .select-trigger {
+  min-width: 110px;
+}
+
+.select-wrap.tc-field-select .select-trigger {
+  min-width: 90px;
+}
+
+.select-wrap.tc-op-select .select-trigger {
+  min-width: 90px;
+}
+
+.select-wrap.tc-groupop-select .select-trigger {
+  min-width: 130px;
 }
 
 .toolbar-sep {

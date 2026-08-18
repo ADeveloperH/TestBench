@@ -4,6 +4,7 @@ import type { SavedFilter } from "./useSavedFilters";
 import type { FilterState, LogLevel } from "../../core/types";
 import { LEVELS, LEVEL_LABELS } from "../../core/types";
 import { BUILTIN_FILTER_IDS } from "../../core/builtins";
+import { Select } from "../../components/Select";
 
 interface Props {
   savedFilters: SavedFilter[];
@@ -111,18 +112,16 @@ export function FilterManager(props: Props) {
                     />
                     <label className="checkbox">
                       级别
-                      <select
+                      <Select
+                        className="filter-level-select"
+                        title="最低日志级别"
                         value={draftFilters.minLevel}
-                        onChange={(e) =>
-                          patch({ minLevel: e.target.value as LogLevel })
-                        }
-                      >
-                        {LEVELS.map((l) => (
-                          <option key={l} value={l}>
-                            {LEVEL_LABELS[l]}
-                          </option>
-                        ))}
-                      </select>
+                        options={LEVELS.map((l) => ({
+                          value: l,
+                          label: LEVEL_LABELS[l],
+                        }))}
+                        onChange={(v) => patch({ minLevel: v as LogLevel })}
+                      />
                     </label>
                   </div>
                   <div className="manage-filter-row">
@@ -144,17 +143,20 @@ export function FilterManager(props: Props) {
                       value={draftFilters.tags}
                       onChange={(e) => patch({ tags: e.target.value })}
                     />
-                    <select
+                    <Select
+                      className="filter-app-select"
+                      title="按应用过滤"
                       value={draftFilters.app ?? ""}
-                      onChange={(e) => patch({ app: e.target.value })}
-                    >
-                      <option value="">全部应用</option>
-                      {props.apps.map((a) => (
-                        <option key={a.package} value={a.package}>
-                          {a.name}（{a.package}）
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: "", label: "全部应用", fullLabel: "全部应用" },
+                        ...props.apps.map((a) => ({
+                          value: a.package,
+                          label: `${a.name}（${a.package}）`,
+                          fullLabel: `${a.name}（${a.package}）`,
+                        })),
+                      ]}
+                      onChange={(v) => patch({ app: v })}
+                    />
                   </div>
                   <div className="manage-filter-row">
                     <button onClick={saveEdit} disabled={!draftName.trim()}>
