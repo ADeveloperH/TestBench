@@ -710,6 +710,8 @@ export default function App() {
             className="app-select"
             title="按应用过滤（自动解析 PID）"
             value={selectedPackage}
+            searchable
+            searchPlaceholder="搜索应用名或包名…"
             options={[
               { value: "", label: "全部应用", fullLabel: "全部应用" },
               ...logPageApps.map((a) => {

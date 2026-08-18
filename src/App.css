@@ -230,6 +230,26 @@ body.light .select-option:hover {
   color: var(--accent);
 }
 
+/* 菜单顶部搜索框（searchable 模式） */
+.select-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  width: calc(100% - 12px);
+  margin: 0 6px 4px;
+  height: 26px;
+  font-size: 12px;
+  background: var(--bg-input);
+}
+
+.select-no-match {
+  padding: 8px 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+}
+
 .select-wrap.device-select .select-trigger {
   min-width: 150px;
   max-width: 240px;
