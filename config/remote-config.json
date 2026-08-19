@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-19T06:37:17.508Z",
+  "updatedAt": "2026-08-19T07:06:18.512Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -89,6 +89,10 @@
     {
       "value": "Test",
       "description": "测试 tag"
+    },
+    {
+      "value": "Test2",
+      "description": "测试tag2"
     }
   ],
   "filters": [
