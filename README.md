@@ -135,7 +135,31 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
-产物按当前操作系统生成（macOS 出 `.app`/`.dmg`，Windows 出 `.exe`/`.msi`）。跨平台构建已配置 GitHub Actions（`.github/workflows/build.yml`）：仓库 Actions 页手动触发，自动产出 Windows（msi/exe）与 macOS（arm64/x64 dmg）安装包。
+产物按当前操作系统生成（macOS 出 `.app`/`.dmg`，Windows 出 `.exe`/`.msi`）。跨平台构建已配置 GitHub Actions（`.github/workflows/build.yml`），分两种使用方式：
+
+### 内部测试（手动触发）
+
+仓库 Actions 页 → `构建安装包` → Run workflow，构建完成后从该次运行的 **Artifacts** 下载 Windows（msi/exe）与 macOS（arm64/x64 dmg）安装包。手动触发不会创建 Release。
+
+### 发布版本（面向用户，自动创建 Release）
+
+1. 修改 `src-tauri/tauri.conf.json` 与 `package.json` 里的版本号（保持一致）
+2. 打 tag 并推送：
+
+   ```bash
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+3. Actions 自动构建三个平台的安装包，完成后自动创建 GitHub Release 并上传资产。用户下载地址：
+
+   ```text
+   https://github.com/ADeveloperH/TestBench/releases
+   ```
+
+   每个版本一个 Release，点开版本即可看到 dmg / exe / msi 附件直接下载。
+
+> 同一 tag 重新触发构建时不会重复创建 Release，只会把新构建的安装包覆盖上传到已有 Release。
 
 ## 日志与调试
 

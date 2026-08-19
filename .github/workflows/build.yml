@@ -1,8 +1,10 @@
 # 双平台构建 TestBench 安装包（Windows + macOS）
 # 触发方式：
 #   1. 手动：仓库页面 → Actions → 本 workflow → Run workflow
+#      产物在每次运行的 Artifacts 里下载（内部测试用）
 #   2. 自动：推送 v* 标签（如 v0.1.0）
-# 产物在每次运行的 Artifacts 里下载。
+#      构建完成后自动创建 GitHub Release 并上传安装包，
+#      用户从 https://github.com/ADeveloperH/TestBench/releases 下载
 name: 构建安装包
 
 on:
@@ -115,3 +117,40 @@ jobs:
           path: |
             src-tauri/target/release/bundle/dmg/*.dmg
             src-tauri/target/release/bundle/macos/*.app
+
+  # 仅 tag 推送触发：汇总三个平台的安装包，自动创建/补充 GitHub Release。
+  # 手动触发（workflow_dispatch）不会走到这里，内部测试仍走 Artifacts 下载。
+  publish:
+    name: 发布 GitHub Release
+    needs: [build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 创建 Release + 上传资产所需
+    steps:
+      - name: 汇总各平台安装包
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 创建（或补充）Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          # 只收集安装包文件（跳过 .app 目录等，Release 资产必须是单个文件）
+          mapfile -t FILES < <(find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.msi' \) | sort)
+          echo "待上传资产："
+          printf '%s\n' "${FILES[@]}"
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "未找到任何安装包资产"
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # 同 tag 重跑：Release 已存在，只补充/覆盖上传资产
+            echo "Release $TAG 已存在，补充上传资产"
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          else
+            gh release create "$TAG" "${FILES[@]}" --generate-notes --title "TestBench $TAG"
+          fi
