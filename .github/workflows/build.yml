@@ -129,6 +129,9 @@ jobs:
     permissions:
       contents: write # 创建 Release + 上传资产所需
     steps:
+      # gh CLI 需要 git 上下文来确定仓库，必须 checkout（否则 gh 报「无法确定仓库」）
+      - uses: actions/checkout@v4
+
       - name: 汇总各平台安装包
         uses: actions/download-artifact@v4
         with:
@@ -137,8 +140,10 @@ jobs:
       - name: 创建（或补充）Release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          gh --version
           TAG="${{ github.ref_name }}"
           # 只收集安装包文件（跳过 .app 目录等，Release 资产必须是单个文件）
           mapfile -t FILES < <(find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.msi' \) | sort)
