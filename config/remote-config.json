@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-19T07:06:18.512Z",
+  "updatedAt": "2026-08-19T08:04:42.307Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -85,29 +85,9 @@
     {
       "value": "Unity",
       "description": "游戏日志"
-    },
-    {
-      "value": "Test",
-      "description": "测试 tag"
-    },
-    {
-      "value": "Test2",
-      "description": "测试tag2"
     }
   ],
   "filters": [
-    {
-      "id": "builtin_network_request",
-      "name": "网络请求",
-      "filters": {
-        "minLevel": "V",
-        "search": "NetWorkLog",
-        "regex": false,
-        "tags": "Unity",
-        "pid": "",
-        "app": "com.lucky.tilematch"
-      }
-    },
     {
       "id": "msu1fpx7-l1u70e",
       "name": "游戏接口日志",
