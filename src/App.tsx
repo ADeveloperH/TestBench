@@ -154,6 +154,15 @@ export default function App() {
   const [activeFilterId, setActiveFilterId] = useState("");
   const [filterName, setFilterName] = useState("");
   const [savedTip, setSavedTip] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  /** 顶部绿色 toast 提示（瞬时反馈，2.5 秒自动消失）。 */
+  const showToast = (msg: string) => {
+    setToast(msg);
+    if (toastTimerRef.current != null) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2500);
+  };
 
   const selectedEntry = entries.find((e) => e.id === selectedId) ?? null;
   const [scrollCommand, setScrollCommand] = useState<ScrollCommand | null>(null);
@@ -379,6 +388,7 @@ export default function App() {
       path,
     });
     notify("APK 安装完成", out).catch(() => {});
+    showToast("APK 安装完成");
     return `安装结果：${out}`;
   };
 
@@ -484,6 +494,7 @@ export default function App() {
         invoke<string>("install_apk", { device: selectedDevice, path: apk })
           .then((out) => {
             notify("APK 安装完成", out).catch(() => {});
+            showToast("APK 安装完成");
             setSavedTip(`安装完成：${out}`);
             setError(null);
           })
@@ -1094,6 +1105,14 @@ export default function App() {
           />
         )}
       </div>
+
+      {toast &&
+        createPortal(
+          <div className="toast" role="status">
+            {toast}
+          </div>,
+          document.body,
+        )}
 
       {error && <div className="error">{error}</div>}
     </div>

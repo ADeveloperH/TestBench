@@ -1946,6 +1946,43 @@ body.light .tc-match {
   background: #49222c;
 }
 
+/* 顶部绿色 toast：瞬时成功反馈（安装完成等），2.5 秒自动消失 */
+.toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6000;
+  padding: 9px 18px;
+  border: 1px solid rgba(67, 199, 123, 0.5);
+  border-radius: 8px;
+  background: #14241d;
+  color: #7fe0a8;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+  pointer-events: none;
+  animation: toast-in 160ms ease;
+}
+
+body.light .toast {
+  border-color: #b7e3c8;
+  background: #eefaf2;
+  color: #1f8a4d;
+  box-shadow: 0 10px 26px rgba(42, 58, 87, 0.18);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 .manage-page {
   max-width: 1320px;
   margin: 0 auto;
