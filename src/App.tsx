@@ -153,11 +153,10 @@ export default function App() {
   } = useSavedFilters();
   const [activeFilterId, setActiveFilterId] = useState("");
   const [filterName, setFilterName] = useState("");
-  const [savedTip, setSavedTip] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
-  /** 顶部绿色 toast 提示（瞬时反馈，2.5 秒自动消失）。 */
+  /** 底部绿色 toast 提示（瞬时反馈，2.5 秒自动消失）。 */
   const showToast = (msg: string) => {
     setToast(msg);
     if (toastTimerRef.current != null) window.clearTimeout(toastTimerRef.current);
@@ -495,7 +494,6 @@ export default function App() {
           .then((out) => {
             notify("APK 安装完成", out).catch(() => {});
             showToast("APK 安装完成");
-            setSavedTip(`安装完成：${out}`);
             setError(null);
           })
           .catch((e) => setError(`安装失败：${String(e)}`));
@@ -597,8 +595,7 @@ export default function App() {
     const id = saveFilter(name, filters);
     setActiveFilterId(id);
     setFilterName("");
-    setSavedTip(`已保存「${name}」`);
-    setTimeout(() => setSavedTip(""), 2000);
+    showToast(`已保存筛选「${name}」`);
   };
 
   const handleApplyFilter = (id: string) => {
@@ -613,8 +610,7 @@ export default function App() {
     } else {
       setSelectedPackage("");
     }
-    setSavedTip(`已应用「${f.name}」`);
-    setTimeout(() => setSavedTip(""), 2000);
+    showToast(`已应用筛选「${f.name}」`);
   };
 
   const handleExportConfig = async () => {
@@ -975,8 +971,6 @@ export default function App() {
               保存筛选
             </button>
           </div>
-          {savedTip && <span className="count">{savedTip}</span>}
-
           <span className="count">共 {entries.length} 条</span>
           {waiting && (
             <span className="count" style={{ color: "#f5a623" }}>

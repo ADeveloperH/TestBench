@@ -1946,14 +1946,14 @@ body.light .tc-match {
   background: #49222c;
 }
 
-/* 顶部绿色 toast：瞬时成功反馈（安装完成等），2.5 秒自动消失 */
+/* 底部绿色 toast：瞬时成功反馈（安装完成等），统一显示在日志列表最下边，2.5 秒自动消失 */
 .toast {
   position: fixed;
-  top: 16px;
+  bottom: 44px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 6000;
-  padding: 9px 18px;
+  padding: 10px 20px;
   border: 1px solid rgba(67, 199, 123, 0.5);
   border-radius: 8px;
   background: #14241d;
@@ -1975,7 +1975,7 @@ body.light .toast {
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -6px);
+    transform: translate(-50%, 6px);
   }
   to {
     opacity: 1;
