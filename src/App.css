@@ -1946,57 +1946,49 @@ body.light .tc-match {
   background: #49222c;
 }
 
-/* 底部绿色 toast：瞬时成功反馈（安装完成等），统一显示在日志列表最下边，2.5 秒自动消失 */
-.toast {
-  position: fixed;
-  bottom: 44px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 6000;
-  max-width: min(70vw, 680px);
+/* 统一横幅：成功（绿）/ 进行中（蓝），与 .error 同位置同布局，位于日志列表下方 */
+.banner {
+  margin: 0 16px 10px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 10px 20px;
-  border: 1px solid rgba(67, 199, 123, 0.5);
-  border-radius: 8px;
-  background: #14241d;
+  animation: banner-in 160ms ease;
+}
+
+.banner-ok {
+  border: 1px solid #2f6b45;
+  background: #16301f;
   color: #7fe0a8;
-  font-size: 13px;
-  font-weight: 500;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
-  pointer-events: none;
-  animation: toast-in 160ms ease;
 }
 
-body.light .toast {
-  border-color: #b7e3c8;
-  background: #eefaf2;
-  color: #1f8a4d;
-  box-shadow: 0 10px 26px rgba(42, 58, 87, 0.18);
-}
-
-/* 进行中状态（如安装中）：蓝色系，持续显示 */
-.toast-busy {
-  border-color: rgba(63, 130, 244, 0.55);
+.banner-busy {
+  border: 1px solid #2f5ba0;
   background: #16233a;
   color: #8ab6ff;
 }
 
-body.light .toast-busy {
+body.light .banner-ok {
+  border-color: #b7e3c8;
+  background: #eefaf2;
+  color: #1f8a4d;
+}
+
+body.light .banner-busy {
   border-color: #b9d2f7;
   background: #eef4fd;
   color: #2f6bd8;
 }
 
-@keyframes toast-in {
+@keyframes banner-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 6px);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
   }
 }
 

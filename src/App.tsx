@@ -1120,17 +1120,15 @@ export default function App() {
         )}
       </div>
 
-      {toast &&
-        createPortal(
-          <div
-            className={toastBusy ? "toast toast-busy" : "toast"}
-            role="status"
-            title={toast}
-          >
-            {toast}
-          </div>,
-          document.body,
-        )}
+      {toast && (
+        <div
+          className={toastBusy ? "banner banner-busy" : "banner banner-ok"}
+          role="status"
+          title={toast}
+        >
+          {toast}
+        </div>
+      )}
 
       {error && <div className="error">{error}</div>}
     </div>
