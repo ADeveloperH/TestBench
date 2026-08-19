@@ -3,7 +3,7 @@ import type { AppInfo } from "../../core/apps";
 import type { SavedFilter } from "./useSavedFilters";
 import type { FilterState, LogLevel } from "../../core/types";
 import { LEVELS, LEVEL_LABELS } from "../../core/types";
-import { BUILTIN_FILTER_IDS } from "../../core/builtins";
+import { getBuiltinFilterIds } from "../../core/builtinRegistry";
 import { Select } from "../../components/Select";
 
 interface Props {
@@ -92,7 +92,7 @@ export function FilterManager(props: Props) {
         {props.savedFilters.map((f, i) => {
           const last = props.savedFilters.length - 1;
           const editing = editingId === f.id;
-          const builtin = BUILTIN_FILTER_IDS.has(f.id);
+          const builtin = getBuiltinFilterIds().has(f.id);
           return (
             <li
               key={f.id}

@@ -1,0 +1,25 @@
+# 校验 config/ 目录下的配置文件（remote-config.json / projects.json）
+# 触发：push 或 PR 且改动涉及 config/** 时
+name: 校验配置
+
+on:
+  push:
+    paths:
+      - "config/**"
+  pull_request:
+    paths:
+      - "config/**"
+
+jobs:
+  validate:
+    name: 校验 JSON 配置
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 运行配置校验
+        run: node scripts/validate-config.mjs

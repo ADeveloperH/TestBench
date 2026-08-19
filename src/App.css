@@ -2582,3 +2582,28 @@ body.light .tools-page {
     display: block;
   }
 }
+
+/* —— 设置页：更新提示条 / 发布配置页 —— */
+.manage-update-banner {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border, #333);
+  font-size: 13px;
+  background: rgba(56, 139, 253, 0.08);
+  color: var(--text, #e6e6e6);
+}
+
+.remote-config-editor {
+  width: 100%;
+  min-height: 320px;
+  margin-top: 10px;
+  padding: 10px;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text, #e6e6e6);
+  background: var(--bg-2, #1a1a1f);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  resize: vertical;
+}

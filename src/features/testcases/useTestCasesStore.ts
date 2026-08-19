@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  BUILTIN_TEST_CASES,
   isBuiltinTestCase,
   type TestCase,
 } from "./engine";
+import {
+  getBuiltinTestCaseIds,
+  getBuiltinTestCases,
+  subscribeBuiltins,
+} from "../../core/builtinRegistry";
 
 const KEY = "logcat-testcases-v4";
+
+/** 内置用例以最新生效定义为准，用户自定义用例（id 不在内置集合内）保留在后。 */
+function applyBuiltinLayer(custom: TestCase[]): TestCase[] {
+  const builtinIds = getBuiltinTestCaseIds();
+  const kept = custom.filter(
+    (c) => c && typeof c.id === "string" && !builtinIds.has(c.id),
+  );
+  return [...getBuiltinTestCases(), ...kept];
+}
 
 function loadCases(): TestCase[] {
   try {
@@ -15,17 +28,13 @@ function loadCases(): TestCase[] {
       if (Array.isArray(arr)) {
         // 内置用例以最新定义为准（框架更新用例后老缓存自动获得新规则），
         // 用户自定义用例（id 不在内置集合内）保留在后。
-        const builtinIds = new Set(BUILTIN_TEST_CASES.map((c) => c.id));
-        const custom = arr.filter(
-          (c) => c && typeof c.id === "string" && !builtinIds.has(c.id),
-        );
-        return [...BUILTIN_TEST_CASES, ...custom];
+        return applyBuiltinLayer(arr);
       }
     }
   } catch {
     // 忽略损坏的缓存
   }
-  return BUILTIN_TEST_CASES;
+  return [...getBuiltinTestCases()];
 }
 
 export interface TestCasesStore {
@@ -39,6 +48,13 @@ export interface TestCasesStore {
 /** 测试用例的持久化存储（localStorage，内置用例作为默认值）。 */
 export function useTestCasesStore(): TestCasesStore {
   const [cases, setCases] = useState<TestCase[]>(loadCases);
+
+  // 远程配置变化（内置层替换）时重算：内置用例以最新定义为准，用户用例保留。
+  useEffect(() => {
+    return subscribeBuiltins(() => {
+      setCases((prev) => applyBuiltinLayer(prev));
+    });
+  }, []);
 
   useEffect(() => {
     try {

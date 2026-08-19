@@ -180,13 +180,40 @@ pnpm tauri build
 - Windows 生成内置二进制：在 Windows 机器上运行 `pnpm run bundle-bin`（自动下载 scrcpy-win64 与 adb）
 - 二进制不提交仓库（`.gitignore`），目录本身提交了 `.gitkeep` 占位，保证 clone 后可直接构建运行
 
-## 应用清单（远程更新）
+## 内置配置（远程更新）
 
-「应用」下拉框的清单采用三级兜底：远程 → 本地缓存 → 内置默认。
+设置页各 tab 的**内置**配置（应用清单、搜索/Tag 常用、过滤器、测试用例）统一由仓库 `config/remote-config.json` 维护，采用三级兜底：
 
-- 远程地址：`https://raw.githubusercontent.com/ADeveloperH/TestBench/main/config/projects.json`
-- 新增应用只需修改该文件并 push，用户下次启动自动更新，无需重新打包/安装；
-- 离线时使用上次拉取的本地缓存；首次安装即离线则用内置的默认应用清单。
+```
+远程配置（remote-config.json）
+  → 本地缓存（上次拉取结果，12 小时有效）
+    → 代码内置（apps.ts / builtins.ts / engine.ts 里的默认值）
+```
+
+- 远程地址：`https://raw.githubusercontent.com/ADeveloperH/TestBench/main/config/remote-config.json`（备选镜像 `cdn.jsdelivr.net`，失败自动切换）
+- 每个 section（`apps` / `searchFavorites` / `tagFavorites` / `filters` / `testCases`）可选：**远程配置写了哪个 section 就整体覆盖哪个**，没写的继续用代码内置
+- 用户本地数据（自己添加的应用/常用/过滤器/用例）与远程内置合并时**本地优先、只增不改**，永远不会被远程覆盖
+- 修改该文件 push 后，用户下次启动（或设置页点「刷新配置」）自动更新，无需重新打包/安装
+- push 时 CI 会自动校验 JSON 格式（`.github/workflows/validate-config.yml`），格式错误不允许合并
+
+### 调试模式发布配置页
+
+开发构建（`pnpm tauri dev`）的设置页会多出一个「**发布配置**」tab：
+
+1. 先在界面上把各 tab 的配置整理好（内置 + 本地增删）
+2. 「发布配置」→「生成配置 JSON」把当前生效配置导出为 remote-config.json 内容
+3. 「校验」→「复制」→「打开网页编辑器」，粘贴到 GitHub 网页编辑器提交即可生效
+
+正式包不包含该页面，普通用户无法上传配置。
+
+### 检查更新
+
+设置页「检查更新」按钮会查询 GitHub Releases 最新版本，与当前版本比较：
+
+- 有新版：提示版本号并一键打开 Releases 下载页，用户手动下载安装
+- 无新版/查询失败：显示「已是最新版本」或错误原因
+
+> 由于未做代码签名，App 内不提供全自动安装式更新（macOS 会被 Gatekeeper 拦截），采用「提示 + 跳转下载页」的半自动方式。
 
 ## WiFi 配对说明
 

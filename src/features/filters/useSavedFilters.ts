@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FilterState } from "../../core/types";
-import { BUILTIN_FILTERS, BUILTIN_FILTER_IDS } from "../../core/builtins";
+import {
+  getBuiltinFilterIds,
+  getBuiltinFilters,
+  subscribeBuiltins,
+} from "../../core/builtinRegistry";
 
 export interface SavedFilter {
   id: string;
@@ -9,6 +13,12 @@ export interface SavedFilter {
 }
 
 const KEY = "logcat-saved-filters-v1";
+
+/** 内置过滤器排最前；过滤掉存储里与当前内置重复的旧副本。 */
+function applyBuiltinLayer(list: SavedFilter[]): SavedFilter[] {
+  const builtinIds = getBuiltinFilterIds();
+  return [...getBuiltinFilters(), ...list.filter((f) => !builtinIds.has(f.id))];
+}
 
 function load(): SavedFilter[] {
   const user: SavedFilter[] = [];
@@ -33,22 +43,26 @@ function load(): SavedFilter[] {
   } catch {
     // 忽略损坏的缓存
   }
-  // 内置过滤器排最前；过滤掉存储里与内置重复的旧副本。
-  return [
-    ...BUILTIN_FILTERS,
-    ...user.filter((f) => !BUILTIN_FILTER_IDS.has(f.id)),
-  ];
+  return applyBuiltinLayer(user);
 }
 
 export function useSavedFilters() {
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(load);
 
-  // 持久化时过滤内置过滤器（内置以代码为准，不写入本地存储）。
+  // 远程配置变化（内置层替换）时重算：内置置顶，用户数据保留。
+  useEffect(() => {
+    return subscribeBuiltins(() => {
+      setSavedFilters((list) => applyBuiltinLayer(list));
+    });
+  }, []);
+
+  // 持久化时过滤内置过滤器（内置以当前生效配置为准，不写入本地存储）。
   useEffect(() => {
     try {
+      const builtinIds = getBuiltinFilterIds();
       localStorage.setItem(
         KEY,
-        JSON.stringify(savedFilters.filter((f) => !BUILTIN_FILTER_IDS.has(f.id))),
+        JSON.stringify(savedFilters.filter((f) => !builtinIds.has(f.id))),
       );
     } catch {
       // 忽略写入失败
@@ -65,13 +79,13 @@ export function useSavedFilters() {
 
   const deleteFilter = useCallback((id: string) => {
     // 内置过滤器不可删除
-    if (BUILTIN_FILTER_IDS.has(id)) return;
+    if (getBuiltinFilterIds().has(id)) return;
     setSavedFilters((list) => list.filter((f) => f.id !== id));
   }, []);
 
   const renameFilter = useCallback((id: string, name: string) => {
     // 内置过滤器不可重命名
-    if (BUILTIN_FILTER_IDS.has(id)) return;
+    if (getBuiltinFilterIds().has(id)) return;
     const n = name.trim();
     if (!n) return;
     setSavedFilters((list) =>
@@ -81,7 +95,7 @@ export function useSavedFilters() {
 
   const updateFilter = useCallback((id: string, filters: FilterState) => {
     // 内置过滤器不可编辑
-    if (BUILTIN_FILTER_IDS.has(id)) return;
+    if (getBuiltinFilterIds().has(id)) return;
     setSavedFilters((list) =>
       list.map((f) => (f.id === id ? { ...f, filters } : f)),
     );
@@ -100,8 +114,8 @@ export function useSavedFilters() {
       }
       // 内置过滤器顺序固定，不允许移动
       if (
-        BUILTIN_FILTER_IDS.has(list[fromIndex].id) ||
-        BUILTIN_FILTER_IDS.has(list[toIndex].id)
+        getBuiltinFilterIds().has(list[fromIndex].id) ||
+        getBuiltinFilterIds().has(list[toIndex].id)
       ) {
         return list;
       }
@@ -114,10 +128,7 @@ export function useSavedFilters() {
 
   const replaceFilters = useCallback((list: SavedFilter[]) => {
     // 导入替换时保留内置过滤器
-    setSavedFilters([
-      ...BUILTIN_FILTERS,
-      ...list.filter((f) => !BUILTIN_FILTER_IDS.has(f.id)),
-    ]);
+    setSavedFilters(applyBuiltinLayer(list));
   }, []);
 
   return {

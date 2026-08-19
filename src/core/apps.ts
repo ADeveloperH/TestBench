@@ -1,5 +1,7 @@
 // import { invoke } from "@tauri-apps/api/core"; // 远程配置请求停用，暂不需要
 
+import { getBuiltinAppPackages, getBuiltinApps } from "./builtinRegistry";
+
 export interface AppInfo {
   name: string;
   package: string;
@@ -38,41 +40,19 @@ export const BUILTIN_APPS: AppInfo[] = [
   { name: "Watermelon Merge Fun", package: "com.yuhuitech.fruitgarden" },
 ];
 
-/** 内置应用包名集合（内置应用在设置页不可删除）。 */
-export const BUILTIN_APP_PACKAGES = new Set(BUILTIN_APPS.map((a) => a.package));
-
-/** 是否为内置应用。 */
+/**
+ * 是否为内置应用。
+ * 注意：判定走 builtinRegistry（远程配置生效后按远程列表判定），
+ * 与上面静态的 BUILTIN_APPS 解耦。
+ */
 export function isBuiltinApp(pkg: string): boolean {
-  return BUILTIN_APP_PACKAGES.has(pkg);
+  return getBuiltinAppPackages().has(pkg);
 }
 
 /**
- * 加载应用清单。
- * TODO: 已停用「远程 → 本地缓存」两级来源，目前直接返回内置默认清单，
- * 不再请求远程接口；后续需要时恢复下面的三级兜底逻辑。
+ * 加载应用清单：返回当前生效的内置应用（远程配置已加载则为远程清单）。
+ * 远程配置的拉取/缓存/兜底统一由 core/remoteConfig.ts 管理。
  */
 export async function loadApps(): Promise<AppInfo[]> {
-  // TODO: 以下远程配置 + 本地缓存逻辑暂时停用，后续再处理。
-  // // 1. 远程
-  // try {
-  //   const apps = await invoke<AppInfo[]>("fetch_remote_apps", { url: APPS_URL });
-  //   if (apps.length > 0) {
-  //     localStorage.setItem(CACHE_KEY, JSON.stringify(apps));
-  //     return apps;
-  //   }
-  // } catch {
-  //   // 忽略，继续尝试缓存
-  // }
-  // // 2. 本地缓存
-  // try {
-  //   const cached = localStorage.getItem(CACHE_KEY);
-  //   if (cached) {
-  //     const apps = JSON.parse(cached) as AppInfo[];
-  //     if (Array.isArray(apps) && apps.length > 0) return apps;
-  //   }
-  // } catch {
-  //   // 忽略
-  // }
-  // 3. 内置默认
-  return BUILTIN_APPS;
+  return [...getBuiltinApps()];
 }

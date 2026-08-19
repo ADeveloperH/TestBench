@@ -29,9 +29,15 @@ import { ManagePage, type ManageTab } from "./features/settings/ManagePage";
 import { TestCaseSidebar } from "./features/testcases/TestCaseSidebar";
 import { ToolsPage } from "./features/tools/ToolsPage";
 import { WifiPanel } from "./features/devices/WifiPanel";
-import { BUILTIN_APPS, DEFAULT_BACKDOOR, loadApps } from "./core/apps";
+import { DEFAULT_BACKDOOR } from "./core/apps";
 import type { AppInfo } from "./core/apps";
-import { BUILTIN_SEARCH_VALUES, BUILTIN_TAG_VALUES } from "./core/builtins";
+import {
+  getBuiltinApps,
+  getBuiltinSearchValues,
+  getBuiltinTagValues,
+  subscribeBuiltins,
+} from "./core/builtinRegistry";
+import { refreshRemoteConfig } from "./core/remoteConfig";
 import { LEVELS, LEVEL_LABELS } from "./core/types";
 import type { DeviceInfo, LogLevel, ScrollCommand } from "./core/types";
 import "./App.css";
@@ -217,13 +223,8 @@ export default function App() {
     prefs.prefs.appOrder,
   ]);
 
-  const loadAppsList = async () => {
-    try {
-      setApps(await loadApps());
-    } catch (e) {
-      setError(String(e));
-      setApps(BUILTIN_APPS);
-    }
+  const loadAppsList = () => {
+    setApps(getBuiltinApps());
   };
 
   // —— 应用运行状态（运行中 / 已安装未运行 / 未安装），每 3 秒轮询 ——
@@ -449,9 +450,14 @@ export default function App() {
     });
   };
 
-  // 挂载时加载应用清单。
+  // 挂载时加载应用清单，并监听远程配置变化即时刷新；同时后台拉取远程配置。
   useEffect(() => {
     loadAppsList();
+    const unsub = subscribeBuiltins(() => setApps(getBuiltinApps()));
+    refreshRemoteConfig().then((status) => {
+      logInfo(`远程内置配置：${status.detail}`).catch(() => {});
+    });
+    return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -901,7 +907,7 @@ export default function App() {
               onUnpin={(v) => prefs.removeFavorite("search", v)}
               onRemoveHistory={(v) => prefs.removeHistory("search", v)}
               placeholder="搜索（消息或 Tag）"
-              protectedValues={BUILTIN_SEARCH_VALUES}
+              protectedValues={getBuiltinSearchValues()}
             />
             <button
               type="button"
@@ -926,7 +932,7 @@ export default function App() {
             onUnpin={(v) => prefs.removeFavorite("tags", v)}
             onRemoveHistory={(v) => prefs.removeHistory("tags", v)}
             placeholder="Tag（逗号分隔，!排除）"
-            protectedValues={BUILTIN_TAG_VALUES}
+            protectedValues={getBuiltinTagValues()}
           />
           <label>应用</label>
           <Select

@@ -1,4 +1,5 @@
 import type { LogEntry } from "../../core/types";
+import { isBuiltinTestCase as isBuiltinTestCaseDynamic } from "../../core/builtinRegistry";
 
 export type RuleEffect = "pass" | "error" | "warn";
 export type ConditionField = "message" | "tag" | "level";
@@ -393,12 +394,12 @@ export const BUILTIN_TEST_CASES: TestCase[] = [
   ...IE_CASES_GROUPED,
 ];
 
-/** 内置用例 id 集合（内置用例在设置页不可删除）。 */
-export const BUILTIN_TEST_CASE_IDS = new Set(BUILTIN_TEST_CASES.map((c) => c.id));
-
-/** 是否为内置测试用例。 */
+/**
+ * 是否为内置测试用例。
+ * 判定走 builtinRegistry（远程配置生效后按远程用例列表判定）。
+ */
 export function isBuiltinTestCase(id: string): boolean {
-  return BUILTIN_TEST_CASE_IDS.has(id);
+  return isBuiltinTestCaseDynamic(id);
 }
 
 export function conditionMatches(cond: Condition, entry: LogEntry): boolean {

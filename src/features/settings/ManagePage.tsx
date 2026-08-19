@@ -1,7 +1,18 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { DEFAULT_BACKDOOR, isBuiltinApp } from "../../core/apps";
 import type { AppInfo } from "../../core/apps";
-import { BUILTIN_SEARCH_VALUES, BUILTIN_TAG_VALUES } from "../../core/builtins";
+import {
+  getBuiltinSearchValues,
+  getBuiltinTagValues,
+} from "../../core/builtinRegistry";
+import {
+  buildRemoteConfigFromState,
+  REMOTE_CONFIG_EDIT_URL,
+  refreshRemoteConfig,
+  validateRemoteConfig,
+} from "../../core/remoteConfig";
 import type { Favorite, ListKind, Prefs } from "./usePrefs";
 import type { SavedFilter } from "../filters/useSavedFilters";
 import type { TestCasesStore } from "../testcases/useTestCasesStore";
@@ -15,7 +26,22 @@ export type ManageTab =
   | "tags"
   | "testcases"
   | "filters"
-  | "help";
+  | "help"
+  | "publish";
+
+/** 是否调试模式：仅开发构建（pnpm tauri dev）显示「发布配置」页。 */
+const IS_DEBUG = import.meta.env.DEV;
+
+/** 检查更新命令的返回结构（与 Rust 端 check_update 对应）。 */
+interface UpdateInfo {
+  current: string;
+  latest: string;
+  has_update: boolean;
+  name: string;
+  url: string;
+  notes: string;
+  error: string | null;
+}
 
 interface Props {
   prefs: Prefs;
@@ -60,6 +86,11 @@ export function ManagePage(props: Props) {
   const [tagFav, setTagFav] = useState("");
   const [tagDesc, setTagDesc] = useState("");
   const [configMsg, setConfigMsg] = useState("");
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  // 发布配置页（仅调试模式）
+  const [remoteJson, setRemoteJson] = useState("");
+  const [publishMsg, setPublishMsg] = useState("");
 
   const doExport = async () => {
     setConfigMsg(await props.onExportConfig());
@@ -71,6 +102,72 @@ export function ManagePage(props: Props) {
 
   const doExportDebug = async () => {
     setConfigMsg(await props.onExportDebugLog());
+  };
+
+  const doRefreshConfig = async () => {
+    setConfigMsg("正在刷新远程配置…");
+    const status = await refreshRemoteConfig(true);
+    setConfigMsg(`内置配置：${status.detail}`);
+  };
+
+  const doCheckUpdate = async () => {
+    setUpdateBusy(true);
+    setUpdateInfo(null);
+    try {
+      setUpdateInfo(await invoke<UpdateInfo>("check_update"));
+    } catch (e) {
+      setUpdateInfo({
+        current: "",
+        latest: "",
+        has_update: false,
+        name: "",
+        url: "",
+        notes: "",
+        error: String(e),
+      });
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
+
+  const doOpenRelease = async () => {
+    if (updateInfo?.url) {
+      await invoke("open_in_browser", { url: updateInfo.url });
+    }
+  };
+
+  const doGenerateRemoteJson = () => {
+    const cfg = buildRemoteConfigFromState({
+      apps: props.effectiveApps,
+      searchFavorites: props.prefs.searchFavorites,
+      tagFavorites: props.prefs.tagFavorites,
+      filters: props.savedFilters,
+      testCases: props.testCaseStore.cases,
+    });
+    setRemoteJson(JSON.stringify(cfg, null, 2));
+    setPublishMsg("已根据当前生效配置生成 JSON");
+  };
+
+  const doValidateRemoteJson = () => {
+    try {
+      const data: unknown = JSON.parse(remoteJson);
+      const cfg = validateRemoteConfig(data);
+      setPublishMsg(
+        `校验通过（schemaVersion ${cfg.schemaVersion}，应用 ${cfg.apps?.length ?? 0} 个、测试用例 ${cfg.testCases?.length ?? 0} 条、过滤器 ${cfg.filters?.length ?? 0} 个）`,
+      );
+    } catch (e) {
+      setPublishMsg(`校验失败：${String(e)}`);
+    }
+  };
+
+  const doCopyRemoteJson = async () => {
+    await writeText(remoteJson);
+    setPublishMsg("已复制到剪贴板");
+  };
+
+  const doOpenEditor = async () => {
+    await invoke("open_in_browser", { url: REMOTE_CONFIG_EDIT_URL });
+    setPublishMsg("已打开 GitHub 网页编辑器，粘贴 JSON 并提交即可生效");
   };
 
   const isAdded = (pkg: string) =>
@@ -117,9 +214,37 @@ export function ManagePage(props: Props) {
           <button onClick={doExport}>导出配置</button>
           <button onClick={doImport}>导入配置</button>
           <button onClick={doExportDebug}>导出调试日志</button>
+          <button onClick={doRefreshConfig} title="拉取最新的内置配置">
+            刷新配置
+          </button>
+          <button onClick={doCheckUpdate} disabled={updateBusy}>
+            {updateBusy ? "检查中…" : "检查更新"}
+          </button>
+          {updateInfo?.has_update && (
+            <button onClick={doOpenRelease} title="在浏览器打开下载页">
+              打开下载页
+            </button>
+          )}
           {configMsg && <span className="count">{configMsg}</span>}
         </div>
       </div>
+      {(updateInfo?.has_update || updateInfo?.error) && (
+        <div className="manage-update-banner">
+          {updateInfo.has_update ? (
+            <>
+              发现新版本 <b>v{updateInfo.latest}</b>（当前 v{updateInfo.current}）
+              ，点击「打开下载页」到 GitHub Releases 下载安装。
+            </>
+          ) : (
+            <>检查更新失败：{updateInfo.error}</>
+          )}
+        </div>
+      )}
+      {updateInfo && !updateInfo.has_update && !updateInfo.error && (
+        <div className="manage-update-banner">
+          已是最新版本 v{updateInfo.current}。
+        </div>
+      )}
 
       <div className="manage-tabs">
         <button className={tab === "apps" ? "active" : ""} onClick={() => setTab("apps")}>
@@ -149,6 +274,15 @@ export function ManagePage(props: Props) {
         >
           帮助
         </button>
+        {IS_DEBUG && (
+          <button
+            className={tab === "publish" ? "active" : ""}
+            onClick={() => setTab("publish")}
+            title="仅调试模式可见：生成 remote-config.json 并发布到仓库"
+          >
+            发布配置
+          </button>
+        )}
       </div>
 
       <div className="manage-content">
@@ -302,7 +436,7 @@ export function ManagePage(props: Props) {
           onMoveFavorite={(from, to) => props.onMoveFavorite("search", from, to)}
           onRemoveHistory={(v) => props.onRemoveHistory("search", v)}
           onClearHistory={() => props.onClearHistory("search")}
-          builtinValues={BUILTIN_SEARCH_VALUES}
+          builtinValues={getBuiltinSearchValues()}
         />
       )}
 
@@ -324,7 +458,7 @@ export function ManagePage(props: Props) {
           onMoveFavorite={(from, to) => props.onMoveFavorite("tags", from, to)}
           onRemoveHistory={(v) => props.onRemoveHistory("tags", v)}
           onClearHistory={() => props.onClearHistory("tags")}
-          builtinValues={BUILTIN_TAG_VALUES}
+          builtinValues={getBuiltinTagValues()}
         />
       )}
 
@@ -388,6 +522,30 @@ export function ManagePage(props: Props) {
               </span>
             </li>
           </ul>
+        </section>
+      )}
+
+      {tab === "publish" && (
+        <section className="manage-section">
+          <h2>发布内置配置（仅调试模式）</h2>
+          <p className="manage-desc">
+            把当前界面上的配置（内置 + 本地）生成为 remote-config.json，
+            粘贴到 GitHub 网页编辑器提交后，所有用户下次启动自动更新，无需发版。
+          </p>
+          <div className="manage-add">
+            <button onClick={doGenerateRemoteJson}>生成配置 JSON</button>
+            <button onClick={doValidateRemoteJson}>校验</button>
+            <button onClick={doCopyRemoteJson}>复制</button>
+            <button onClick={doOpenEditor}>打开网页编辑器</button>
+          </div>
+          {publishMsg && <span className="count">{publishMsg}</span>}
+          <textarea
+            className="remote-config-editor"
+            value={remoteJson}
+            onChange={(e) => setRemoteJson(e.target.value)}
+            spellCheck={false}
+            placeholder="点「生成配置 JSON」或直接粘贴 remote-config.json 内容"
+          />
         </section>
       )}
       </div>
