@@ -2607,3 +2607,21 @@ body.light .tools-page {
   border-radius: 6px;
   resize: vertical;
 }
+
+.manage-token-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.manage-token-input {
+  flex: 1;
+  max-width: 460px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text, #e6e6e6);
+  background: var(--bg-2, #1a1a1f);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+}

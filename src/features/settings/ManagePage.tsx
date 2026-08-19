@@ -8,6 +8,7 @@ import {
   getBuiltinTagValues,
 } from "../../core/builtinRegistry";
 import {
+  applyRemoteConfigDirect,
   buildRemoteConfigFromState,
   REMOTE_CONFIG_EDIT_URL,
   refreshRemoteConfig,
@@ -31,6 +32,9 @@ export type ManageTab =
 
 /** 是否调试模式：仅开发构建（pnpm tauri dev）显示「发布配置」页。 */
 const IS_DEBUG = import.meta.env.DEV;
+
+/** 发布凭据（fine-grained PAT）的本地存储 key。 */
+const PUBLISH_TOKEN_KEY = "remote-config-publish-token";
 
 /** 检查更新命令的返回结构（与 Rust 端 check_update 对应）。 */
 interface UpdateInfo {
@@ -91,6 +95,13 @@ export function ManagePage(props: Props) {
   // 发布配置页（仅调试模式）
   const [remoteJson, setRemoteJson] = useState("");
   const [publishMsg, setPublishMsg] = useState("");
+  // 维护者凭据：fine-grained PAT，只保存在本机 localStorage（调试包不含凭据）
+  const [publishToken, setPublishToken] = useState(
+    () => localStorage.getItem(PUBLISH_TOKEN_KEY) ?? "",
+  );
+  const [tokenInput, setTokenInput] = useState("");
+  const [showTokenInput, setShowTokenInput] = useState(!publishToken);
+  const [publishBusy, setPublishBusy] = useState(false);
 
   const doExport = async () => {
     setConfigMsg(await props.onExportConfig());
@@ -168,6 +179,56 @@ export function ManagePage(props: Props) {
   const doOpenEditor = async () => {
     await invoke("open_in_browser", { url: REMOTE_CONFIG_EDIT_URL });
     setPublishMsg("已打开 GitHub 网页编辑器，粘贴 JSON 并提交即可生效");
+  };
+
+  const doSaveToken = () => {
+    const t = tokenInput.trim();
+    if (!t) {
+      setPublishMsg("请输入 Token");
+      return;
+    }
+    localStorage.setItem(PUBLISH_TOKEN_KEY, t);
+    setPublishToken(t);
+    setTokenInput("");
+    setShowTokenInput(false);
+    setPublishMsg("凭据已保存（仅保存在本机）");
+  };
+
+  const doClearToken = () => {
+    localStorage.removeItem(PUBLISH_TOKEN_KEY);
+    setPublishToken("");
+    setShowTokenInput(true);
+    setPublishMsg("凭据已清除");
+  };
+
+  const doPublish = async () => {
+    if (!remoteJson.trim()) {
+      setPublishMsg("请先生成配置 JSON");
+      return;
+    }
+    if (!publishToken) {
+      setPublishMsg("请先粘贴并保存 GitHub Token");
+      return;
+    }
+    // 发布前本地校验
+    try {
+      const cfg = validateRemoteConfig(JSON.parse(remoteJson));
+      setPublishBusy(true);
+      try {
+        const commitUrl = await invoke<string>("publish_remote_config", {
+          token: publishToken,
+          content: remoteJson,
+        });
+        // 本地立即应用，无需等 raw 缓存刷新
+        const status = applyRemoteConfigDirect(cfg);
+        setPublishMsg(`已发布并生效：${status.detail}；提交：${commitUrl}`);
+        await invoke("open_in_browser", { url: commitUrl });
+      } finally {
+        setPublishBusy(false);
+      }
+    } catch (e) {
+      setPublishMsg(`发布失败：${String(e)}`);
+    }
   };
 
   const isAdded = (pkg: string) =>
@@ -530,7 +591,7 @@ export function ManagePage(props: Props) {
           <h2>发布内置配置（仅调试模式）</h2>
           <p className="manage-desc">
             把当前界面上的配置（内置 + 本地）生成为 remote-config.json，
-            粘贴到 GitHub 网页编辑器提交后，所有用户下次启动自动更新，无需发版。
+            一键提交到仓库后，所有用户下次启动自动更新，无需发版。
             JSON 各字段对应：apps=应用、searchFavorites=搜索常用、
             tagFavorites=Tag 常用、filters=过滤器、testCases=测试用例。
           </p>
@@ -538,9 +599,46 @@ export function ManagePage(props: Props) {
             <button onClick={doGenerateRemoteJson}>生成配置 JSON</button>
             <button onClick={doValidateRemoteJson}>校验</button>
             <button onClick={doCopyRemoteJson}>复制</button>
-            <button onClick={doOpenEditor}>打开网页编辑器</button>
+            <button
+              onClick={doPublish}
+              disabled={publishBusy || !publishToken || !remoteJson.trim()}
+              title={
+                !publishToken
+                  ? "请先保存 GitHub Token"
+                  : "提交到仓库（需要 Token 有本仓库 Contents 写权限）"
+              }
+            >
+              {publishBusy ? "发布中…" : "发布到远程"}
+            </button>
+            <button onClick={doOpenEditor} title="打开 GitHub 网页编辑器手动修改">
+              网页编辑器
+            </button>
           </div>
           {publishMsg && <span className="count">{publishMsg}</span>}
+          <div className="manage-token-row">
+            {showTokenInput ? (
+              <>
+                <input
+                  type="password"
+                  className="manage-token-input"
+                  placeholder="粘贴 fine-grained PAT（仅本机保存）"
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                />
+                <button onClick={doSaveToken}>保存凭据</button>
+              </>
+            ) : (
+              <>
+                <span className="count">已配置发布凭据（仅本机保存）</span>
+                <button onClick={doClearToken}>清除凭据</button>
+              </>
+            )}
+          </div>
+          <p className="manage-desc">
+            凭据为 GitHub fine-grained PAT：仅授权
+            ADeveloperH/TestBench 一个仓库、Contents 读写权限即可；只保存在本机，
+            调试包本身不含任何凭据。
+          </p>
           <p className="count">
             当前生效配置：应用 {props.effectiveApps.length} · 搜索常用{" "}
             {props.prefs.searchFavorites.length} · Tag 常用{" "}

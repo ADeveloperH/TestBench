@@ -321,6 +321,118 @@ fn open_in_browser(url: String) -> Result<(), String> {
     }
 }
 
+/// 远程配置文件在仓库中的路径（Contents API 使用）。
+const REMOTE_CONFIG_API_URL: &str =
+    "https://api.github.com/repos/ADeveloperH/TestBench/contents/config/remote-config.json";
+
+fn github_headers(token: &str) -> (String, String, String) {
+    (
+        format!("Bearer {token}"),
+        "application/vnd.github+json".to_string(),
+        "TestBench-Publisher".to_string(),
+    )
+}
+
+/// 用维护者的 fine-grained PAT 把远程配置提交到仓库（Contents API）。
+/// 仅调试模式前端页面会调用；权限由 GitHub 对 token 的授权范围控制。
+#[tauri::command]
+fn publish_remote_config(token: String, content: String) -> Result<String, String> {
+    let content = content.trim();
+    // 提交前先校验是合法 JSON，避免把坏配置写进仓库
+    serde_json::from_str::<serde_json::Value>(content)
+        .map_err(|e| format!("配置不是合法 JSON：{e}"))?;
+    let token = token.trim();
+    if token.is_empty() {
+        return Err("缺少 GitHub Token，请先在发布页粘贴 fine-grained PAT".into());
+    }
+    let (auth, accept, ua) = github_headers(token);
+    log::info!("发布远程配置：获取当前文件 sha");
+
+    // 1. 取当前文件 sha（文件不存在则视为新建）
+    let sha: Option<String> = match ureq::get(REMOTE_CONFIG_API_URL)
+        .set("Authorization", &auth)
+        .set("Accept", &accept)
+        .set("User-Agent", &ua)
+        .timeout(std::time::Duration::from_secs(15))
+        .call()
+    {
+        Ok(resp) => {
+            let v: serde_json::Value = resp
+                .into_json()
+                .map_err(|e| format!("解析 GitHub 响应失败：{e}"))?;
+            v["sha"].as_str().map(|s| s.to_string())
+        }
+        Err(ureq::Error::Status(404, _)) => None,
+        Err(ureq::Error::Status(code, _)) => {
+            return Err(match code {
+                401 => "Token 无效或已过期，请重新生成并粘贴".into(),
+                403 => "Token 没有该仓库的访问权限（需要选中 ADeveloperH/TestBench 并授予 Contents 读写）".into(),
+                _ => format!("GitHub 返回错误（HTTP {code}）"),
+            });
+        }
+        Err(e) => return Err(format!("请求失败：{e}")),
+    };
+
+    // 2. 提交（base64 编码内容；已有文件需带 sha）
+    let encoded = base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        content.as_bytes(),
+    );
+    let mut payload = serde_json::json!({
+        "message": "chore: TestBench 调试版发布内置配置",
+        "content": encoded,
+        "branch": "main",
+    });
+    if let Some(s) = &sha {
+        payload["sha"] = serde_json::json!(s);
+    }
+    log::info!("发布远程配置：提交新内容");
+    let resp = ureq::put(REMOTE_CONFIG_API_URL)
+        .set("Authorization", &auth)
+        .set("Accept", &accept)
+        .set("User-Agent", &ua)
+        .timeout(std::time::Duration::from_secs(30))
+        .send_json(payload)
+        .map_err(|e| match e {
+            ureq::Error::Status(code, resp) => {
+                let detail = resp
+                    .into_string()
+                    .ok()
+                    .and_then(|s| {
+                        serde_json::from_str::<serde_json::Value>(&s)
+                            .ok()
+                            .and_then(|v| {
+                                v["message"].as_str().map(|m| m.to_string())
+                            })
+                    })
+                    .unwrap_or_default();
+                match code {
+                    401 => "Token 无效或已过期，请重新生成并粘贴".to_string(),
+                    403 => format!("没有提交权限：{detail}"),
+                    409 => "文件在远端已被修改，请刷新后重试".to_string(),
+                    422 => format!("GitHub 拒绝提交：{detail}"),
+                    _ => format!("GitHub 返回错误（HTTP {code}）：{detail}"),
+                }
+            }
+            e => format!("提交失败：{e}"),
+        })?;
+
+    // 3. 返回提交链接
+    let v: serde_json::Value = resp
+        .into_json()
+        .map_err(|e| format!("解析提交结果失败：{e}"))?;
+    let commit_url = v["commit"]["html_url"]
+        .as_str()
+        .unwrap_or("https://github.com/ADeveloperH/TestBench/commits/main")
+        .to_string();
+    let commit_sha = v["commit"]["sha"]
+        .as_str()
+        .map(|s| s[..7.min(s.len())].to_string())
+        .unwrap_or_default();
+    log::info!("远程配置已发布：{commit_sha}");
+    Ok(commit_url)
+}
+
 #[tauri::command]
 async fn open_backdoor(
     device: Option<String>,
@@ -773,6 +885,7 @@ pub fn run() {
             fetch_remote_apps,
             check_update,
             open_in_browser,
+            publish_remote_config,
             open_backdoor,
             restart_app,
             screenshot,

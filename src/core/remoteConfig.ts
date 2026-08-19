@@ -267,6 +267,20 @@ export async function refreshRemoteConfig(force = false): Promise<RemoteStatus> 
 }
 
 /**
+ * 直接应用一份远程配置（调试版发布成功后本地立即生效，无需等 raw 缓存刷新）。
+ */
+export function applyRemoteConfigDirect(cfg: RemoteConfig): RemoteStatus {
+  writeCache(cfg);
+  applyBuiltins(mergeRemote(getCodeBuiltins(), cfg));
+  lastStatus = {
+    source: "remote",
+    updatedAt: cfg.updatedAt,
+    detail: "已应用刚发布的内置配置",
+  };
+  return lastStatus;
+}
+
+/**
  * 从「当前生效的用户可见状态」生成远程配置文件内容（调试模式发布页用）：
  * 维护者先在界面上把配置整理好（内置 + 本地），再一键生成 remote-config.json 发布。
  */

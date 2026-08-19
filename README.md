@@ -202,7 +202,15 @@ pnpm tauri build
 
 1. 先在界面上把各 tab 的配置整理好（内置 + 本地增删）
 2. 「发布配置」→「生成配置 JSON」把当前生效配置导出为 remote-config.json 内容
-3. 「校验」→「复制」→「打开网页编辑器」，粘贴到 GitHub 网页编辑器提交即可生效
+3. 「校验」→ 一键「**发布到远程**」自动提交到仓库，所有用户下次启动生效
+
+发布凭据（首次使用）：
+
+1. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token
+2. Repository access 选择仅 `ADeveloperH/TestBench`；Permissions 里 **Contents 设为 Read and write**，其余保持只读/无权限
+3. 生成的 token 粘贴到发布页「保存凭据」（仅保存在本机，调试包本身不含凭据，可随时「清除凭据」）
+
+提交走 GitHub Contents API，权限由 token 范围控制：没有该仓库写权限的账号无法提交。发布成功后本地立即应用新配置；远端 raw 链接有约 5 分钟缓存，其他用户会在缓存过期后或下次启动刷新时获得。
 
 正式包不包含该页面，普通用户无法上传配置。
 
