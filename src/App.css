@@ -1972,6 +1972,19 @@ body.light .toast {
   box-shadow: 0 10px 26px rgba(42, 58, 87, 0.18);
 }
 
+/* 进行中状态（如安装中）：蓝色系，持续显示 */
+.toast-busy {
+  border-color: rgba(63, 130, 244, 0.55);
+  background: #16233a;
+  color: #8ab6ff;
+}
+
+body.light .toast-busy {
+  border-color: #b9d2f7;
+  background: #eef4fd;
+  color: #2f6bd8;
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;

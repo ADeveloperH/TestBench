@@ -154,14 +154,21 @@ export default function App() {
   const [activeFilterId, setActiveFilterId] = useState("");
   const [filterName, setFilterName] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [toastBusy, setToastBusy] = useState(false);
   const toastTimerRef = useRef<number | null>(null);
 
-  /** 底部绿色 toast 提示（瞬时反馈，4 秒自动消失）。 */
-  const showToast = (msg: string) => {
-    logInfo(`显示提示：${msg}`).catch(() => {});
+  /** 底部绿色 toast 提示（4 秒自动消失；sticky=true 时持续显示直到下一次提示）。 */
+  const showToast = (msg: string, sticky = false) => {
+    logInfo(`显示提示：${msg}${sticky ? "（持续）" : ""}`).catch(() => {});
     setToast(msg);
-    if (toastTimerRef.current != null) window.clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 4000);
+    setToastBusy(sticky);
+    if (toastTimerRef.current != null) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    if (!sticky) {
+      toastTimerRef.current = window.setTimeout(() => setToast(null), 4000);
+    }
   };
 
   const selectedEntry = entries.find((e) => e.id === selectedId) ?? null;
@@ -383,13 +390,19 @@ export default function App() {
   const handleInstallApk = async () => {
     const path = await invoke<string | null>("pick_apk");
     if (!path) return "已取消选择 APK";
-    const out = await invoke<string>("install_apk", {
-      device: selectedDevice,
-      path,
-    });
-    notify("APK 安装完成", out).catch(() => {});
-    showToast("APK 安装完成");
-    return `安装结果：${out}`;
+    showToast("正在安装 APK…", true);
+    try {
+      const out = await invoke<string>("install_apk", {
+        device: selectedDevice,
+        path,
+      });
+      notify("APK 安装完成", out).catch(() => {});
+      showToast("APK 安装完成");
+      return `安装结果：${out}`;
+    } catch (e) {
+      setToast(null);
+      throw e;
+    }
   };
 
   const handleDeviceInfo = async () => {
@@ -491,6 +504,7 @@ export default function App() {
           setError("未连接设备，无法安装 APK（请先连接设备）");
           return;
         }
+        showToast("正在安装 APK…", true);
         invoke<string>("install_apk", { device: selectedDevice, path: apk })
           .then((out) => {
             notify("APK 安装完成", out).catch((e) => {
@@ -499,7 +513,10 @@ export default function App() {
             showToast("APK 安装完成");
             setError(null);
           })
-          .catch((e) => setError(`安装失败：${String(e)}`));
+          .catch((e) => {
+            setToast(null);
+            setError(`安装失败：${String(e)}`);
+          });
       })
       .then((fn) => {
         if (disposed) fn();
@@ -1105,7 +1122,10 @@ export default function App() {
 
       {toast &&
         createPortal(
-          <div className="toast" role="status">
+          <div
+            className={toastBusy ? "toast toast-busy" : "toast"}
+            role="status"
+          >
             {toast}
           </div>,
           document.body,
