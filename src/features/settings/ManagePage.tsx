@@ -153,7 +153,7 @@ export function ManagePage(props: Props) {
       const data: unknown = JSON.parse(remoteJson);
       const cfg = validateRemoteConfig(data);
       setPublishMsg(
-        `校验通过（schemaVersion ${cfg.schemaVersion}，应用 ${cfg.apps?.length ?? 0} 个、测试用例 ${cfg.testCases?.length ?? 0} 条、过滤器 ${cfg.filters?.length ?? 0} 个）`,
+        `校验通过（schemaVersion ${cfg.schemaVersion}：应用 ${cfg.apps?.length ?? 0} 个、搜索常用 ${cfg.searchFavorites?.length ?? 0} 条、Tag 常用 ${cfg.tagFavorites?.length ?? 0} 条、过滤器 ${cfg.filters?.length ?? 0} 个、测试用例 ${cfg.testCases?.length ?? 0} 条）`,
       );
     } catch (e) {
       setPublishMsg(`校验失败：${String(e)}`);
@@ -531,6 +531,8 @@ export function ManagePage(props: Props) {
           <p className="manage-desc">
             把当前界面上的配置（内置 + 本地）生成为 remote-config.json，
             粘贴到 GitHub 网页编辑器提交后，所有用户下次启动自动更新，无需发版。
+            JSON 各字段对应：apps=应用、searchFavorites=搜索常用、
+            tagFavorites=Tag 常用、filters=过滤器、testCases=测试用例。
           </p>
           <div className="manage-add">
             <button onClick={doGenerateRemoteJson}>生成配置 JSON</button>
@@ -539,6 +541,12 @@ export function ManagePage(props: Props) {
             <button onClick={doOpenEditor}>打开网页编辑器</button>
           </div>
           {publishMsg && <span className="count">{publishMsg}</span>}
+          <p className="count">
+            当前生效配置：应用 {props.effectiveApps.length} · 搜索常用{" "}
+            {props.prefs.searchFavorites.length} · Tag 常用{" "}
+            {props.prefs.tagFavorites.length} · 过滤器 {props.savedFilters.length}{" "}
+            · 测试用例 {props.testCaseStore.cases.length}
+          </p>
           <textarea
             className="remote-config-editor"
             value={remoteJson}
