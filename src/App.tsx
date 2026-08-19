@@ -156,11 +156,12 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
-  /** 底部绿色 toast 提示（瞬时反馈，2.5 秒自动消失）。 */
+  /** 底部绿色 toast 提示（瞬时反馈，4 秒自动消失）。 */
   const showToast = (msg: string) => {
+    logInfo(`显示提示：${msg}`).catch(() => {});
     setToast(msg);
     if (toastTimerRef.current != null) window.clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 2500);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 4000);
   };
 
   const selectedEntry = entries.find((e) => e.id === selectedId) ?? null;
@@ -492,7 +493,9 @@ export default function App() {
         }
         invoke<string>("install_apk", { device: selectedDevice, path: apk })
           .then((out) => {
-            notify("APK 安装完成", out).catch(() => {});
+            notify("APK 安装完成", out).catch((e) => {
+              logInfo(`系统通知发送失败：${String(e)}`).catch(() => {});
+            });
             showToast("APK 安装完成");
             setError(null);
           })
