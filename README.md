@@ -38,7 +38,7 @@
 - [ ] macOS 签名/公证、Windows 签名（分发必需）
 - [x] 检查更新提示（已实现：无签名环境下采用「提示 + 跳转下载页」的半自动方式）
 - [ ] 全自动安装式更新（tauri-updater，需先完成代码签名）
-- [x] 应用图标（自定义「日志窗口 + 测试通过」图标，源文件 `src-tauri/icons/app-icon.svg`）
+- [x] 应用图标（自定义图标，源文件 `src-tauri/icons/app-icon-source.png`）
 
 ## 架构
 
@@ -171,13 +171,13 @@ pnpm tauri build
 
 ### 应用图标
 
-图标源文件为 `src-tauri/icons/app-icon.svg`（深色圆角底 + 日志窗口 + 测试通过徽标，配色与界面主题一致）。修改设计后重新生成各平台图标：
+图标源文件为 `src-tauri/icons/app-icon-source.png`。修改设计后重新生成各平台图标：
 
 ```bash
-pnpm tauri icon src-tauri/icons/app-icon.svg
+pnpm tauri icon src-tauri/icons/app-icon-source.png
 ```
 
-生成产物包括 macOS `icon.icns`、Windows `icon.ico` 与各尺寸 PNG；窗口图标与系统托盘图标均随 bundle 配置自动使用。
+生成产物包括 macOS `icon.icns`、Windows `icon.ico` 与各尺寸 PNG；窗口图标与系统托盘图标均随 bundle 配置自动使用。图标文件变化会自动触发重编译（`build.rs` 已做哈希跟踪），`pnpm tauri dev` 无需额外操作即可看到新图标。
 
 ## 日志与调试
 
