@@ -30,24 +30,27 @@
 - 拖拽 APK 安装、快捷键（空格暂停、Cmd/Ctrl+L 清空、Cmd/Ctrl+E 导出）
 - 录屏/安装完成系统通知、深色/浅色主题切换
 - 测试用例（规则引擎：AND/OR 条件树、出现 N 次阈值、缺失判定；按模块分组管理；侧边栏实时状态与问题优先排序）
+- 内置配置远程更新（remote-config.json：应用/常用/过滤器/测试用例，远程 → 缓存 → 代码内置三级兜底，更新无需发版）
+- 检查更新（查询 GitHub Releases 提示新版本，一键跳转下载页）
 
 ## 计划中的功能
 
 - [ ] macOS 签名/公证、Windows 签名（分发必需）
-- [ ] 自动更新（GitHub Releases + tauri-updater，发布后一键更新）
+- [x] 检查更新提示（已实现：无签名环境下采用「提示 + 跳转下载页」的半自动方式）
+- [ ] 全自动安装式更新（tauri-updater，需先完成代码签名）
 - [ ] 应用图标（替换默认 Tauri 图标）
 
 ## 架构
 
 ```
 前端（React）
-  ├─ core/      共享基础：类型、常量、日志解析、应用清单
+  ├─ core/      共享基础：类型、常量、日志解析、应用清单、内置配置注册表、远程配置
   ├─ features/  按功能分模块：logcat / testcases / tools / filters / settings / devices
   ├─ components/ 通用 UI：Tip、HistoryInput
   └─ App        视图切换 + 日志页组装
         │ invoke() 调用命令 / listen() 订阅事件
 后端（Rust）
-  ├─ lib.rs     命令定义 + 全局状态 + logcat 事件发射
+  ├─ lib.rs     命令定义 + 全局状态 + logcat 事件发射 + 更新检查/配置发布
   └─ adb/       adb/scrcpy 模块：devices / logcat / apps / install / info / scrcpy
 ```
 
@@ -57,13 +60,18 @@
 
 ```
 testbench/
+├── .github/workflows/          # CI：build.yml 构建+发布 Release、validate-config.yml 配置校验
+├── config/                     # 内置配置：remote-config.json（远程更新）、projects.json（旧应用清单）
+├── scripts/                    # 开发脚本：setup、bundle-bin、validate-config
 ├── src/                        # 前端源码
 │   ├── App.tsx                 # 主界面（视图切换 + 日志页组装）
 │   ├── App.css                 # 样式（深色主题）
 │   ├── core/                   # 共享基础
 │   │   ├── types.ts            # 类型与常量
 │   │   ├── logcat.ts           # threadtime 行解析 + ANSI 过滤
-│   │   └── apps.ts             # 应用清单（远程 + 内置）
+│   │   ├── apps.ts             # 应用清单（代码内置来源）
+│   │   ├── builtinRegistry.ts  # 内置配置注册表（远程按 section 覆盖代码内置）
+│   │   └── remoteConfig.ts     # 远程配置拉取/校验/缓存/应用、发布配置生成
 │   ├── features/               # 按功能模块
 │   │   ├── logcat/             # 日志查看（useLogcat + LogList）
 │   │   ├── testcases/          # 测试用例（引擎 + 侧边栏 + 管理）
@@ -196,6 +204,8 @@ pnpm tauri build
 - 修改该文件 push 后，用户下次启动（或设置页点「刷新配置」）自动更新，无需重新打包/安装
 - push 时 CI 会自动校验 JSON 格式（`.github/workflows/validate-config.yml`），格式错误不允许合并
 
+> 注意：某个 section 一旦在 `remote-config.json` 中出现，**代码内置即整体失效、以远程为准**。当前远程文件已包含全部 5 个 section（含测试用例），因此之后调整内置配置（包括测试用例）请走发布页或直接改远程文件，修改 `apps.ts` / `builtins.ts` / `engine.ts` 里的代码内置不再生效。
+
 ### 调试模式发布配置页
 
 开发构建（`pnpm tauri dev`）的设置页会多出一个「**发布配置**」tab：
@@ -208,9 +218,9 @@ pnpm tauri build
 
 1. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token
 2. Repository access 选择仅 `ADeveloperH/TestBench`；Permissions 里 **Contents 设为 Read and write**，其余保持只读/无权限
-3. 生成的 token 粘贴到发布页「保存凭据」（仅保存在本机，调试包本身不含凭据，可随时「清除凭据」）
+3. 生成的 token 粘贴到发布页「保存凭据」（仅保存在本机，调试包本身不含凭据，可随时「清除凭据」）；点「**测试凭据**」可立即检查该 token 对本仓库的读写权限，确认有写权限后再发布
 
-提交走 GitHub Contents API，权限由 token 范围控制：没有该仓库写权限的账号无法提交。发布成功后本地立即应用新配置；远端 raw 链接有约 5 分钟缓存，其他用户会在缓存过期后或下次启动刷新时获得。
+提交走 GitHub Contents API，权限由 token 范围控制：没有该仓库写权限的账号无法提交。发布成功后**发布者本机立即应用新配置**；其他用户下次启动（本地缓存最多 12 小时）或点「刷新配置」时获取。注意：远端 raw 链接有约 5 分钟 CDN 缓存，「刷新配置」只能跳过客户端本地缓存、无法绕过这一层——发布后 5 分钟内其他用户可能仍拿到旧配置。
 
 正式包不包含该页面，普通用户无法上传配置。
 
@@ -220,6 +230,8 @@ pnpm tauri build
 
 - 有新版：提示版本号并一键打开 Releases 下载页，用户手动下载安装
 - 无新版/查询失败：显示「已是最新版本」或错误原因
+
+版本比较按 semver 规则：发版时 `src-tauri/tauri.conf.json` 的版本号必须递增，否则不会提示更新。
 
 > 由于未做代码签名，App 内不提供全自动安装式更新（macOS 会被 Gatekeeper 拦截），采用「提示 + 跳转下载页」的半自动方式。
 
