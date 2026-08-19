@@ -201,6 +201,19 @@ export function ManagePage(props: Props) {
     setPublishMsg("凭据已清除");
   };
 
+  const doVerifyToken = async () => {
+    const t = publishToken || tokenInput.trim();
+    if (!t) {
+      setPublishMsg("请先粘贴并保存 GitHub Token");
+      return;
+    }
+    try {
+      setPublishMsg(await invoke<string>("verify_publish_token", { token: t }));
+    } catch (e) {
+      setPublishMsg(`凭据检查：${String(e)}`);
+    }
+  };
+
   const doPublish = async () => {
     if (!remoteJson.trim()) {
       setPublishMsg("请先生成配置 JSON");
@@ -626,10 +639,12 @@ export function ManagePage(props: Props) {
                   onChange={(e) => setTokenInput(e.target.value)}
                 />
                 <button onClick={doSaveToken}>保存凭据</button>
+                <button onClick={doVerifyToken}>测试凭据</button>
               </>
             ) : (
               <>
                 <span className="count">已配置发布凭据（仅本机保存）</span>
+                <button onClick={doVerifyToken}>测试凭据</button>
                 <button onClick={doClearToken}>清除凭据</button>
               </>
             )}

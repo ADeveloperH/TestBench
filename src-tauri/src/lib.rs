@@ -321,6 +321,39 @@ fn open_in_browser(url: String) -> Result<(), String> {
     }
 }
 
+/// 校验发布凭据对本仓库的权限（调试版「测试凭据」按钮用）。
+#[tauri::command]
+fn verify_publish_token(token: String) -> Result<String, String> {
+    let token = token.trim();
+    if token.is_empty() {
+        return Err("缺少 GitHub Token，请先粘贴".into());
+    }
+    let (auth, accept, ua) = github_headers(token);
+    let resp = ureq::get("https://api.github.com/repos/ADeveloperH/TestBench")
+        .set("Authorization", &auth)
+        .set("Accept", &accept)
+        .set("User-Agent", &ua)
+        .timeout(std::time::Duration::from_secs(15))
+        .call()
+        .map_err(|e| match e {
+            ureq::Error::Status(401, _) => "Token 无效或已过期，请重新生成".to_string(),
+            ureq::Error::Status(403, _) => {
+                "Token 无法访问该仓库：请检查 token 的 Repository access 是否选为「Only select repositories」并勾选 ADeveloperH/TestBench（不能选 Public read-only），或确认 token 是用对仓库有写权限的账号创建的".to_string()
+            }
+            ureq::Error::Status(404, _) => "仓库不存在".to_string(),
+            e => format!("请求失败：{e}"),
+        })?;
+    let v: serde_json::Value = resp
+        .into_json()
+        .map_err(|e| format!("解析响应失败：{e}"))?;
+    let push = v["permissions"]["push"].as_bool().unwrap_or(false);
+    if push {
+        Ok("凭据有效：对本仓库有写权限，可以发布".into())
+    } else {
+        Err("凭据有效但只有读权限：请在 token 的 Repository permissions 里把 Contents 设为 Read and write".into())
+    }
+}
+
 /// 远程配置文件在仓库中的路径（Contents API 使用）。
 const REMOTE_CONFIG_API_URL: &str =
     "https://api.github.com/repos/ADeveloperH/TestBench/contents/config/remote-config.json";
@@ -886,6 +919,7 @@ pub fn run() {
             check_update,
             open_in_browser,
             publish_remote_config,
+            verify_publish_token,
             open_backdoor,
             restart_app,
             screenshot,
