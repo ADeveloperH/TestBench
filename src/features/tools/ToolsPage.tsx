@@ -4,9 +4,14 @@ import type { AppInfo } from "../../core/apps";
 import type { DeviceInfo } from "../../core/types";
 import { Select } from "../../components/Select";
 
+/** 应用运行状态（与日志页一致）：running 运行中 / installed 已安装未运行 / missing 未安装 / unknown 未知。 */
+export type AppRunState = "running" | "installed" | "missing" | "unknown";
+
 interface Props {
   apps: AppInfo[];
   hasDevice: boolean;
+  /** 查询应用运行状态（与日志页同一套逻辑） */
+  appState: (pkg: string) => AppRunState;
   onOpenBackdoor: (pkg: string) => Promise<string>;
   onRestartApp: (pkg: string) => Promise<string>;
   onClearData: (pkg: string) => Promise<string>;
@@ -181,11 +186,19 @@ export function ToolsPage(props: Props) {
             searchPlaceholder="搜索应用名或包名…"
             options={[
               { value: "", label: "选择应用", fullLabel: "选择应用" },
-              ...props.apps.map((a) => ({
-                value: a.package,
-                label: `${a.name}（${a.package}）`,
-                fullLabel: `${a.name}（${a.package}）`,
-              })),
+              ...props.apps.map((a) => {
+                const state = props.appState(a.package);
+                return {
+                  value: a.package,
+                  label: (
+                    <span className={`app-opt app-opt-${state}`}>
+                      <i className="app-dot" />
+                      {a.name}（{a.package}）
+                    </span>
+                  ),
+                  fullLabel: `${a.name}（${a.package}）`,
+                };
+              }),
             ]}
             onChange={(v) => setPkg(v)}
           />

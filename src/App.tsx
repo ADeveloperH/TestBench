@@ -728,8 +728,9 @@ export default function App() {
   if (view === "tools") {
     return (
       <ToolsPage
-        apps={effectiveApps}
+        apps={logPageApps}
         hasDevice={!!selectedDevice}
+        appState={appRunState}
         onOpenBackdoor={handleOpenBackdoor}
         onRestartApp={handleRestartApp}
         onClearData={handleClearData}
