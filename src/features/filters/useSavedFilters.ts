@@ -5,6 +5,7 @@ import {
   getBuiltinFilters,
   subscribeBuiltins,
 } from "../../core/builtinRegistry";
+import { IS_DEBUG } from "../../core/debug";
 
 export interface SavedFilter {
   id: string;
@@ -13,11 +14,36 @@ export interface SavedFilter {
 }
 
 const KEY = "logcat-saved-filters-v1";
+/** 调试模式删除的内置过滤器 id 名单（正式包忽略，内置不可删）。 */
+const REMOVED_KEY = "logcat-removed-builtin-filters-v1";
 
-/** 内置过滤器排最前；过滤掉存储里与当前内置重复的旧副本。 */
+function loadRemovedIds(): string[] {
+  try {
+    const raw = localStorage.getItem(REMOVED_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (Array.isArray(d)) return d.filter((x) => typeof x === "string");
+    }
+  } catch {
+    // 忽略损坏的缓存
+  }
+  return [];
+}
+
+function saveRemovedIds(ids: string[]): void {
+  try {
+    localStorage.setItem(REMOVED_KEY, JSON.stringify(ids));
+  } catch {
+    // 忽略写入失败
+  }
+}
+
+/** 内置过滤器排最前；过滤掉存储里与当前内置重复的旧副本。调试模式下应用删除名单。 */
 function applyBuiltinLayer(list: SavedFilter[]): SavedFilter[] {
   const builtinIds = getBuiltinFilterIds();
-  return [...getBuiltinFilters(), ...list.filter((f) => !builtinIds.has(f.id))];
+  const removed = IS_DEBUG ? new Set(loadRemovedIds()) : new Set<string>();
+  const builtins = getBuiltinFilters().filter((f) => !removed.has(f.id));
+  return [...builtins, ...list.filter((f) => !builtinIds.has(f.id))];
 }
 
 function load(): SavedFilter[] {
@@ -78,14 +104,17 @@ export function useSavedFilters() {
   }, []);
 
   const deleteFilter = useCallback((id: string) => {
-    // 内置过滤器不可删除
-    if (getBuiltinFilterIds().has(id)) return;
+    // 内置过滤器不可删除（调试模式除外：删除 = 记入删除名单）
+    if (getBuiltinFilterIds().has(id)) {
+      if (!IS_DEBUG) return;
+      saveRemovedIds([...new Set([...loadRemovedIds(), id])]);
+    }
     setSavedFilters((list) => list.filter((f) => f.id !== id));
   }, []);
 
   const renameFilter = useCallback((id: string, name: string) => {
-    // 内置过滤器不可重命名
-    if (getBuiltinFilterIds().has(id)) return;
+    // 内置过滤器不可重命名（调试模式除外）
+    if (getBuiltinFilterIds().has(id) && !IS_DEBUG) return;
     const n = name.trim();
     if (!n) return;
     setSavedFilters((list) =>
@@ -94,8 +123,8 @@ export function useSavedFilters() {
   }, []);
 
   const updateFilter = useCallback((id: string, filters: FilterState) => {
-    // 内置过滤器不可编辑
-    if (getBuiltinFilterIds().has(id)) return;
+    // 内置过滤器不可编辑（调试模式除外）
+    if (getBuiltinFilterIds().has(id) && !IS_DEBUG) return;
     setSavedFilters((list) =>
       list.map((f) => (f.id === id ? { ...f, filters } : f)),
     );
@@ -112,10 +141,11 @@ export function useSavedFilters() {
       ) {
         return list;
       }
-      // 内置过滤器顺序固定，不允许移动
+      // 内置过滤器顺序固定，不允许移动（调试模式除外）
       if (
-        getBuiltinFilterIds().has(list[fromIndex].id) ||
-        getBuiltinFilterIds().has(list[toIndex].id)
+        !IS_DEBUG &&
+        (getBuiltinFilterIds().has(list[fromIndex].id) ||
+          getBuiltinFilterIds().has(list[toIndex].id))
       ) {
         return list;
       }

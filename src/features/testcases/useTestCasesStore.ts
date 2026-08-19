@@ -8,16 +8,42 @@ import {
   getBuiltinTestCases,
   subscribeBuiltins,
 } from "../../core/builtinRegistry";
+import { IS_DEBUG } from "../../core/debug";
 
 const KEY = "logcat-testcases-v4";
+/** 调试模式删除的内置用例 id 名单（正式包忽略，内置不可删）。 */
+const REMOVED_KEY = "logcat-removed-builtin-cases-v1";
 
-/** 内置用例以最新生效定义为准，用户自定义用例（id 不在内置集合内）保留在后。 */
+function loadRemovedIds(): string[] {
+  try {
+    const raw = localStorage.getItem(REMOVED_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (Array.isArray(d)) return d.filter((x) => typeof x === "string");
+    }
+  } catch {
+    // 忽略损坏的缓存
+  }
+  return [];
+}
+
+function saveRemovedIds(ids: string[]): void {
+  try {
+    localStorage.setItem(REMOVED_KEY, JSON.stringify(ids));
+  } catch {
+    // 忽略写入失败
+  }
+}
+
+/** 内置用例以最新生效定义为准，用户自定义用例保留在后；调试模式下应用删除名单。 */
 function applyBuiltinLayer(custom: TestCase[]): TestCase[] {
   const builtinIds = getBuiltinTestCaseIds();
+  const removed = IS_DEBUG ? new Set(loadRemovedIds()) : new Set<string>();
+  const builtins = getBuiltinTestCases().filter((c) => !removed.has(c.id));
   const kept = custom.filter(
     (c) => c && typeof c.id === "string" && !builtinIds.has(c.id),
   );
-  return [...getBuiltinTestCases(), ...kept];
+  return [...builtins, ...kept];
 }
 
 function loadCases(): TestCase[] {
@@ -74,8 +100,11 @@ export function useTestCasesStore(): TestCasesStore {
   }, []);
 
   const removeCase = useCallback((id: string) => {
-    // 内置用例不可删除
-    if (isBuiltinTestCase(id)) return;
+    // 内置用例不可删除（调试模式除外：删除 = 记入删除名单）
+    if (isBuiltinTestCase(id)) {
+      if (!IS_DEBUG) return;
+      saveRemovedIds([...new Set([...loadRemovedIds(), id])]);
+    }
     setCases((prev) => prev.filter((c) => c.id !== id));
   }, []);
 

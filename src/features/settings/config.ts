@@ -28,6 +28,8 @@ function defaultPrefs(): Prefs {
     mergeStack: true,
     theme: "dark",
     logFontSize: 12,
+    removedBuiltinSearch: [],
+    removedBuiltinTags: [],
   };
 }
 
@@ -64,6 +66,12 @@ function normalizePrefs(p: Partial<Prefs> | undefined): Prefs {
       typeof p.logFontSize === "number" && p.logFontSize >= 9 && p.logFontSize <= 20
         ? Math.round(p.logFontSize)
         : 12,
+    removedBuiltinSearch: Array.isArray(p.removedBuiltinSearch)
+      ? p.removedBuiltinSearch
+      : [],
+    removedBuiltinTags: Array.isArray(p.removedBuiltinTags)
+      ? p.removedBuiltinTags
+      : [],
   };
 }
 
@@ -137,6 +145,12 @@ function mergePrefs(local: Prefs, imported: Prefs): Prefs {
     mergeStack: local.mergeStack,
     theme: local.theme,
     logFontSize: local.logFontSize,
+    removedBuiltinSearch: [
+      ...new Set([...local.removedBuiltinSearch, ...imported.removedBuiltinSearch]),
+    ],
+    removedBuiltinTags: [
+      ...new Set([...local.removedBuiltinTags, ...imported.removedBuiltinTags]),
+    ],
   };
 }
 

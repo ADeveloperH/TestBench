@@ -224,6 +224,8 @@ pnpm tauri icon src-tauri/icons/app-icon-source.png
 2. 「发布配置」→「生成配置 JSON」把当前生效配置导出为 remote-config.json 内容
 3. 「校验」→ 一键「**发布到远程**」自动提交到仓库，所有用户下次启动生效
 
+调试模式下各 tab 的**内置条目同样支持删除/编辑**（应用/搜索/Tag 常用/过滤器/测试用例）：删除的内置条目会记住，刷新不恢复；点「生成配置 JSON」时按删除后的生效配置生成，发布后所有用户的内置配置随之更新。正式包中内置条目仍不可删除/编辑。
+
 发布凭据（首次使用）：
 
 1. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token

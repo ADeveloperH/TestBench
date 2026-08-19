@@ -8,6 +8,7 @@ import {
   getBuiltinTagValues,
   subscribeBuiltins,
 } from "../../core/builtinRegistry";
+import { IS_DEBUG } from "../../core/debug";
 
 export type ListKind = "search" | "tags";
 
@@ -35,6 +36,10 @@ export interface Prefs {
   theme: "dark" | "light";
   /** 日志字号（px，9~20，默认 12） */
   logFontSize: number;
+  /** 调试模式删除的内置搜索常用 value（正式包忽略，内置不可删） */
+  removedBuiltinSearch: string[];
+  /** 调试模式删除的内置 Tag 常用 value（正式包忽略，内置不可删） */
+  removedBuiltinTags: string[];
 }
 
 const KEY = "logcat-prefs-v1";
@@ -61,6 +66,8 @@ const DEFAULTS: Prefs = {
   mergeStack: true,
   theme: "dark",
   logFontSize: LOG_FONT_DEFAULT,
+  removedBuiltinSearch: [],
+  removedBuiltinTags: [],
 };
 
 /** 兼容旧版：历史版本的常用是纯字符串，迁移成 { value, description }。 */
@@ -81,22 +88,35 @@ function normalizeFavorites(x: unknown): Favorite[] {
   return out;
 }
 
-/** 内置常用排最前；过滤掉与当前内置重复的旧副本（远程配置变化后据此重算）。 */
+/**
+ * 内置常用排最前；过滤掉与当前内置重复的旧副本（远程配置变化后据此重算）。
+ * 调试模式下应用「已删除内置」名单：被删的内置不再显示，且允许用户用同名 value
+ * 重建自己的常用；正式包忽略删除名单，内置始终保留且不可删。
+ */
 function applyBuiltinLayer(base: Prefs): Prefs {
   const searchValues = getBuiltinSearchValues();
   const tagValues = getBuiltinTagValues();
+  const removedSearch = IS_DEBUG ? new Set(base.removedBuiltinSearch) : new Set<string>();
+  const removedTags = IS_DEBUG ? new Set(base.removedBuiltinTags) : new Set<string>();
   return {
     ...base,
     searchFavorites: [
-      ...getBuiltinSearchFavorites(),
-      ...base.searchFavorites.filter((f) => !searchValues.has(f.value)),
+      ...getBuiltinSearchFavorites().filter((f) => !removedSearch.has(f.value)),
+      ...base.searchFavorites.filter(
+        (f) => !searchValues.has(f.value) || removedSearch.has(f.value),
+      ),
     ],
     tagFavorites: [
-      ...getBuiltinTagFavorites(),
-      ...base.tagFavorites.filter((f) => !tagValues.has(f.value)),
+      ...getBuiltinTagFavorites().filter((f) => !removedTags.has(f.value)),
+      ...base.tagFavorites.filter(
+        (f) => !tagValues.has(f.value) || removedTags.has(f.value),
+      ),
     ],
-    // 兼容旧数据：内置应用现在不可删除，清理历史版本记录的隐藏项
-    removedPackages: base.removedPackages.filter((pkg) => !isBuiltinApp(pkg)),
+    // 兼容旧数据：正式包里内置应用不可删除，清理历史版本记录的隐藏项；
+    // 调试模式下保留（维护者删除内置应用后需要记住删除状态）。
+    removedPackages: IS_DEBUG
+      ? base.removedPackages
+      : base.removedPackages.filter((pkg) => !isBuiltinApp(pkg)),
   };
 }
 
@@ -179,10 +199,10 @@ export function usePrefs() {
     (kind: ListKind, value: string, description = "") => {
       const v = value.trim();
       if (!v) return;
-      // 内置常用已存在，忽略重复添加
+      // 内置常用已存在，忽略重复添加（调试模式除外：允许用同名 value 重建自己的常用）
       const builtin =
         kind === "search" ? getBuiltinSearchValues() : getBuiltinTagValues();
-      if (builtin.has(v)) return;
+      if (builtin.has(v) && !IS_DEBUG) return;
       const desc = description.trim();
       setPrefs((p) => {
         const upd = (list: Favorite[]) => {
@@ -203,10 +223,26 @@ export function usePrefs() {
   );
 
   const removeFavorite = useCallback((kind: ListKind, value: string) => {
-    // 内置常用不可删除
+    // 内置常用不可删除；调试模式下删除内置 = 记入「已删除内置」名单
     const builtin =
       kind === "search" ? getBuiltinSearchValues() : getBuiltinTagValues();
-    if (builtin.has(value)) return;
+    if (builtin.has(value)) {
+      if (!IS_DEBUG) return;
+      setPrefs((p) =>
+        kind === "search"
+          ? {
+              ...p,
+              removedBuiltinSearch: [...p.removedBuiltinSearch, value],
+              searchFavorites: p.searchFavorites.filter((x) => x.value !== value),
+            }
+          : {
+              ...p,
+              removedBuiltinTags: [...p.removedBuiltinTags, value],
+              tagFavorites: p.tagFavorites.filter((x) => x.value !== value),
+            },
+      );
+      return;
+    }
     setPrefs((p) =>
       kind === "search"
         ? {
@@ -268,8 +304,8 @@ export function usePrefs() {
   }, []);
 
   const removeApp = useCallback((pkg: string) => {
-    // 内置应用不可删除
-    if (isBuiltinApp(pkg)) return;
+    // 内置应用不可删除（调试模式除外：删除内置 = 记入 removedPackages）
+    if (isBuiltinApp(pkg) && !IS_DEBUG) return;
     setPrefs((p) => {
       if (p.addedApps.some((a) => a.package === pkg)) {
         return { ...p, addedApps: p.addedApps.filter((a) => a.package !== pkg) };

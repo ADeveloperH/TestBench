@@ -38,6 +38,10 @@ import {
   subscribeBuiltins,
 } from "./core/builtinRegistry";
 import { refreshRemoteConfig } from "./core/remoteConfig";
+import { IS_DEBUG } from "./core/debug";
+
+/** 调试模式下允许在日志页取消常用内置项（正式包受保护）。 */
+const NO_PROTECTED_VALUES = new Set<string>();
 import { LEVELS, LEVEL_LABELS } from "./core/types";
 import type { DeviceInfo, LogLevel, ScrollCommand } from "./core/types";
 import "./App.css";
@@ -907,7 +911,7 @@ export default function App() {
               onUnpin={(v) => prefs.removeFavorite("search", v)}
               onRemoveHistory={(v) => prefs.removeHistory("search", v)}
               placeholder="搜索（消息或 Tag）"
-              protectedValues={getBuiltinSearchValues()}
+              protectedValues={IS_DEBUG ? NO_PROTECTED_VALUES : getBuiltinSearchValues()}
             />
             <button
               type="button"
@@ -932,7 +936,7 @@ export default function App() {
             onUnpin={(v) => prefs.removeFavorite("tags", v)}
             onRemoveHistory={(v) => prefs.removeHistory("tags", v)}
             placeholder="Tag（逗号分隔，!排除）"
-            protectedValues={getBuiltinTagValues()}
+            protectedValues={IS_DEBUG ? NO_PROTECTED_VALUES : getBuiltinTagValues()}
           />
           <label>应用</label>
           <Select

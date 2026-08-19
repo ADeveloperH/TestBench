@@ -4,6 +4,7 @@ import type { SavedFilter } from "./useSavedFilters";
 import type { FilterState, LogLevel } from "../../core/types";
 import { LEVELS, LEVEL_LABELS } from "../../core/types";
 import { getBuiltinFilterIds } from "../../core/builtinRegistry";
+import { IS_DEBUG } from "../../core/debug";
 import { Select } from "../../components/Select";
 
 interface Props {
@@ -93,6 +94,7 @@ export function FilterManager(props: Props) {
           const last = props.savedFilters.length - 1;
           const editing = editingId === f.id;
           const builtin = getBuiltinFilterIds().has(f.id);
+          const locked = builtin && !IS_DEBUG;
           return (
             <li
               key={f.id}
@@ -176,48 +178,48 @@ export function FilterManager(props: Props) {
                   {builtin && <span className="manage-badge">内置</span>}
                   <button
                     className="manage-move"
-                    disabled={builtin}
-                    title={builtin ? "内置过滤器不可编辑" : "编辑"}
+                    disabled={locked}
+                    title={locked ? "内置过滤器不可编辑" : builtin ? "调试模式：内置过滤器可编辑" : "编辑"}
                     onClick={() => startEdit(f)}
                   >
                     ✎
                   </button>
                   <button
                     className="manage-move"
-                    disabled={i === 0 || builtin}
-                    title={builtin ? "内置过滤器不可移动" : "置顶"}
+                    disabled={i === 0 || locked}
+                    title={locked ? "内置过滤器不可移动" : builtin ? "调试模式：内置过滤器可移动" : "置顶"}
                     onClick={() => props.onMove(i, 0)}
                   >
                     ⏫
                   </button>
                   <button
                     className="manage-move"
-                    disabled={i === 0 || builtin}
-                    title={builtin ? "内置过滤器不可移动" : "上移"}
+                    disabled={i === 0 || locked}
+                    title={locked ? "内置过滤器不可移动" : builtin ? "调试模式：内置过滤器可移动" : "上移"}
                     onClick={() => props.onMove(i, i - 1)}
                   >
                     ↑
                   </button>
                   <button
                     className="manage-move"
-                    disabled={i === last || builtin}
-                    title={builtin ? "内置过滤器不可移动" : "下移"}
+                    disabled={i === last || locked}
+                    title={locked ? "内置过滤器不可移动" : builtin ? "调试模式：内置过滤器可移动" : "下移"}
                     onClick={() => props.onMove(i, i + 1)}
                   >
                     ↓
                   </button>
                   <button
                     className="manage-move"
-                    disabled={i === last || builtin}
-                    title={builtin ? "内置过滤器不可移动" : "置底"}
+                    disabled={i === last || locked}
+                    title={locked ? "内置过滤器不可移动" : builtin ? "调试模式：内置过滤器可移动" : "置底"}
                     onClick={() => props.onMove(i, last)}
                   >
                     ⏬
                   </button>
                   <button
                     className="manage-del"
-                    disabled={builtin}
-                    title={builtin ? "内置过滤器不可删除" : "删除"}
+                    disabled={locked}
+                    title={locked ? "内置过滤器不可删除" : builtin ? "调试模式：内置过滤器可删除" : "删除"}
                     onClick={() => props.onDelete(f.id)}
                   >
                     删除

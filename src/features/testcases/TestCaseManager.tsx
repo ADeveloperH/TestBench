@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { AppInfo } from "../../core/apps";
 import { Select } from "../../components/Select";
+import { IS_DEBUG } from "../../core/debug";
 import type { TestCasesStore } from "./useTestCasesStore";
 import {
   cond,
@@ -147,9 +148,13 @@ export function TestCaseManager({ store, apps }: Props) {
               </button>
               <button
                 className="manage-del"
-                disabled={isBuiltinTestCase(tc.id)}
+                disabled={isBuiltinTestCase(tc.id) && !IS_DEBUG}
                 title={
-                  isBuiltinTestCase(tc.id) ? "内置用例不可删除" : "删除"
+                  isBuiltinTestCase(tc.id)
+                    ? IS_DEBUG
+                      ? "调试模式：内置用例可删除（发布后对用户生效）"
+                      : "内置用例不可删除"
+                    : "删除"
                 }
                 onClick={(e) => {
                   e.stopPropagation();

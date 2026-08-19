@@ -14,6 +14,7 @@ import {
   refreshRemoteConfig,
   validateRemoteConfig,
 } from "../../core/remoteConfig";
+import { IS_DEBUG } from "../../core/debug";
 import type { Favorite, ListKind, Prefs } from "./usePrefs";
 import type { SavedFilter } from "../filters/useSavedFilters";
 import type { TestCasesStore } from "../testcases/useTestCasesStore";
@@ -29,9 +30,6 @@ export type ManageTab =
   | "filters"
   | "help"
   | "publish";
-
-/** 是否调试模式：仅开发构建（pnpm tauri dev）显示「发布配置」页。 */
-const IS_DEBUG = import.meta.env.DEV;
 
 /** 发布凭据（fine-grained PAT）的本地存储 key。 */
 const PUBLISH_TOKEN_KEY = "remote-config-publish-token";
@@ -445,10 +443,12 @@ export function ManagePage(props: Props) {
                     </button>
                     <button
                       className="manage-del"
-                      disabled={isBuiltinApp(a.package)}
+                      disabled={isBuiltinApp(a.package) && !IS_DEBUG}
                       title={
                         isBuiltinApp(a.package)
-                          ? "内置应用不可删除"
+                          ? IS_DEBUG
+                            ? "调试模式：内置应用可删除（发布后对用户生效）"
+                            : "内置应用不可删除"
                           : "删除"
                       }
                       onClick={() => props.onRemoveApp(a.package)}
@@ -738,6 +738,7 @@ function ListSection(p: ListSectionProps) {
           const last = p.favorites.length - 1;
           const editing = editingValue === f.value;
           const builtin = p.builtinValues.has(f.value);
+          const locked = builtin && !IS_DEBUG;
           return (
             <li key={f.value} className="manage-item">
               <span className="manage-name" title={f.description || f.value}>
@@ -766,8 +767,8 @@ function ListSection(p: ListSectionProps) {
                   )}
                   <button
                     className="manage-move"
-                    disabled={builtin}
-                    title={builtin ? "内置常用不可编辑" : "编辑描述"}
+                    disabled={locked}
+                    title={locked ? "内置常用不可编辑" : builtin ? "调试模式：内置常用可编辑" : "编辑描述"}
                     onClick={() => startEdit(f)}
                   >
                     ✎
@@ -776,40 +777,40 @@ function ListSection(p: ListSectionProps) {
               )}
               <button
                 className="manage-move"
-                disabled={i === 0 || builtin}
-                title={builtin ? "内置常用不可移动" : "置顶"}
+                disabled={i === 0 || locked}
+                title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "置顶"}
                 onClick={() => p.onMoveFavorite(i, 0)}
               >
                 ⏫
               </button>
               <button
                 className="manage-move"
-                disabled={i === 0 || builtin}
-                title={builtin ? "内置常用不可移动" : "上移"}
+                disabled={i === 0 || locked}
+                title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "上移"}
                 onClick={() => p.onMoveFavorite(i, i - 1)}
               >
                 ↑
               </button>
               <button
                 className="manage-move"
-                disabled={i === last || builtin}
-                title={builtin ? "内置常用不可移动" : "下移"}
+                disabled={i === last || locked}
+                title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "下移"}
                 onClick={() => p.onMoveFavorite(i, i + 1)}
               >
                 ↓
               </button>
               <button
                 className="manage-move"
-                disabled={i === last || builtin}
-                title={builtin ? "内置常用不可移动" : "置底"}
+                disabled={i === last || locked}
+                title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "置底"}
                 onClick={() => p.onMoveFavorite(i, last)}
               >
                 ⏬
               </button>
               <button
                 className="manage-del"
-                disabled={builtin}
-                title={builtin ? "内置常用不可删除" : "删除"}
+                disabled={locked}
+                title={locked ? "内置常用不可删除" : builtin ? "调试模式：内置常用可删除" : "删除"}
                 onClick={() => p.onRemoveFavorite(f.value)}
               >
                 删除
