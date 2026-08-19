@@ -467,14 +467,25 @@ export default function App() {
     wv
       .onDragDropEvent((event) => {
         if (event.payload.type !== "drop") return;
+        logInfo(`收到文件拖放：paths=${JSON.stringify(event.payload.paths)} device=${selectedDevice ?? "无"}`).catch(
+          () => {},
+        );
         const apk = event.payload.paths.find((p) =>
           p.toLowerCase().endsWith(".apk"),
         );
-        if (!apk || !selectedDevice) return;
+        if (!apk) {
+          setError("拖放的文件不是 APK 安装包");
+          return;
+        }
+        if (!selectedDevice) {
+          setError("未连接设备，无法安装 APK（请先连接设备）");
+          return;
+        }
         invoke<string>("install_apk", { device: selectedDevice, path: apk })
           .then((out) => {
             notify("APK 安装完成", out).catch(() => {});
             setSavedTip(`安装完成：${out}`);
+            setError(null);
           })
           .catch((e) => setError(`安装失败：${String(e)}`));
       })
