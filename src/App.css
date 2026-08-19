@@ -1953,6 +1953,10 @@ body.light .tc-match {
   left: 50%;
   transform: translateX(-50%);
   z-index: 6000;
+  max-width: min(70vw, 680px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 10px 20px;
   border: 1px solid rgba(67, 199, 123, 0.5);
   border-radius: 8px;

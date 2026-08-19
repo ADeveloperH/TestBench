@@ -390,7 +390,7 @@ export default function App() {
   const handleInstallApk = async () => {
     const path = await invoke<string | null>("pick_apk");
     if (!path) return "已取消选择 APK";
-    showToast("正在安装 APK…", true);
+    showToast(`正在安装 APK：${path}`, true);
     try {
       const out = await invoke<string>("install_apk", {
         device: selectedDevice,
@@ -504,7 +504,7 @@ export default function App() {
           setError("未连接设备，无法安装 APK（请先连接设备）");
           return;
         }
-        showToast("正在安装 APK…", true);
+        showToast(`正在安装 APK：${apk}`, true);
         invoke<string>("install_apk", { device: selectedDevice, path: apk })
           .then((out) => {
             notify("APK 安装完成", out).catch((e) => {
@@ -1125,6 +1125,7 @@ export default function App() {
           <div
             className={toastBusy ? "toast toast-busy" : "toast"}
             role="status"
+            title={toast}
           >
             {toast}
           </div>,
