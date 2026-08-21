@@ -49,7 +49,7 @@ export interface UseLogcatResult {
   filters: FilterState;
   setFilters: Dispatch<SetStateAction<FilterState>>;
   error: string | null;
-  setError: (e: string | null) => void;
+  setError: Dispatch<SetStateAction<string | null>>;
   /** 设备未就绪（adb 输出 waiting for device），显示等待提示 */
   waiting: boolean;
 }
