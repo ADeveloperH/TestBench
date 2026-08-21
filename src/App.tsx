@@ -334,6 +334,12 @@ export default function App() {
           package: selectedPackage,
         });
         const newPid = pids.join(",");
+        if (newPid) {
+          // 应用已运行 → 自动清除「应用未运行」提示（每 3 秒检测一次）
+          setError((prev) =>
+            prev === `应用「${selectedPackage}」当前未运行` ? null : prev,
+          );
+        }
         setFilters((f) => {
           if (f.pid === newPid) return f;
           // 应用被杀（无进程）时清空 PID 放行全部日志，重启后自动恢复过滤
@@ -344,7 +350,16 @@ export default function App() {
       }
     }, 3000);
     return () => clearInterval(timer);
-  }, [selectedPackage, selectedDevice, setFilters]);
+  }, [selectedPackage, selectedDevice, setFilters, setError]);
+
+  // 错误横幅自动消失：除「应用未运行」外，其余错误最多显示 4 秒
+  // （「应用未运行」由上面的 PID 轮询 / 切换应用时自然更新）。
+  useEffect(() => {
+    if (!error) return;
+    if (error.startsWith("应用「") && error.endsWith("当前未运行")) return;
+    const timer = setTimeout(() => setError(null), 4000);
+    return () => clearTimeout(timer);
+  }, [error, setError]);
 
   const handleAppChange = (pkg: string) => {
     setSelectedPackage(pkg);
