@@ -304,6 +304,12 @@ export default function App() {
   const applyAppFilter = async (pkg: string) => {
     if (!pkg) {
       setFilters((f) => ({ ...f, pid: "", app: "" }));
+      // 切换到「全部应用」：清除残留的「应用未运行」提示
+      setError((prev) =>
+        prev && prev.startsWith("应用「") && prev.endsWith("当前未运行")
+          ? null
+          : prev,
+      );
       return;
     }
     try {
