@@ -27,6 +27,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "macOS": {
       "signingIdentity": "-"
     },
@@ -38,5 +39,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU0ODJCOEYxMUM3MkM3REMKUldUY3gzSWM4YmlDVkJLbUVhVkdDYkhnZDBDU1ZRd2NJYXRTMFF4dDB6NDNPWVplaTFQLzkzQUQK",
+      "endpoints": [
+        "https://INTERNAL_UPDATE_HOST/testbench/latest.json"
+      ]
+    }
   }
 }

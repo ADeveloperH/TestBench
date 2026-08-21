@@ -213,95 +213,6 @@ async fn fetch_remote_apps(url: String) -> Result<Vec<App>, String> {
     adb_fetch_remote_apps(&url)
 }
 
-/// 检查更新返回结构（与前端 ManagePage 的 UpdateInfo 对应）。
-#[derive(serde::Serialize)]
-struct UpdateInfo {
-    current: String,
-    latest: String,
-    has_update: bool,
-    name: String,
-    url: String,
-    notes: String,
-    error: Option<String>,
-}
-
-/// 把 "v1.2.3" / "1.2.3" 解析成数字段；无法解析返回 None。
-fn parse_version(v: &str) -> Option<Vec<u64>> {
-    let mut parts = Vec::new();
-    for seg in v.trim().trim_start_matches('v').split('.') {
-        parts.push(seg.parse::<u64>().ok()?);
-    }
-    if parts.is_empty() {
-        None
-    } else {
-        Some(parts)
-    }
-}
-
-/// latest 是否比 current 新（按 semver 数字段比较；无法解析时按字符串不等处理）。
-fn version_newer(latest: &str, current: &str) -> bool {
-    match (parse_version(latest), parse_version(current)) {
-        (Some(l), Some(c)) => {
-            for i in 0..l.len().max(c.len()) {
-                let lv = l.get(i).copied().unwrap_or(0);
-                let cv = c.get(i).copied().unwrap_or(0);
-                if lv != cv {
-                    return lv > cv;
-                }
-            }
-            false
-        }
-        _ => !latest.is_empty() && latest != current,
-    }
-}
-
-/// 检查 GitHub Releases 最新版本（公开仓库，无需 token）。
-#[tauri::command]
-fn check_update(app: AppHandle) -> UpdateInfo {
-    let current = app.package_info().version.to_string();
-    log::info!("检查更新：当前版本 {current}");
-    let fail = |msg: &str| UpdateInfo {
-        current: current.clone(),
-        latest: String::new(),
-        has_update: false,
-        name: String::new(),
-        url: String::new(),
-        notes: String::new(),
-        error: Some(msg.to_string()),
-    };
-    let body = match ureq::get("https://api.github.com/repos/ADeveloperH/TestBench/releases/latest")
-        .set("User-Agent", "TestBench-Updater")
-        .set("Accept", "application/vnd.github+json")
-        .timeout(std::time::Duration::from_secs(10))
-        .call()
-    {
-        Ok(resp) => match resp.into_string() {
-            Ok(s) => s,
-            Err(e) => return fail(&format!("读取响应失败：{e}")),
-        },
-        Err(ureq::Error::Status(404, _)) => return fail("仓库还没有发布任何版本"),
-        Err(e) => return fail(&format!("请求失败：{e}")),
-    };
-    let v: serde_json::Value = match serde_json::from_str(&body) {
-        Ok(v) => v,
-        Err(e) => return fail(&format!("JSON 解析失败：{e}")),
-    };
-    let tag = v["tag_name"].as_str().unwrap_or("").to_string();
-    let latest = tag.trim_start_matches('v').to_string();
-    if latest.is_empty() {
-        return fail("GitHub 返回的 tag 为空");
-    }
-    UpdateInfo {
-        has_update: version_newer(&latest, &current),
-        latest,
-        current,
-        name: v["name"].as_str().unwrap_or("").to_string(),
-        url: v["html_url"].as_str().unwrap_or("").to_string(),
-        notes: v["body"].as_str().unwrap_or("").to_string(),
-        error: None,
-    }
-}
-
 /// 用系统默认浏览器打开 URL。
 #[tauri::command]
 fn open_in_browser(url: String) -> Result<(), String> {
@@ -857,6 +768,10 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        // 自动更新（updater）：更新清单/签名验证逻辑由 tauri.conf.json 的 plugins.updater 配置
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // 更新安装完成后 relaunch 重启进程
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 已有实例在运行：聚焦已有窗口
             if let Some(w) = app.get_webview_window("main") {
@@ -916,7 +831,6 @@ pub fn run() {
             resolve_pids,
             app_runtime_status,
             fetch_remote_apps,
-            check_update,
             open_in_browser,
             publish_remote_config,
             verify_publish_token,

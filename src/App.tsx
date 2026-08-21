@@ -39,6 +39,13 @@ import {
 } from "./core/builtinRegistry";
 import { refreshRemoteConfig } from "./core/remoteConfig";
 import { IS_DEBUG } from "./core/debug";
+import { getVersion } from "@tauri-apps/api/app";
+import {
+  checkForUpdate,
+  installUpdate,
+  type AppUpdateInfo,
+  type UpdateProgress,
+} from "./services/updater";
 
 /** 调试模式下允许在日志页取消常用内置项（正式包受保护）。 */
 const NO_PROTECTED_VALUES = new Set<string>();
@@ -166,6 +173,92 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [toastBusy, setToastBusy] = useState(false);
   const toastTimerRef = useRef<number | null>(null);
+
+  // —— 应用更新（Tauri updater） ——
+  type UpdateStatus =
+    | "idle"
+    | "checking"
+    | "uptodate"
+    | "available"
+    | "downloading"
+    | "installing"
+    | "error";
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(
+    null,
+  );
+  const [updateError, setUpdateError] = useState<string>("");
+  const [currentVersion, setCurrentVersion] = useState("");
+
+  const closeUpdateDialog = () => {
+    // 下载/安装中不允许关闭（避免中断更新流程）
+    if (updateStatus === "downloading" || updateStatus === "installing") return;
+    setUpdateStatus("idle");
+  };
+
+  const runUpdateCheck = async (silent: boolean) => {
+    if (updateStatus === "checking") return;
+    if (silent) {
+      // 后台自动检查：失败只记日志，不打扰用户
+      try {
+        const info = await checkForUpdate();
+        if (info) {
+          setUpdateInfo(info);
+          setUpdateStatus("available");
+        }
+      } catch (e) {
+        logInfo(`[Updater] auto check failed: ${String(e)}`).catch(() => {});
+      }
+      return;
+    }
+    // 手动检查：全程有明确反馈
+    setUpdateError("");
+    setUpdateStatus("checking");
+    try {
+      const info = await checkForUpdate();
+      setUpdateInfo(info);
+      if (info) {
+        setUpdateStatus("available");
+      } else {
+        try {
+          setCurrentVersion(await getVersion());
+        } catch {
+          // 拿不到版本号也照常显示「已是最新」
+        }
+        setUpdateStatus("uptodate");
+      }
+    } catch (e) {
+      setUpdateError("无法连接更新服务器，请稍后重试。");
+      setUpdateStatus("error");
+      logInfo(`[Updater] manual check failed: ${String(e)}`).catch(() => {});
+    }
+  };
+
+  const runUpdateInstall = async () => {
+    if (!updateInfo) return;
+    setUpdateStatus("downloading");
+    setUpdateProgress({ downloaded: 0, percent: 0 });
+    try {
+      await installUpdate(updateInfo.update, (p) => setUpdateProgress(p));
+      setUpdateStatus("installing");
+      // relaunch 成功后进程会退出，这里的状态不会再被用户看到
+    } catch (e) {
+      setUpdateError("更新未完成，请稍后重试。");
+      setUpdateStatus("error");
+      logInfo(`[Updater] install failed: ${String(e)}`).catch(() => {});
+    }
+  };
+
+  // 启动后延迟 4 秒自动检查更新（开发模式不检查；失败静默，不阻断主程序）
+  useEffect(() => {
+    if (IS_DEBUG) return;
+    const timer = window.setTimeout(() => {
+      runUpdateCheck(true);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 底部绿色 toast 提示（4 秒自动消失；sticky=true 时持续显示直到下一次提示）。 */
   const showToast = (msg: string, sticky = false) => {
@@ -713,60 +806,173 @@ export default function App() {
     document.body.classList.toggle("light", prefs.prefs.theme === "light");
   }, [prefs.prefs.theme]);
 
+  const formatMB = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+  const updateDialogPortal =
+    updateStatus !== "idle"
+      ? createPortal(
+          <div
+            className="save-description-backdrop"
+            role="presentation"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) closeUpdateDialog();
+            }}
+          >
+            <div
+              className="save-description-dialog update-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label="应用更新"
+            >
+              {updateStatus === "checking" && (
+                <>
+                  <h3>正在检查更新…</h3>
+                  <p className="count">正在连接更新服务器</p>
+                </>
+              )}
+
+              {updateStatus === "uptodate" && (
+                <>
+                  <h3>已经是最新版本</h3>
+                  <p className="count">当前版本 v{currentVersion || "?"}</p>
+                  <div className="save-description-actions">
+                    <button onClick={closeUpdateDialog}>关闭</button>
+                  </div>
+                </>
+              )}
+
+              {updateStatus === "available" && updateInfo && (
+                <>
+                  <h3>发现新版本</h3>
+                  <p className="count">
+                    当前版本：v{updateInfo.currentVersion}
+                    <br />
+                    最新版本：v{updateInfo.version}
+                  </p>
+                  {updateInfo.notes && (
+                    <div className="update-notes">{updateInfo.notes}</div>
+                  )}
+                  <div className="save-description-actions">
+                    <button onClick={closeUpdateDialog}>稍后更新</button>
+                    <button className="primary-action" onClick={runUpdateInstall}>
+                      立即更新
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {updateStatus === "downloading" && (
+                <>
+                  <h3>正在下载更新</h3>
+                  <div className="update-progress-track">
+                    <div
+                      className="update-progress-fill"
+                      style={{
+                        width: `${updateProgress?.percent ?? 0}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="count">
+                    {updateProgress?.percent ?? 0}%
+                    {updateProgress?.total
+                      ? `（${formatMB(updateProgress.downloaded)} / ${formatMB(updateProgress.total)}）`
+                      : `（${formatMB(updateProgress?.downloaded ?? 0)} 已下载）`}
+                  </p>
+                </>
+              )}
+
+              {updateStatus === "installing" && (
+                <>
+                  <h3>正在安装更新…</h3>
+                  <p className="count">安装完成后应用将自动重启</p>
+                </>
+              )}
+
+              {updateStatus === "error" && (
+                <>
+                  <h3>更新失败</h3>
+                  <p className="count">自动更新没有完成，请稍后重试。</p>
+                  <p className="count">{updateError}</p>
+                  <div className="save-description-actions">
+                    <button onClick={closeUpdateDialog}>关闭</button>
+                    <button
+                      className="primary-action"
+                      onClick={() => runUpdateCheck(false)}
+                    >
+                      重新检查
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   if (view === "manage") {
     return (
-      <ManagePage
-        prefs={prefs.prefs}
-        effectiveApps={effectiveApps}
-        testCaseStore={testCaseStore}
-        initialTab={manageTab}
-        onAddApp={(name, pkg) => prefs.addApp({ name, package: pkg })}
-        onRemoveApp={(pkg) => prefs.removeApp(pkg)}
-        onAddFavorite={(kind, v, d) => prefs.addFavorite(kind, v, d)}
-        onRemoveFavorite={(kind, v) => prefs.removeFavorite(kind, v)}
-        onUpdateFavoriteDescription={(kind, v, d) =>
-          prefs.updateFavoriteDescription(kind, v, d)
-        }
-        onRemoveHistory={(kind, v) => prefs.removeHistory(kind, v)}
-        onClearHistory={(kind) => prefs.clearHistory(kind)}
-        onSetAppOrder={(order) => prefs.setAppOrder(order)}
-        onSetBackdoorOverride={(pkg, a) => prefs.setBackdoorOverride(pkg, a)}
-        onMoveFavorite={(kind, from, to) => prefs.moveFavorite(kind, from, to)}
-        savedFilters={savedFilters}
-        onSaveFilter={saveFilter}
-        onRenameFilter={renameFilter}
-        onUpdateFilter={updateFilter}
-        onDeleteFilter={deleteFilter}
-        onMoveFilter={moveFilter}
-        onExportConfig={handleExportConfig}
-        onImportConfig={handleImportConfig}
-        onExportDebugLog={handleExportDebugLog}
-        onBack={() => setView("log")}
-      />
+      <>
+        <ManagePage
+          prefs={prefs.prefs}
+          effectiveApps={effectiveApps}
+          testCaseStore={testCaseStore}
+          initialTab={manageTab}
+          onAddApp={(name, pkg) => prefs.addApp({ name, package: pkg })}
+          onRemoveApp={(pkg) => prefs.removeApp(pkg)}
+          onAddFavorite={(kind, v, d) => prefs.addFavorite(kind, v, d)}
+          onRemoveFavorite={(kind, v) => prefs.removeFavorite(kind, v)}
+          onUpdateFavoriteDescription={(kind, v, d) =>
+            prefs.updateFavoriteDescription(kind, v, d)
+          }
+          onRemoveHistory={(kind, v) => prefs.removeHistory(kind, v)}
+          onClearHistory={(kind) => prefs.clearHistory(kind)}
+          onSetAppOrder={(order) => prefs.setAppOrder(order)}
+          onSetBackdoorOverride={(pkg, a) => prefs.setBackdoorOverride(pkg, a)}
+          onMoveFavorite={(kind, from, to) =>
+            prefs.moveFavorite(kind, from, to)
+          }
+          savedFilters={savedFilters}
+          onSaveFilter={saveFilter}
+          onRenameFilter={renameFilter}
+          onUpdateFilter={updateFilter}
+          onDeleteFilter={deleteFilter}
+          onMoveFilter={moveFilter}
+          onExportConfig={handleExportConfig}
+          onImportConfig={handleImportConfig}
+          onExportDebugLog={handleExportDebugLog}
+          onCheckUpdate={() => runUpdateCheck(false)}
+          onBack={() => setView("log")}
+        />
+        {updateDialogPortal}
+      </>
     );
   }
 
   if (view === "tools") {
     return (
-      <ToolsPage
-        apps={logPageApps}
-        hasDevice={!!selectedDevice}
-        appState={appRunState}
-        onOpenBackdoor={handleOpenBackdoor}
-        onRestartApp={handleRestartApp}
-        onClearData={handleClearData}
-        onUninstall={handleUninstall}
-        onScreenshot={handleScreenshot}
-        onInstallApk={handleInstallApk}
-        onDeviceInfo={handleDeviceInfo}
-        onCurrentActivity={handleCurrentActivity}
-        onStartRecording={handleStartRecording}
-        onStopRecording={handleStopRecording}
-        onMirror={handleMirror}
-        onAppAlarm={handleAppAlarm}
-        onAppPerformance={handleAppPerformance}
-        onBack={() => setView("log")}
-      />
+      <>
+        <ToolsPage
+          apps={logPageApps}
+          hasDevice={!!selectedDevice}
+          appState={appRunState}
+          onOpenBackdoor={handleOpenBackdoor}
+          onRestartApp={handleRestartApp}
+          onClearData={handleClearData}
+          onUninstall={handleUninstall}
+          onScreenshot={handleScreenshot}
+          onInstallApk={handleInstallApk}
+          onDeviceInfo={handleDeviceInfo}
+          onCurrentActivity={handleCurrentActivity}
+          onStartRecording={handleStartRecording}
+          onStopRecording={handleStopRecording}
+          onMirror={handleMirror}
+          onAppAlarm={handleAppAlarm}
+          onAppPerformance={handleAppPerformance}
+          onBack={() => setView("log")}
+        />
+        {updateDialogPortal}
+      </>
     );
   }
 
@@ -1163,6 +1369,8 @@ export default function App() {
       )}
 
       {error && <div className="error">{error}</div>}
+
+      {updateDialogPortal}
     </div>
   );
 }

@@ -34,17 +34,6 @@ export type ManageTab =
 /** 发布凭据（fine-grained PAT）的本地存储 key。 */
 const PUBLISH_TOKEN_KEY = "remote-config-publish-token";
 
-/** 检查更新命令的返回结构（与 Rust 端 check_update 对应）。 */
-interface UpdateInfo {
-  current: string;
-  latest: string;
-  has_update: boolean;
-  name: string;
-  url: string;
-  notes: string;
-  error: string | null;
-}
-
 interface Props {
   prefs: Prefs;
   effectiveApps: AppInfo[];
@@ -73,6 +62,8 @@ interface Props {
   onExportConfig: () => Promise<string>;
   onImportConfig: () => Promise<string>;
   onExportDebugLog: () => Promise<string>;
+  /** 手动检查更新（弹窗流程由 App 统一管理） */
+  onCheckUpdate: () => void;
   onBack: () => void;
 }
 
@@ -88,8 +79,6 @@ export function ManagePage(props: Props) {
   const [tagFav, setTagFav] = useState("");
   const [tagDesc, setTagDesc] = useState("");
   const [configMsg, setConfigMsg] = useState("");
-  const [updateBusy, setUpdateBusy] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   // 发布配置页（仅调试模式）
   const [remoteJson, setRemoteJson] = useState("");
   const [publishMsg, setPublishMsg] = useState("");
@@ -117,32 +106,6 @@ export function ManagePage(props: Props) {
     setConfigMsg("正在刷新远程配置…");
     const status = await refreshRemoteConfig(true);
     setConfigMsg(`内置配置：${status.detail}`);
-  };
-
-  const doCheckUpdate = async () => {
-    setUpdateBusy(true);
-    setUpdateInfo(null);
-    try {
-      setUpdateInfo(await invoke<UpdateInfo>("check_update"));
-    } catch (e) {
-      setUpdateInfo({
-        current: "",
-        latest: "",
-        has_update: false,
-        name: "",
-        url: "",
-        notes: "",
-        error: String(e),
-      });
-    } finally {
-      setUpdateBusy(false);
-    }
-  };
-
-  const doOpenRelease = async () => {
-    if (updateInfo?.url) {
-      await invoke("open_in_browser", { url: updateInfo.url });
-    }
   };
 
   const doGenerateRemoteJson = () => {
@@ -289,34 +252,12 @@ export function ManagePage(props: Props) {
           <button onClick={doRefreshConfig} title="拉取最新的内置配置">
             刷新配置
           </button>
-          <button onClick={doCheckUpdate} disabled={updateBusy}>
-            {updateBusy ? "检查中…" : "检查更新"}
+          <button onClick={props.onCheckUpdate} title="检查是否有新版本">
+            检查更新
           </button>
-          {updateInfo?.has_update && (
-            <button onClick={doOpenRelease} title="在浏览器打开下载页">
-              打开下载页
-            </button>
-          )}
           {configMsg && <span className="count">{configMsg}</span>}
         </div>
       </div>
-      {(updateInfo?.has_update || updateInfo?.error) && (
-        <div className="manage-update-banner">
-          {updateInfo.has_update ? (
-            <>
-              发现新版本 <b>v{updateInfo.latest}</b>（当前 v{updateInfo.current}）
-              ，点击「打开下载页」到 GitHub Releases 下载安装。
-            </>
-          ) : (
-            <>检查更新失败：{updateInfo.error}</>
-          )}
-        </div>
-      )}
-      {updateInfo && !updateInfo.has_update && !updateInfo.error && (
-        <div className="manage-update-banner">
-          已是最新版本 v{updateInfo.current}。
-        </div>
-      )}
 
       <div className="manage-tabs">
         <button className={tab === "apps" ? "active" : ""} onClick={() => setTab("apps")}>

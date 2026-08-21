@@ -35,9 +35,8 @@
 
 ## 计划中的功能
 
-- [ ] macOS 签名/公证、Windows 签名（分发必需）
-- [x] 检查更新提示（已实现：无签名环境下采用「提示 + 跳转下载页」的半自动方式）
-- [ ] 全自动安装式更新（tauri-updater，需先完成代码签名）
+- [ ] macOS 签名/公证、Windows 签名（对外分发仍需；内部工具走 ad-hoc + 内置更新）
+- [x] 应用内自动更新（Tauri updater + Ed25519 更新签名 + macOS ad-hoc，见「检查更新」章节）
 - [x] 应用图标（自定义图标，源文件 `src-tauri/icons/app-icon-source.png`）
 
 ## 架构
@@ -238,14 +237,46 @@ pnpm tauri icon src-tauri/icons/app-icon-source.png
 
 ### 检查更新
 
-设置页「检查更新」按钮会查询 GitHub Releases 最新版本，与当前版本比较：
+应用内自动更新基于 Tauri 官方 updater + macOS ad-hoc 签名（内部工具方案，无 Apple Developer Program）：
 
-- 有新版：提示版本号并一键打开 Releases 下载页，用户手动下载安装
-- 无新版/查询失败：显示「已是最新版本」或错误原因
+- 启动约 4 秒后自动后台检查更新（开发模式不检查）；也可在设置页点「检查更新」手动触发
+- 发现新版本弹出更新弹窗：显示版本号与更新说明 → 「立即更新」→ 下载（带进度）→ 安装 → 自动重启
+- 更新包经 Ed25519 签名校验（公钥内置在 App 内），签名错误拒绝安装；检查失败不影响正常使用
 
-版本比较按 semver 规则：发版时 `src-tauri/tauri.conf.json` 的版本号必须递增，否则不会提示更新。
+#### 更新服务器
 
-> 由于未做代码签名，App 内不提供全自动安装式更新（macOS 会被 Gatekeeper 拦截），采用「提示 + 跳转下载页」的半自动方式。
+更新清单为静态 `latest.json`（示例见 `release-output/latest.json`），与更新包一起托管在公司内网 HTTPS 静态文件服务器上：
+
+```json
+{
+  "version": "0.0.3",
+  "notes": "更新说明",
+  "pub_date": "2026-08-21T10:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "（.app.tar.gz.sig 文件的内容，不是 URL）",
+      "url": "https://INTERNAL_UPDATE_HOST/testbench/0.0.3/TestBench.app.tar.gz"
+    }
+  }
+}
+```
+
+更新地址在 `src-tauri/tauri.conf.json` 的 `plugins.updater.endpoints` 配置（当前为 placeholder `INTERNAL_UPDATE_HOST`，接入真实服务器时替换）。
+
+#### 发布 macOS 更新
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY_PATH="$HOME/.tauri/internal-workbench.key"
+export UPDATE_BASE_URL="https://INTERNAL_UPDATE_HOST/testbench"
+export UPDATE_NOTES="本次更新说明"
+pnpm release:mac
+```
+
+脚本会构建 → codesign 校验 → 生成 `release-output/`（latest.json + 版本目录下的更新包），把该目录内容上传到更新服务器即可。**私钥只存在于开发机/CI，绝不提交或上传**；公钥已内置在 tauri.conf.json。
+
+#### 第一次安装（未签名信任）
+
+首次安装的 dmg 下载自网络时会被 Gatekeeper 拦截（ad-hoc 签名未公证），需要用户手动信任一次：系统设置 → 隐私与安全性 → 仍要打开；或右键 App → 打开。**必须把 App 拖入 /Applications 再运行**（更新机制基于 /Applications 内替换，不支持 DMG/移动硬盘/网络盘直接运行）。之后所有版本升级由 App 内更新完成，无需再次手动信任。
 
 ## WiFi 配对说明
 

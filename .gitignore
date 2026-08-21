@@ -32,3 +32,14 @@ src-tauri/bin/windows/*
 *.njsproj
 *.sln
 *.sw?
+
+# updater 签名私钥（绝不提交，公钥已内置于 tauri.conf.json）
+*.key
+*.key.pem
+*.private
+
+# 本地发布产物（latest.json / 更新包）
+release-output/
+
+# pnpm 本地 store（依赖缓存）
+.pnpm-store/
