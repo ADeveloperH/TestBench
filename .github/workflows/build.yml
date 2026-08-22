@@ -171,6 +171,11 @@ jobs:
           BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
           mkdir -p release-output
           for arch in arm64 x86_64; do
+            # 文件名后缀用 arm64/x86_64，updater 平台键用 aarch64/x86_64
+            case "$arch" in
+              arm64) PLATFORM="darwin-aarch64" ;;
+              x86_64) PLATFORM="darwin-x86_64" ;;
+            esac
             TAR=$(find artifacts -type f -name "TestBench_${arch}.app.tar.gz" | head -1)
             SIG=$(find artifacts -type f -name "TestBench_${arch}.app.tar.gz.sig" | head -1)
             [ -n "$TAR" ] && [ -n "$SIG" ] || { echo "缺少 ${arch} 更新产物"; exit 1; }
@@ -178,7 +183,7 @@ jobs:
             [ "$arch" = "x86_64" ] && MERGE="--merge"
             node scripts/generate-update-json.mjs \
               --version "$VERSION" \
-              --platform "darwin-${arch}" \
+              --platform "$PLATFORM" \
               --tar "$TAR" \
               --sig "$SIG" \
               --out release-output \
