@@ -502,6 +502,22 @@ export function ManagePage(props: Props) {
               <span className="manage-pkg">空格</span>
             </li>
             <li className="manage-item">
+              <span className="manage-name">打开日志查找</span>
+              <span className="manage-pkg">⌘ / Ctrl + F</span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">查找：下一个匹配</span>
+              <span className="manage-pkg">Enter / ↓</span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">查找：上一个匹配</span>
+              <span className="manage-pkg">Shift + Enter / ↑</span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">关闭查找</span>
+              <span className="manage-pkg">Esc</span>
+            </li>
+            <li className="manage-item">
               <span className="manage-name">复制所选日志</span>
               <span className="manage-pkg">⌘ / Ctrl + C</span>
             </li>
@@ -521,6 +537,11 @@ export function ManagePage(props: Props) {
 
           <h2>小技巧</h2>
           <ul className="manage-list">
+            <li className="manage-item">
+              <span className="manage-name">
+                ⌘ / Ctrl + F 打开查找条：高亮所有匹配、显示匹配计数，支持正则与大小写切换
+              </span>
+            </li>
             <li className="manage-item">
               <span className="manage-name">
                 把 APK 文件拖进窗口，即可安装到当前设备
