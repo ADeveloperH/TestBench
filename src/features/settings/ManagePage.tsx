@@ -506,18 +506,6 @@ export function ManagePage(props: Props) {
               <span className="manage-pkg">⌘ / Ctrl + F</span>
             </li>
             <li className="manage-item">
-              <span className="manage-name">查找：下一个匹配</span>
-              <span className="manage-pkg">Enter / ↓</span>
-            </li>
-            <li className="manage-item">
-              <span className="manage-name">查找：上一个匹配</span>
-              <span className="manage-pkg">Shift + Enter / ↑</span>
-            </li>
-            <li className="manage-item">
-              <span className="manage-name">关闭查找</span>
-              <span className="manage-pkg">Esc</span>
-            </li>
-            <li className="manage-item">
               <span className="manage-name">复制所选日志</span>
               <span className="manage-pkg">⌘ / Ctrl + C</span>
             </li>
@@ -532,6 +520,22 @@ export function ManagePage(props: Props) {
             <li className="manage-item">
               <span className="manage-name">展开 / 收起长日志</span>
               <span className="manage-pkg">双击日志行</span>
+            </li>
+          </ul>
+
+          <h2>日志查找（打开后）</h2>
+          <ul className="manage-list">
+            <li className="manage-item">
+              <span className="manage-name">下一个匹配</span>
+              <span className="manage-pkg">Enter / ↓</span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">上一个匹配</span>
+              <span className="manage-pkg">Shift + Enter / ↑</span>
+            </li>
+            <li className="manage-item">
+              <span className="manage-name">关闭查找</span>
+              <span className="manage-pkg">Esc</span>
             </li>
           </ul>
 
