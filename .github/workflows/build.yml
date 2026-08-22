@@ -102,6 +102,9 @@ jobs:
         run: pnpm install
 
       - name: 生成内置 adb / scrcpy 二进制
+        env:
+          # macOS runner 新版 Homebrew 的 tap trust 校验会告警/阻断 brew install，禁用它
+          HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
         run: |
           brew install scrcpy dylibbundler
           mkdir -p src-tauri/bin/macos
