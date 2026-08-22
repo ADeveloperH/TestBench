@@ -167,7 +167,15 @@ jobs:
           set -euo pipefail
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#v}"
-          NOTES="$(git log -1 --pretty=%s 2>/dev/null || true)"
+          # 更新说明优先读 config/release-notes.txt（发版前由维护者填写总结）；
+          # 为空则回退到 tag 对应 commit 的提交信息。
+          NOTES=""
+          if [ -f config/release-notes.txt ]; then
+            NOTES="$(cat config/release-notes.txt)"
+          fi
+          if [ -z "$NOTES" ]; then
+            NOTES="$(git log -1 --pretty=%s 2>/dev/null || true)"
+          fi
           BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
           mkdir -p release-output
           for arch in arm64 x64; do
