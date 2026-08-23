@@ -4,7 +4,6 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import type { AppInfo } from "../../core/apps";
 import { useTestCases, type CaseStatus } from "./useTestCases";
 import { ruleSummary, type TestCase } from "./engine";
 import type { TestCasesStore } from "./useTestCasesStore";
@@ -16,7 +15,6 @@ interface Props {
   scopePkg: string;
   pidFilter: string;
   sessionKey?: string;
-  apps: AppInfo[];
   onLocate: (id: number) => void;
   onManage: () => void;
   onClose: () => void;
@@ -68,7 +66,6 @@ export function TestCaseSidebar({
   scopePkg,
   pidFilter,
   sessionKey,
-  apps,
   onLocate,
   onManage,
   onClose,
@@ -83,8 +80,6 @@ export function TestCaseSidebar({
     store.cases,
     sessionKey,
   );
-  const appName = apps.find((a) => a.package === scopePkg)?.name;
-
   // 拖拽调整侧栏宽度（左边缘手柄，向左拖 = 加宽）。
   const sidebarRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
@@ -201,10 +196,6 @@ export function TestCaseSidebar({
           重置全部
         </button>
         <button onClick={onManage}>管理</button>
-      </div>
-
-      <div className="tc-sidebar-app">
-        当前应用：{scopePkg ? `${appName ?? scopePkg}` : "未选择"}
       </div>
 
       {!scopePkg && <p className="manage-desc">请先在日志页选择应用。</p>}

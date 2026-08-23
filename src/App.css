@@ -121,6 +121,29 @@ body.light .toolbar {
   border-right: 1px solid var(--border);
 }
 
+.device-waiting-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  color: #f5a623;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.device-waiting-status i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+body.light .device-waiting-status {
+  color: #9a6400;
+}
+
 .toolbar-capture-group {
   padding-right: 10px;
   border-right: 1px solid var(--border);
@@ -1859,13 +1882,6 @@ body.detail-resizing {
   border-bottom: 1px solid var(--border);
 }
 
-.tc-sidebar-app {
-  padding: 6px 10px;
-  color: var(--text-dim);
-  font-size: 12px;
-  border-bottom: 1px solid var(--border);
-}
-
 .tc-sidebar-list {
   list-style: none;
   margin: 0;
@@ -2199,11 +2215,6 @@ body.light .tc-sidebar {
 .tc-sidebar-toolbar {
   gap: 7px;
   padding: 9px 11px;
-  border-bottom-color: #354255;
-}
-
-.tc-sidebar-app {
-  padding: 8px 11px;
   border-bottom-color: #354255;
 }
 

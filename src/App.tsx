@@ -1236,6 +1236,12 @@ export default function App() {
             ]}
             onChange={(v) => setSelectedDevice(v)}
           />
+            {waiting && (
+              <span className="device-waiting-status" role="status">
+                <i />
+                等待设备连接…
+              </span>
+            )}
             <button onClick={() => refreshDevices()} title="刷新设备列表">
               刷新
             </button>
@@ -1434,15 +1440,6 @@ export default function App() {
               <span className="test-monitor-scope">
                 完整应用日志 · 已记录 {activeTestPidHistory.length} 个 PID · 筛选已锁定
               </span>
-              <button
-                className="toolbar-icon-action"
-                onClick={() => {
-                  setManageTab("testcases");
-                  setView("manage");
-                }}
-              >
-                管理用例
-              </button>
             </div>
           ) : (
             <>
@@ -1514,11 +1511,6 @@ export default function App() {
             </>
           )}
           <span className="count toolbar-log-count">共 {tabEntries.length} 条</span>
-          {waiting && (
-            <span className="count" style={{ color: "#f5a623" }}>
-              等待设备连接…
-            </span>
-          )}
         </div>
 
         {showWifi && <WifiPanel onChanged={refreshDevices} />}
@@ -1769,7 +1761,6 @@ export default function App() {
             scopePkg={logTabs.activeTab.testPackage}
             pidFilter={activeTestPidHistory.join(",")}
             sessionKey={`${logTabs.activeTabId}:${activeTestStartedAtId}:${activeTabClearedBeforeId}`}
-            apps={effectiveApps}
             onLocate={locateEntry}
             onManage={() => {
               setManageTab("testcases");
