@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -247,6 +248,8 @@ interface Props {
   selectedId: number | null;
   onSelect: (id: number) => void;
   scrollCommand: ScrollCommand | null;
+  /** 筛选或 Tab 切换时变化，用于主动清空虚拟列表的旧行高缓存。 */
+  layoutKey: string;
 }
 
 /**
@@ -255,7 +258,13 @@ interface Props {
  * 并浮现「回到最新」浮动按钮；点击或滚回底部后恢复跟随。
  * Ctrl/Cmd+F 打开 Android Studio Logcat 风格的查找条（高亮 + 上一个/下一个 + 计数 + 正则/大小写）。
  */
-export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props) {
+export function LogList({
+  entries,
+  selectedId,
+  onSelect,
+  scrollCommand,
+  layoutKey,
+}: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const lastScrollTopRef = useRef(0);
@@ -321,10 +330,30 @@ export function LogList({ entries, selectedId, onSelect, scrollCommand }: Props)
   const virtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => parentRef.current,
+    // 筛选后同一 index 会对应不同日志。使用日志 ID 作为测量缓存键，
+    // 避免旧日志的行高套用到新结果上造成行重叠。
+    getItemKey: (index) => entries[index]?.id ?? index,
     estimateSize: () => ROW_HEIGHT,
     measureElement: (el) => el.getBoundingClientRect().height,
     overscan: 30,
   });
+
+  // Tag/搜索/过滤器或日志 Tab 改变后，主动重新测量可见行。
+  // ResizeObserver 在 WebView 中偶尔会晚一帧，下一帧再测一次可避免
+  // 必须调整窗口尺寸后才恢复的日志重叠问题。
+  useLayoutEffect(() => {
+    setExpandedId(null);
+    const measureRenderedRows = () => {
+      parentRef.current
+        ?.querySelectorAll<HTMLElement>(".log-row[data-index]")
+        .forEach((row) => virtualizer.measureElement(row));
+    };
+    measureRenderedRows();
+    const frame = requestAnimationFrame(measureRenderedRows);
+    return () => cancelAnimationFrame(frame);
+    // virtualizer 实例会随渲染变化，只以明确的布局 key 作为重测条件。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutKey]);
 
   const onScroll = () => {
     const el = parentRef.current;

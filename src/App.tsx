@@ -25,6 +25,8 @@ import {
 import { HistoryInput } from "./components/HistoryInput";
 import { Select } from "./components/Select";
 import { LogList } from "./features/logcat/LogList";
+import { LogTabs } from "./features/logcat/LogTabs";
+import { useLogTabs } from "./features/logcat/useLogTabs";
 import { ManagePage, type ManageTab } from "./features/settings/ManagePage";
 import { TestCaseSidebar } from "./features/testcases/TestCaseSidebar";
 import { ToolsPage } from "./features/tools/ToolsPage";
@@ -57,6 +59,8 @@ import "./App.css";
 const DETAIL_HEIGHT_KEY = "log-detail-height-v1";
 const DETAIL_MIN_HEIGHT = 80;
 const DETAIL_MAX_HEIGHT = 600;
+/** 普通日志 Tab 选择了未运行应用时，用一个不可能命中的 PID 保持空结果。 */
+const NO_RUNNING_APP_PID = "__testbench_no_running_app__";
 
 function loadDetailHeight(): number {
   try {
@@ -105,6 +109,9 @@ function ToolbarIcon({ name }: { name: ToolbarIconName }) {
 
 export default function App() {
   const prefs = usePrefs();
+  const logTabs = useLogTabs();
+  const activeTabIdRef = useRef(logTabs.activeTabId);
+  activeTabIdRef.current = logTabs.activeTabId;
 
   const {
     devices,
@@ -112,11 +119,8 @@ export default function App() {
     setSelectedDevice,
     refreshDevices,
     running,
-    paused,
-    setPaused,
     start,
     stop,
-    clear,
     exportLogs,
     entries,
     allEntries,
@@ -125,17 +129,25 @@ export default function App() {
     error,
     setError,
     waiting,
-  } = useLogcat(true); // 合并堆栈固定开启
+  } = useLogcat(true, logTabs.activeTab.filters); // 合并堆栈固定开启
 
   const [view, setView] = useState<"log" | "manage" | "tools">("log");
   const [showWifi, setShowWifi] = useState(false);
   const [apps, setApps] = useState<AppInfo[]>([]);
-  const [selectedPackage, setSelectedPackage] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState(
+    logTabs.activeTab.filters.app ?? "",
+  );
+  const [selectedId, setSelectedId] = useState<number | null>(
+    logTabs.activeTab.selectedLogId,
+  );
   const [detailHeight, setDetailHeight] = useState<number>(loadDetailHeight);
-  const [showCases, setShowCases] = useState(false);
+  const [showCases, setShowCases] = useState(logTabs.activeTab.showTestCases);
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showFilterSave, setShowFilterSave] = useState(false);
+  const [showTestTabCreate, setShowTestTabCreate] = useState(false);
+  const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null);
+  const [testTabPackage, setTestTabPackage] = useState("");
+  const [testTabName, setTestTabName] = useState("");
   const [manageTab, setManageTab] = useState<ManageTab>("apps");
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
@@ -168,7 +180,9 @@ export default function App() {
     moveFilter,
     replaceFilters,
   } = useSavedFilters();
-  const [activeFilterId, setActiveFilterId] = useState("");
+  const [activeFilterId, setActiveFilterId] = useState(
+    logTabs.activeTab.activeFilterId,
+  );
   const [filterName, setFilterName] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [toastBusy, setToastBusy] = useState(false);
@@ -274,9 +288,75 @@ export default function App() {
     }
   };
 
-  const selectedEntry = entries.find((e) => e.id === selectedId) ?? null;
+  // 当前 Tab 只保存视图状态；所有 Tab 共享同一份原始日志缓冲，避免重复占用内存。
+  const activeTabPausedAtId = logTabs.activeTab.pausedAtId;
+  const activeTabClearedBeforeId = logTabs.activeTab.clearedBeforeId;
+  const activeTestStartedAtId = logTabs.activeTab.testStartedAtId;
+  const activeTestPidHistory = logTabs.activeTab.pidHistory;
+  const isTestTab = logTabs.activeTab.kind === "test";
+
+  const testSessionEntries = useMemo(() => {
+    if (!isTestTab) return [];
+    const pidSet = new Set(activeTestPidHistory);
+    const floor = Math.max(activeTabClearedBeforeId, activeTestStartedAtId);
+    if (pidSet.size === 0) return [];
+    return allEntries.filter(
+      (entry) => entry.id > floor && pidSet.has(entry.pid),
+    );
+  }, [
+    allEntries,
+    isTestTab,
+    activeTestPidHistory,
+    activeTabClearedBeforeId,
+    activeTestStartedAtId,
+  ]);
+
+  const tabEntries = useMemo(() => {
+    const source = isTestTab ? testSessionEntries : entries;
+    return source.filter(
+      (entry) =>
+        entry.id > activeTabClearedBeforeId &&
+        (activeTabPausedAtId == null || entry.id <= activeTabPausedAtId),
+    );
+  }, [
+    entries,
+    testSessionEntries,
+    isTestTab,
+    activeTabClearedBeforeId,
+    activeTabPausedAtId,
+  ]);
+
+  const tabAllEntries = useMemo(() => {
+    if (isTestTab) return testSessionEntries;
+    return allEntries.filter(
+      (entry) =>
+        entry.id > activeTabClearedBeforeId &&
+        (activeTabPausedAtId == null || entry.id <= activeTabPausedAtId),
+    );
+  }, [
+    allEntries,
+    testSessionEntries,
+    isTestTab,
+    activeTabClearedBeforeId,
+    activeTabPausedAtId,
+  ]);
+
+  const selectedEntry = tabEntries.find((e) => e.id === selectedId) ?? null;
   const [scrollCommand, setScrollCommand] = useState<ScrollCommand | null>(null);
   const prevFiltersRef = useRef(filters);
+
+  // 持续把当前日志处理条件和界面状态写回当前 Tab。
+  useEffect(() => {
+    logTabs.updateActiveTab({ filters: { ...filters, pid: "" } });
+  }, [filters, logTabs.updateActiveTab]);
+
+  useEffect(() => {
+    logTabs.updateActiveTab({
+      activeFilterId,
+      selectedLogId: selectedId,
+      showTestCases: showCases,
+    });
+  }, [activeFilterId, selectedId, showCases, logTabs.updateActiveTab]);
 
   // 过滤条件变化时，定位到选中的日志，方便查看上下文。
   useEffect(() => {
@@ -287,11 +367,11 @@ export default function App() {
       prev.pid !== filters.pid ||
       prev.minLevel !== filters.minLevel;
     prevFiltersRef.current = filters;
-    if (changed && selectedId != null && entries.some((e) => e.id === selectedId)) {
+    if (changed && selectedId != null && tabEntries.some((e) => e.id === selectedId)) {
       setScrollCommand({ seq: Date.now(), kind: "id", id: selectedId });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, [filters, selectedId, tabEntries]);
 
   // 生效应用 = 手动添加（优先）∪ 内置/远程（排除已删除的），按名称排序。
   const effectiveApps = useMemo(() => {
@@ -394,15 +474,28 @@ export default function App() {
     return [...running, ...installed, ...missing];
   }, [effectiveApps, appRuntime, runningSet, installedSet]);
 
-  const applyAppFilter = async (pkg: string) => {
+  const clearAppNotRunningError = () => {
+    setError((previous) =>
+      previous?.startsWith("应用「") && previous.endsWith("当前未运行")
+        ? null
+        : previous,
+    );
+  };
+
+  const applyAppFilter = async (
+    pkg: string,
+    targetTab = logTabs.activeTab,
+  ) => {
+    const targetIsActive = () => activeTabIdRef.current === targetTab.id;
     if (!pkg) {
-      setFilters((f) => ({ ...f, pid: "", app: "" }));
+      logTabs.updateTab(targetTab.id, {
+        filters: { ...targetTab.filters, pid: "", app: "" },
+      });
+      if (targetIsActive()) {
+        setFilters((f) => ({ ...f, pid: "", app: "" }));
+      }
       // 切换到「全部应用」：清除残留的「应用未运行」提示
-      setError((prev) =>
-        prev && prev.startsWith("应用「") && prev.endsWith("当前未运行")
-          ? null
-          : prev,
-      );
+      clearAppNotRunningError();
       return;
     }
     try {
@@ -410,15 +503,25 @@ export default function App() {
         device: selectedDevice,
         package: pkg,
       });
+      const isTestTarget = targetTab.kind === "test";
       if (pids.length === 0) {
-        setError(`应用「${pkg}」当前未运行`);
-        setFilters((f) => ({ ...f, pid: "", app: "" }));
+        if (targetIsActive()) setError(`应用「${pkg}」当前未运行`);
+        const next = {
+          ...targetTab.filters,
+          pid: isTestTarget ? "" : NO_RUNNING_APP_PID,
+          app: pkg,
+        };
+        logTabs.updateTab(targetTab.id, { filters: { ...next, pid: "" } });
+        if (targetIsActive()) setFilters(next);
       } else {
-        setError(null);
-        setFilters((f) => ({ ...f, pid: pids.join(","), app: pkg }));
+        if (isTestTarget) logTabs.addTabPids(targetTab.id, pids);
+        if (targetIsActive()) {
+          setError(null);
+          setFilters((f) => ({ ...f, pid: pids.join(","), app: pkg }));
+        }
       }
     } catch (e) {
-      setError(String(e));
+      if (targetIsActive()) setError(String(e));
     }
   };
 
@@ -426,30 +529,50 @@ export default function App() {
   // 定期静默重解析，PID 变化即更新过滤，日志最多延迟几秒自动恢复。
   useEffect(() => {
     if (!selectedPackage || !selectedDevice) return;
-    const timer = setInterval(async () => {
+    const tabId = logTabs.activeTabId;
+    const isTestMonitor = logTabs.activeTab.kind === "test";
+    const poll = async () => {
       try {
         const pids = await invoke<string[]>("resolve_pids", {
           device: selectedDevice,
           package: selectedPackage,
         });
         const newPid = pids.join(",");
+        if (isTestMonitor && pids.length > 0) {
+          logTabs.addTabPids(tabId, pids);
+        }
+        // 轮询返回时 Tab 可能已经切换，旧 Tab 只能维护自己的 PID 历史，
+        // 不能再覆盖当前页面的筛选和底部提示。
+        if (activeTabIdRef.current !== tabId) return;
         if (newPid) {
           // 应用已运行 → 自动清除「应用未运行」提示（每 3 秒检测一次）
-          setError((prev) =>
-            prev === `应用「${selectedPackage}」当前未运行` ? null : prev,
-          );
+          clearAppNotRunningError();
+        } else {
+          setError(`应用「${selectedPackage}」当前未运行`);
         }
         setFilters((f) => {
-          if (f.pid === newPid) return f;
-          // 应用被杀（无进程）时清空 PID 放行全部日志，重启后自动恢复过滤
-          return { ...f, pid: newPid, app: selectedPackage };
+          const effectivePid = newPid || (isTestMonitor ? "" : NO_RUNNING_APP_PID);
+          if (f.pid === effectivePid && f.app === selectedPackage) return f;
+          // 测试 Tab 的完整应用日志由 pidHistory 计算；这里的 pid 只表达
+          // 当前运行状态。应用停止时保持包名并等待新的 PID。
+          return { ...f, pid: effectivePid, app: selectedPackage };
         });
       } catch {
         // 静默失败，下个周期再试
       }
-    }, 3000);
+    };
+    poll();
+    const timer = setInterval(poll, 3000);
     return () => clearInterval(timer);
-  }, [selectedPackage, selectedDevice, setFilters, setError]);
+  }, [
+    selectedPackage,
+    selectedDevice,
+    logTabs.activeTabId,
+    logTabs.activeTab.kind,
+    logTabs.addTabPids,
+    setFilters,
+    setError,
+  ]);
 
   // 错误横幅自动消失：除「应用未运行」外，其余错误最多显示 4 秒
   // （「应用未运行」由上面的 PID 轮询 / 切换应用时自然更新）。
@@ -588,6 +711,17 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDevice]);
 
+  // 每次开启一轮新的采集时日志 ID 会从头开始，清除各 Tab 基于旧 ID 的
+  // 暂停/清空边界，避免新日志被旧边界永久隐藏。
+  const previousRunningRef = useRef(running);
+  useEffect(() => {
+    if (running && !previousRunningRef.current) {
+      logTabs.resetRuntimeState();
+      setSelectedId(null);
+    }
+    previousRunningRef.current = running;
+  }, [running, logTabs.resetRuntimeState]);
+
   // 选中某行后，Cmd/Ctrl+C 复制该行；不干扰手动框选文本的复制。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -652,7 +786,24 @@ export default function App() {
     };
   }, [selectedDevice, setError]);
 
-  // 快捷键：空格 暂停/继续，Cmd/Ctrl+L 清空，Cmd/Ctrl+E 导出。
+  const toggleCurrentTabPause = () => {
+    if (logTabs.activeTab.pausedAtId != null) {
+      logTabs.updateActiveTab({ pausedAtId: null });
+      return;
+    }
+    const lastId = allEntries[allEntries.length - 1]?.id ?? -1;
+    logTabs.updateActiveTab({ pausedAtId: lastId });
+  };
+
+  const clearCurrentTab = () => {
+    const lastId = allEntries[allEntries.length - 1]?.id ?? -1;
+    logTabs.updateActiveTab({ clearedBeforeId: lastId, selectedLogId: null });
+    setSelectedId(null);
+  };
+
+  const exportCurrentTab = () => exportLogs(tabEntries);
+
+  // 快捷键：空格暂停当前 Tab，Cmd/Ctrl+L 清空当前 Tab，Cmd/Ctrl+E 导出当前 Tab。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -667,28 +818,37 @@ export default function App() {
       }
       if (e.key === " ") {
         e.preventDefault();
-        if (running) setPaused(!paused);
+        if (running) toggleCurrentTabPause();
         return;
       }
       if (!e.metaKey && !e.ctrlKey) return;
       const k = e.key.toLowerCase();
       if (k === "l") {
         e.preventDefault();
-        clear();
+        clearCurrentTab();
       } else if (k === "e") {
         e.preventDefault();
-        exportLogs();
+        exportCurrentTab();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [running, paused, setPaused, clear, exportLogs]);
+  }, [running, logTabs.activeTab, allEntries, tabEntries, exportLogs]);
 
   const handleSelect = (id: number) => {
     setSelectedId((prev) => (prev === id ? null : id));
   };
 
   const locateEntry = (id: number) => {
+    // 测试用例监控在后台持续运行；如果界面暂停后命中了更新的日志，
+    // 点击证据时自动恢复当前测试 Tab，保证目标日志一定在列表中。
+    if (
+      logTabs.activeTab.kind === "test" &&
+      logTabs.activeTab.pausedAtId != null &&
+      id > logTabs.activeTab.pausedAtId
+    ) {
+      logTabs.updateActiveTab({ pausedAtId: null });
+    }
     setSelectedId(id);
     setScrollCommand({ seq: Date.now(), kind: "id", id });
   };
@@ -756,6 +916,83 @@ export default function App() {
     }
     showToast(`已应用筛选「${f.name}」`);
   };
+
+  const showLogTab = (tab: (typeof logTabs.tabs)[number]) => {
+    // 先同步切换异步结果归属并清掉上一个 Tab 的应用状态，避免旧的
+    // 「应用未运行」提示在新 Tab（尤其是「全部应用」）中短暂或持续残留。
+    activeTabIdRef.current = tab.id;
+    clearAppNotRunningError();
+    logTabs.selectTab(tab.id);
+    setFilters({ ...tab.filters, pid: "" });
+    setSelectedPackage(
+      tab.kind === "test" ? tab.testPackage : (tab.filters.app ?? ""),
+    );
+    setSelectedId(tab.selectedLogId);
+    setShowCases(tab.kind === "test" ? true : tab.showTestCases);
+    setActiveFilterId(tab.activeFilterId);
+    setShowFilterSave(false);
+    const packageName = tab.kind === "test" ? tab.testPackage : tab.filters.app;
+    if (packageName && selectedDevice) {
+      applyAppFilter(packageName, tab);
+    }
+  };
+
+  const handleSelectLogTab = (id: string) => {
+    const tab = logTabs.tabs.find((item) => item.id === id);
+    if (!tab || tab.id === logTabs.activeTabId) return;
+    showLogTab(tab);
+  };
+
+  const handleCreateLogTab = () => {
+    const tab = logTabs.createTab();
+    showLogTab(tab);
+  };
+
+  const handleOpenTestTabCreate = () => {
+    const firstPackage = selectedPackage || logPageApps[0]?.package || "";
+    const appName = logPageApps.find((app) => app.package === firstPackage)?.name;
+    setTestTabPackage(firstPackage);
+    setTestTabName(appName ? `用例 · ${appName}` : "测试用例监控");
+    setShowTestTabCreate(true);
+  };
+
+  const handleCreateTestTab = () => {
+    if (!testTabPackage) return;
+    const lastId = allEntries[allEntries.length - 1]?.id ?? -1;
+    const appName = effectiveApps.find((app) => app.package === testTabPackage)?.name;
+    const tab = logTabs.createTestTab(
+      testTabPackage,
+      testTabName.trim() || `用例 · ${appName ?? testTabPackage}`,
+      lastId,
+    );
+    setShowTestTabCreate(false);
+    showLogTab(tab);
+  };
+
+  const handleDuplicateLogTab = () => {
+    const lastId = allEntries[allEntries.length - 1]?.id ?? -1;
+    const tab = logTabs.duplicateTab(logTabs.activeTab, lastId);
+    showLogTab(tab);
+  };
+
+  const handleCloseLogTab = (id: string) => {
+    if (logTabs.tabs.length <= 1) {
+      setPendingCloseTabId(null);
+      return;
+    }
+    const closingIndex = logTabs.tabs.findIndex((tab) => tab.id === id);
+    const remaining = logTabs.tabs.filter((tab) => tab.id !== id);
+    const next = id === logTabs.activeTabId
+      ? remaining[Math.min(Math.max(0, closingIndex - 1), remaining.length - 1)]
+      : null;
+    logTabs.closeTab(id);
+    if (next) showLogTab(next);
+    setPendingCloseTabId(null);
+  };
+
+  const pendingCloseTab = pendingCloseTabId
+    ? logTabs.tabs.find((tab) => tab.id === pendingCloseTabId) ?? null
+    : null;
 
   const handleExportConfig = async () => {
     try {
@@ -1027,29 +1264,11 @@ export default function App() {
               </button>
             )}
 
-            <button
-              className={`toolbar-icon-action ${paused ? "active" : ""}`}
-              onClick={() => setPaused(!paused)}
-              disabled={!running}
-              title="暂停/继续抓取（空格）"
-            >
-              <ToolbarIcon name="pause" />
-              {paused ? "继续" : "暂停"}
-            </button>
-
-            <button className="toolbar-icon-action" onClick={clear} title="清空日志（⌘/Ctrl+L）">
-              <ToolbarIcon name="trash" />
-              清空
-            </button>
           </div>
 
           <span className="toolbar-spacer" />
 
           <div className="toolbar-group toolbar-actions-group">
-            <button className="toolbar-icon-action" onClick={exportLogs} title="导出日志（⌘/Ctrl+E）">
-              <ToolbarIcon name="export" />
-              导出
-            </button>
             <button className="toolbar-icon-action" onClick={() => setShowWifi(!showWifi)}>
               <ToolbarIcon name="wifi" />
               WiFi 连接
@@ -1057,13 +1276,6 @@ export default function App() {
             <button className="toolbar-icon-action" onClick={() => setView("tools")}>
               <ToolbarIcon name="tools" />
               工具
-            </button>
-            <button
-              className={`toolbar-icon-action ${showCases ? "active" : ""}`}
-              onClick={() => setShowCases(!showCases)}
-            >
-              <ToolbarIcon name="tests" />
-              测试用例
             </button>
             <div className="toolbar-more" ref={moreMenuRef}>
               <button
@@ -1125,8 +1337,123 @@ export default function App() {
           </div>
         </div>
 
+        <LogTabs
+          tabs={logTabs.tabs}
+          activeTabId={logTabs.activeTabId}
+          onSelect={handleSelectLogTab}
+          onCreateLog={handleCreateLogTab}
+          onCreateTest={handleOpenTestTabCreate}
+          onDuplicate={handleDuplicateLogTab}
+          onClose={setPendingCloseTabId}
+          onRename={logTabs.renameTab}
+        />
+
         <div className="toolbar-row toolbar-filter-row">
-          <div className="toolbar-search-with-regex">
+          <div className="toolbar-group tab-processing-actions">
+            <button
+              className={`toolbar-icon-action ${logTabs.activeTab.pausedAtId != null ? "active" : ""}`}
+              onClick={toggleCurrentTabPause}
+              disabled={!running}
+              title="只暂停/继续当前 Tab（空格）"
+            >
+              <ToolbarIcon name="pause" />
+              <span className="toolbar-action-label">
+                {logTabs.activeTab.pausedAtId != null ? "继续" : "暂停"}
+              </span>
+            </button>
+            <button
+              className="toolbar-icon-action"
+              onClick={clearCurrentTab}
+              title="只清空当前 Tab（⌘/Ctrl+L）"
+            >
+              <ToolbarIcon name="trash" />
+              <span className="toolbar-action-label">清空</span>
+            </button>
+            <button
+              className="toolbar-icon-action"
+              onClick={exportCurrentTab}
+              title="导出当前 Tab（⌘/Ctrl+E）"
+            >
+              <ToolbarIcon name="export" />
+              <span className="toolbar-action-label">导出</span>
+            </button>
+          </div>
+          {!isTestTab && (
+            <>
+              <label className="toolbar-field-label">应用</label>
+              <Select
+                className="app-select"
+                title="按应用过滤（自动解析 PID）"
+                value={selectedPackage}
+                searchable
+                searchPlaceholder="搜索应用名或包名…"
+                options={[
+                  { value: "", label: "全部应用", fullLabel: "全部应用" },
+                  ...logPageApps.map((app) => {
+                    const state = appRunState(app.package);
+                    return {
+                      value: app.package,
+                      label: (
+                        <span className={`app-opt app-opt-${state}`}>
+                          <i className="app-dot" />
+                          {app.name}（{app.package}）
+                        </span>
+                      ),
+                      fullLabel: `${app.name}（${app.package}）`,
+                    };
+                  }),
+                ]}
+                onChange={handleAppChange}
+              />
+              <label className="toolbar-field-label">级别</label>
+              <Select
+                className="level-select"
+                title="最低日志级别"
+                value={filters.minLevel}
+                options={LEVELS.map((level) => ({
+                  value: level,
+                  label: LEVEL_LABELS[level],
+                }))}
+                onChange={(value) =>
+                  setFilters({ ...filters, minLevel: value as LogLevel })
+                }
+              />
+            </>
+          )}
+          <span className="tab-processing-separator" />
+          {isTestTab ? (
+            <div className="test-monitor-context">
+              <span className="test-monitor-badge">
+                <ToolbarIcon name="tests" />
+                测试用例监控
+              </span>
+              <span className="test-monitor-app">
+                <strong>
+                  {effectiveApps.find((app) => app.package === logTabs.activeTab.testPackage)?.name
+                    ?? logTabs.activeTab.testPackage}
+                </strong>
+                <small>{logTabs.activeTab.testPackage}</small>
+              </span>
+              <span className={`test-monitor-state ${filters.pid ? "running" : "waiting"}`}>
+                <i />
+                {filters.pid ? `监控中 · ${filters.pid.split(",").length} 个当前 PID` : "等待应用启动"}
+              </span>
+              <span className="test-monitor-scope">
+                完整应用日志 · 已记录 {activeTestPidHistory.length} 个 PID · 筛选已锁定
+              </span>
+              <button
+                className="toolbar-icon-action"
+                onClick={() => {
+                  setManageTab("testcases");
+                  setView("manage");
+                }}
+              >
+                管理用例
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="toolbar-search-with-regex">
             <HistoryInput
               value={filters.search}
               onChange={(v) => setFilters({ ...filters, search: v })}
@@ -1151,8 +1478,8 @@ export default function App() {
             >
               .*
             </button>
-          </div>
-          <HistoryInput
+              </div>
+              <HistoryInput
             value={filters.tags}
             onChange={(v) => setFilters({ ...filters, tags: v })}
             favorites={prefs.prefs.tagFavorites}
@@ -1166,45 +1493,7 @@ export default function App() {
             placeholder="Tag（逗号分隔，!排除）"
             protectedValues={IS_DEBUG ? NO_PROTECTED_VALUES : getBuiltinTagValues()}
           />
-          <label>应用</label>
-          <Select
-            className="app-select"
-            title="按应用过滤（自动解析 PID）"
-            value={selectedPackage}
-            searchable
-            searchPlaceholder="搜索应用名或包名…"
-            options={[
-              { value: "", label: "全部应用", fullLabel: "全部应用" },
-              ...logPageApps.map((a) => {
-                const state = appRunState(a.package);
-                return {
-                  value: a.package,
-                  label: (
-                    <span className={`app-opt app-opt-${state}`}>
-                      <i className="app-dot" />
-                      {a.name}（{a.package}）
-                    </span>
-                  ),
-                  fullLabel: `${a.name}（${a.package}）`,
-                };
-              }),
-            ]}
-            onChange={(v) => handleAppChange(v)}
-          />
-          <label className="toolbar-filter-label">级别</label>
-          <Select
-            className="level-select"
-            title="最低日志级别"
-            value={filters.minLevel}
-            options={LEVELS.map((l) => ({
-              value: l,
-              label: LEVEL_LABELS[l],
-            }))}
-            onChange={(v) =>
-              setFilters({ ...filters, minLevel: v as LogLevel })
-            }
-          />
-          <label>过滤器</label>
+          <label className="toolbar-field-label">过滤器</label>
           <Select
             className="filter-select"
             title="已保存的过滤器"
@@ -1218,18 +1507,20 @@ export default function App() {
             ]}
             onChange={(v) => handleApplyFilter(v)}
           />
-          <div className="toolbar-filter-save">
-            <button
-              className={`toolbar-icon-action ${showFilterSave ? "active" : ""}`}
-              onClick={() => setShowFilterSave((shown) => !shown)}
-              title="保存当前筛选"
-              aria-expanded={showFilterSave}
-            >
-              <ToolbarIcon name="bookmark" />
-              保存筛选
-            </button>
-          </div>
-          <span className="count">共 {entries.length} 条</span>
+              <div className="toolbar-filter-save">
+                <button
+                  className={`toolbar-icon-action ${showFilterSave ? "active" : ""}`}
+                  onClick={() => setShowFilterSave((shown) => !shown)}
+                  title="保存当前筛选"
+                  aria-expanded={showFilterSave}
+                >
+                  <ToolbarIcon name="bookmark" />
+                  <span className="toolbar-action-label">保存筛选</span>
+                </button>
+              </div>
+            </>
+          )}
+          <span className="count">共 {tabEntries.length} 条</span>
           {waiting && (
             <span className="count" style={{ color: "#f5a623" }}>
               等待设备连接…
@@ -1283,13 +1574,146 @@ export default function App() {
           document.body,
         )}
 
+      {showTestTabCreate &&
+        createPortal(
+          <div
+            className="save-description-backdrop"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setShowTestTabCreate(false);
+            }}
+          >
+            <div
+              className="save-description-dialog test-tab-create-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label="新建测试用例监控"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setShowTestTabCreate(false);
+              }}
+            >
+              <h3>新建测试用例监控</h3>
+              <p>选择用例需要监控的应用。此 Tab 会保留完整应用日志并锁定筛选条件，保证用例判定和问题定位使用同一份日志。</p>
+              <label>
+                监控应用
+                <Select
+                  className="test-tab-app-select"
+                  value={testTabPackage}
+                  searchable
+                  searchPlaceholder="搜索应用名或包名…"
+                  menuClassName="select-menu-modal"
+                  options={logPageApps.map((app) => {
+                    const state = appRunState(app.package);
+                    return {
+                      value: app.package,
+                      label: (
+                        <span className={`app-opt app-opt-${state}`}>
+                          <i className="app-dot" />
+                          {app.name}（{app.package}）
+                        </span>
+                      ),
+                      fullLabel: `${app.name}（${app.package}）`,
+                    };
+                  })}
+                  onChange={(packageName) => {
+                    const previousDefault = effectiveApps.find(
+                      (app) => app.package === testTabPackage,
+                    );
+                    const nextApp = effectiveApps.find(
+                      (app) => app.package === packageName,
+                    );
+                    setTestTabPackage(packageName);
+                    if (
+                      !testTabName.trim()
+                      || testTabName === "测试用例监控"
+                      || testTabName === `用例 · ${previousDefault?.name ?? ""}`
+                    ) {
+                      setTestTabName(nextApp ? `用例 · ${nextApp.name}` : "测试用例监控");
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Tab 名称
+                <input
+                  value={testTabName}
+                  autoFocus
+                  maxLength={32}
+                  placeholder="例如：登录流程用例监控"
+                  onChange={(event) => setTestTabName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && testTabPackage) handleCreateTestTab();
+                  }}
+                />
+              </label>
+              <div className="test-tab-create-note">
+                应用重启后会自动跟踪新 PID，并保留本次测试中旧 PID 的日志。清空 Tab 即开始一轮新的用例会话。
+              </div>
+              <div className="save-description-actions">
+                <button onClick={() => setShowTestTabCreate(false)}>取消</button>
+                <button
+                  className="primary-action"
+                  onClick={handleCreateTestTab}
+                  disabled={!testTabPackage}
+                >
+                  创建并开始用例监控
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {pendingCloseTab &&
+        createPortal(
+          <div
+            className="save-description-backdrop"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setPendingCloseTabId(null);
+            }}
+          >
+            <div
+              className="save-description-dialog"
+              role="alertdialog"
+              aria-modal="true"
+              aria-label="确认关闭 Tab"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setPendingCloseTabId(null);
+              }}
+            >
+              <h3>关闭 Tab？</h3>
+              <p>
+                确定关闭「{pendingCloseTab.name}」吗？
+                {pendingCloseTab.kind === "test"
+                  ? "本次测试用例监控状态将被移除。"
+                  : "该 Tab 的筛选和查看状态将被移除。"}
+                原始日志采集不会停止。
+              </p>
+              <div className="save-description-actions">
+                <button autoFocus onClick={() => setPendingCloseTabId(null)}>
+                  取消
+                </button>
+                <button
+                  className="danger"
+                  onClick={() => handleCloseLogTab(pendingCloseTab.id)}
+                >
+                  确认关闭
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
       <div className="log-main">
         <div className="log-left" ref={logLeftRef}>
           <LogList
-            entries={entries}
+            entries={tabEntries}
             selectedId={selectedId}
             onSelect={handleSelect}
             scrollCommand={scrollCommand}
+            layoutKey={`${logTabs.activeTabId}|${filters.search}|${filters.regex}|${filters.tags}|${filters.app}|${filters.minLevel}|${logTabs.activeTab.clearedBeforeId}|${logTabs.activeTab.pausedAtId ?? "live"}`}
           />
           {selectedEntry && (
             <div className="log-detail" style={{ height: detailHeight }}>
@@ -1300,32 +1724,36 @@ export default function App() {
               />
               <div className="log-detail-head">
                 <span className="log-detail-title">日志详情</span>
-                <button
-                  title={`只显示 Tag 为「${selectedEntry.tag}」的日志`}
-                  onClick={() =>
-                    setFilters((f) => ({ ...f, tags: selectedEntry.tag }))
-                  }
-                >
-                  只看此 Tag
-                </button>
-                <button
-                  title={`排除 Tag 为「${selectedEntry.tag}」的日志（在 Tag 过滤中追加 !${selectedEntry.tag}）`}
-                  onClick={() =>
-                    setFilters((f) => {
-                      const parts = f.tags
-                        .split(",")
-                        .map((t) => t.trim())
-                        .filter(Boolean);
-                      if (parts.includes(`!${selectedEntry.tag}`)) return f;
-                      return {
-                        ...f,
-                        tags: [...parts, `!${selectedEntry.tag}`].join(", "),
-                      };
-                    })
-                  }
-                >
-                  排除此 Tag
-                </button>
+                {!isTestTab && (
+                  <>
+                    <button
+                      title={`只显示 Tag 为「${selectedEntry.tag}」的日志`}
+                      onClick={() =>
+                        setFilters((f) => ({ ...f, tags: selectedEntry.tag }))
+                      }
+                    >
+                      只看此 Tag
+                    </button>
+                    <button
+                      title={`排除 Tag 为「${selectedEntry.tag}」的日志（在 Tag 过滤中追加 !${selectedEntry.tag}）`}
+                      onClick={() =>
+                        setFilters((f) => {
+                          const parts = f.tags
+                            .split(",")
+                            .map((t) => t.trim())
+                            .filter(Boolean);
+                          if (parts.includes(`!${selectedEntry.tag}`)) return f;
+                          return {
+                            ...f,
+                            tags: [...parts, `!${selectedEntry.tag}`].join(", "),
+                          };
+                        })
+                      }
+                    >
+                      排除此 Tag
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() =>
                     writeText(selectedEntry.raw).catch((e) =>
@@ -1341,12 +1769,13 @@ export default function App() {
             </div>
           )}
         </div>
-        {showCases && (
+        {isTestTab && (
           <TestCaseSidebar
             store={testCaseStore}
-            allEntries={allEntries}
-            scopePkg={selectedPackage}
-            pidFilter={filters.pid}
+            allEntries={tabAllEntries}
+            scopePkg={logTabs.activeTab.testPackage}
+            pidFilter={activeTestPidHistory.join(",")}
+            sessionKey={`${logTabs.activeTabId}:${activeTestStartedAtId}:${activeTabClearedBeforeId}`}
             apps={effectiveApps}
             onLocate={locateEntry}
             onManage={() => {
@@ -1354,6 +1783,7 @@ export default function App() {
               setView("manage");
             }}
             onClose={() => setShowCases(false)}
+            closable={false}
           />
         )}
       </div>

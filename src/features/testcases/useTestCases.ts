@@ -82,6 +82,7 @@ export function useTestCases(
   scopePkg: string,
   pidFilter: string,
   cases: TestCase[],
+  sessionKey = "",
 ) {
   const [version, setVersion] = useState(0);
   const hitsRef = useRef<Record<string, CaseState>>({});
@@ -150,7 +151,7 @@ export function useTestCases(
         .map((s) => s.trim())
         .filter(Boolean),
     );
-    const context = `${scopePkg}|${pidFilter}`;
+    const context = `${scopePkg}|${pidFilter}|${sessionKey}`;
     if (contextRef.current !== context) {
       // 切换应用：重置并按新应用重新评估整个缓冲
       contextRef.current = context;
@@ -202,7 +203,7 @@ export function useTestCases(
     processedRef.current = allEntries.length;
     recompute();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allEntries, scopePkg, pidFilter, visibleCases]);
+  }, [allEntries, scopePkg, pidFilter, visibleCases, sessionKey]);
 
   const results = useMemo(() => {
     return visibleCases.map((tc) => {

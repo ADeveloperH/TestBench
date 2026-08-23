@@ -18,6 +18,8 @@ interface Props {
   searchable?: boolean;
   /** 搜索框占位提示 */
   searchPlaceholder?: string;
+  /** 菜单通过 Portal 渲染到 body 时附加的样式类，用于弹框等独立层级。 */
+  menuClassName?: string;
 }
 
 /** 选项的纯文本表示（搜索匹配用）。 */
@@ -46,6 +48,7 @@ export function Select({
   className,
   searchable = false,
   searchPlaceholder = "搜索…",
+  menuClassName,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -123,7 +126,7 @@ export function Select({
   const menu = open && (
     <div
       ref={menuRef}
-      className="select-menu select-menu-floating"
+      className={`select-menu select-menu-floating${menuClassName ? ` ${menuClassName}` : ""}`}
       style={
         menuPosition
           ? {

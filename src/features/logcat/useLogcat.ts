@@ -42,7 +42,7 @@ export interface UseLogcatResult {
   start: () => Promise<void>;
   stop: () => Promise<void>;
   clear: () => Promise<void>;
-  exportLogs: () => Promise<void>;
+  exportLogs: (entries?: LogEntry[]) => Promise<void>;
   entries: LogEntry[];
   /** 原始缓冲（未经过滤），供测试用例引擎使用 */
   allEntries: LogEntry[];
@@ -54,21 +54,28 @@ export interface UseLogcatResult {
   waiting: boolean;
 }
 
-export function useLogcat(mergeStack = true): UseLogcatResult {
+export function useLogcat(
+  mergeStack = true,
+  initialFilters?: FilterState,
+): UseLogcatResult {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [buffer, setBuffer] = useState("main");
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
   const [entries, setEntries] = useState<LogEntry[]>([]);
-  const [filters, setFilters] = useState<FilterState>({
-    minLevel: "V",
-    search: "",
-    regex: false,
-    tags: "",
-    pid: "",
-    app: "",
-  });
+  const [filters, setFilters] = useState<FilterState>(() =>
+    initialFilters
+      ? { ...initialFilters, pid: "" }
+      : {
+          minLevel: "V",
+          search: "",
+          regex: false,
+          tags: "",
+          pid: "",
+          app: "",
+        },
+  );
   const [error, setError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
 
@@ -355,10 +362,11 @@ export function useLogcat(mergeStack = true): UseLogcatResult {
     });
   }, [entries, filters]);
 
-  const exportLogs = useCallback(async () => {
-    log.info(`导出日志，共 ${filtered.length} 条`);
+  const exportLogs = useCallback(async (items?: LogEntry[]) => {
+    const output = items ?? filtered;
+    log.info(`导出日志，共 ${output.length} 条`);
     try {
-      const text = filtered.map((e) => e.raw).join("\n");
+      const text = output.map((e) => e.raw).join("\n");
       const saved = await invoke<string | null>("export_logs", { text });
       if (saved) {
         log.info(`日志已导出到：${saved}`);

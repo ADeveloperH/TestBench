@@ -15,10 +15,12 @@ interface Props {
   allEntries: LogEntry[];
   scopePkg: string;
   pidFilter: string;
+  sessionKey?: string;
   apps: AppInfo[];
   onLocate: (id: number) => void;
   onManage: () => void;
   onClose: () => void;
+  closable?: boolean;
 }
 
 // 侧栏宽度：可拖拽调整，持久化。
@@ -65,10 +67,12 @@ export function TestCaseSidebar({
   allEntries,
   scopePkg,
   pidFilter,
+  sessionKey,
   apps,
   onLocate,
   onManage,
   onClose,
+  closable = true,
 }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [width, setWidth] = useState<number>(loadSidebarWidth);
@@ -77,6 +81,7 @@ export function TestCaseSidebar({
     scopePkg,
     pidFilter,
     store.cases,
+    sessionKey,
   );
   const appName = apps.find((a) => a.package === scopePkg)?.name;
 
@@ -184,9 +189,11 @@ export function TestCaseSidebar({
       />
       <div className="tc-sidebar-head">
         <span className="tc-sidebar-title">测试用例</span>
-        <button className="tc-sidebar-close" onClick={onClose}>
-          ×
-        </button>
+        {closable && (
+          <button className="tc-sidebar-close" onClick={onClose}>
+            ×
+          </button>
+        )}
       </div>
 
       <div className="tc-sidebar-toolbar">
