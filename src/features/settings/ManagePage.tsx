@@ -23,6 +23,7 @@ import { FilterManager } from "../filters/FilterManager";
 import { TestCaseManager } from "../testcases/TestCaseManager";
 
 export type ManageTab =
+  | "general"
   | "apps"
   | "search"
   | "tags"
@@ -244,61 +245,115 @@ export function ManagePage(props: Props) {
     <div className="manage-page settings-page">
       <div className="manage-header">
         <button onClick={props.onBack}>← 返回</button>
-        <h1>设置</h1>
-        <div className="manage-header-actions">
-          <button onClick={doExport}>导出配置</button>
-          <button onClick={doImport}>导入配置</button>
-          <button onClick={doExportDebug}>导出调试日志</button>
-          <button onClick={doRefreshConfig} title="拉取最新的内置配置">
-            刷新配置
-          </button>
-          <button onClick={props.onCheckUpdate} title="检查是否有新版本">
-            检查更新
-          </button>
-          {configMsg && <span className="count">{configMsg}</span>}
+        <div className="manage-title-block">
+          <h1>设置与配置</h1>
+          <p>管理日志工作区、测试用例和应用配置</p>
         </div>
       </div>
 
-      <div className="manage-tabs">
-        <button className={tab === "apps" ? "active" : ""} onClick={() => setTab("apps")}>
-          应用
-        </button>
-        <button className={tab === "search" ? "active" : ""} onClick={() => setTab("search")}>
-          搜索
-        </button>
-        <button className={tab === "tags" ? "active" : ""} onClick={() => setTab("tags")}>
-          Tag
-        </button>
-        <button
-          className={tab === "filters" ? "active" : ""}
-          onClick={() => setTab("filters")}
-        >
-          过滤器
-        </button>
-        <button
-          className={tab === "testcases" ? "active" : ""}
-          onClick={() => setTab("testcases")}
-        >
-          测试用例
-        </button>
-        <button
-          className={tab === "help" ? "active" : ""}
-          onClick={() => setTab("help")}
-        >
-          帮助
-        </button>
-        {IS_DEBUG && (
-          <button
-            className={tab === "publish" ? "active" : ""}
-            onClick={() => setTab("publish")}
-            title="仅调试模式可见：生成 remote-config.json 并发布到仓库"
-          >
-            发布配置
-          </button>
-        )}
-      </div>
+      <div className="manage-workspace">
+        <aside className="manage-nav" aria-label="设置分类">
+          <div className="manage-nav-group">
+            <span className="manage-nav-label">配置</span>
+            <button className={tab === "apps" ? "active" : ""} onClick={() => setTab("apps")}>
+              <span>应用</span>
+              <small>{props.effectiveApps.length} 个应用</small>
+            </button>
+            <button className={tab === "search" ? "active" : ""} onClick={() => setTab("search")}>
+              <span>常用搜索</span>
+              <small>{props.prefs.searchFavorites.length} 项</small>
+            </button>
+            <button className={tab === "tags" ? "active" : ""} onClick={() => setTab("tags")}>
+              <span>常用 Tag</span>
+              <small>{props.prefs.tagFavorites.length} 项</small>
+            </button>
+            <button className={tab === "filters" ? "active" : ""} onClick={() => setTab("filters")}>
+              <span>过滤器</span>
+              <small>{props.savedFilters.length} 个</small>
+            </button>
+            <button className={tab === "testcases" ? "active" : ""} onClick={() => setTab("testcases")}>
+              <span>测试用例</span>
+              <small>{props.testCaseStore.cases.length} 条</small>
+            </button>
+          </div>
+          <div className="manage-nav-group">
+            <span className="manage-nav-label">支持</span>
+            <button className={tab === "help" ? "active" : ""} onClick={() => setTab("help")}>
+              <span>帮助与快捷键</span>
+              <small>使用说明</small>
+            </button>
+          </div>
+          {IS_DEBUG && (
+            <div className="manage-nav-group">
+              <span className="manage-nav-label">开发</span>
+              <button
+                className={tab === "publish" ? "active" : ""}
+                onClick={() => setTab("publish")}
+                title="仅调试模式可见：生成 remote-config.json 并发布到仓库"
+              >
+                <span>发布配置</span>
+                <small>仅调试模式</small>
+              </button>
+            </div>
+          )}
+          <div className="manage-nav-group">
+            <span className="manage-nav-label">其它</span>
+            <button className={tab === "general" ? "active" : ""} onClick={() => setTab("general")}>
+              <span>通用</span>
+              <small>备份、诊断与更新</small>
+            </button>
+          </div>
+        </aside>
 
-      <div className="manage-content">
+        <main className="manage-content">
+      {tab === "general" && (
+        <section className="manage-section settings-general-section">
+          <div className="manage-section-heading">
+            <h2>通用</h2>
+            <p>集中管理配置数据、诊断信息和软件版本。</p>
+          </div>
+          <div className="settings-card-grid">
+            <article className="settings-card">
+              <div>
+                <h3>配置数据</h3>
+                <p>备份或恢复应用、常用项、过滤器和测试用例。</p>
+              </div>
+              <div className="settings-card-actions">
+                <button onClick={doExport}>导出配置</button>
+                <button onClick={doImport}>导入配置</button>
+              </div>
+            </article>
+            <article className="settings-card">
+              <div>
+                <h3>内置配置</h3>
+                <p>从远程配置源重新获取最新的内置应用和规则。</p>
+              </div>
+              <div className="settings-card-actions">
+                <button onClick={doRefreshConfig}>刷新配置</button>
+              </div>
+            </article>
+            <article className="settings-card">
+              <div>
+                <h3>诊断与支持</h3>
+                <p>遇到异常时导出调试日志，便于定位运行环境和错误信息。</p>
+              </div>
+              <div className="settings-card-actions">
+                <button onClick={doExportDebug}>导出调试日志</button>
+              </div>
+            </article>
+            <article className="settings-card">
+              <div>
+                <h3>软件更新</h3>
+                <p>手动检查测试工作台是否有可用的新版本。</p>
+              </div>
+              <div className="settings-card-actions">
+                <button onClick={props.onCheckUpdate}>检查更新</button>
+              </div>
+            </article>
+          </div>
+          {configMsg && <div className="settings-inline-status">{configMsg}</div>}
+        </section>
+      )}
       {tab === "apps" && (
         <section className="manage-section">
           <h2>应用清单（内置 + 手动）</h2>
@@ -341,15 +396,46 @@ export function ManagePage(props: Props) {
               const backdoor = backdoorOf(a.package);
               return (
                 <li key={a.package} className="manage-item manage-app-item">
-                  <div className="manage-app-main">
-                    <span className="manage-name">{a.name}</span>
-                    <span className="manage-pkg">{a.package}</span>
+                  <span className="manage-name" title={a.name}>{a.name}</span>
+                  <span className="manage-pkg" title={a.package}>{a.package}</span>
+                  <span className="manage-app-source">
                     {isBuiltinApp(a.package) && (
                       <span className="manage-badge">内置</span>
                     )}
                     {isAdded(a.package) && (
                       <span className="manage-badge">手动</span>
                     )}
+                  </span>
+                  <div className="manage-app-sub">
+                    {editingBackdoor === a.package ? (
+                      <input
+                        className="manage-desc-input"
+                        placeholder="后门 Activity"
+                        value={editBackdoor}
+                        autoFocus
+                        onChange={(e) => setEditBackdoor(e.target.value)}
+                        onBlur={saveBackdoor}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveBackdoor();
+                          if (e.key === "Escape") setEditingBackdoor(null);
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <span className="manage-desc" title={backdoor}>
+                          后门：{backdoor}
+                        </span>
+                        <button
+                          className="manage-move"
+                          title="编辑后门 Activity"
+                          onClick={() => startEditBackdoor(a.package, backdoor)}
+                        >
+                          ✎
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <div className="manage-app-actions">
                     <button
                       className="manage-move"
                       disabled={i === 0}
@@ -396,35 +482,6 @@ export function ManagePage(props: Props) {
                     >
                       删除
                     </button>
-                  </div>
-                  <div className="manage-app-sub">
-                    {editingBackdoor === a.package ? (
-                      <input
-                        className="manage-desc-input"
-                        placeholder="后门 Activity"
-                        value={editBackdoor}
-                        autoFocus
-                        onChange={(e) => setEditBackdoor(e.target.value)}
-                        onBlur={saveBackdoor}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") saveBackdoor();
-                          if (e.key === "Escape") setEditingBackdoor(null);
-                        }}
-                      />
-                    ) : (
-                      <>
-                        <span className="manage-desc" title={backdoor}>
-                          后门：{backdoor}
-                        </span>
-                        <button
-                          className="manage-move"
-                          title="编辑后门 Activity"
-                          onClick={() => startEditBackdoor(a.package, backdoor)}
-                        >
-                          ✎
-                        </button>
-                      </>
-                    )}
                   </div>
                 </li>
               );
@@ -635,6 +692,7 @@ export function ManagePage(props: Props) {
           />
         </section>
       )}
+        </main>
       </div>
     </div>
   );

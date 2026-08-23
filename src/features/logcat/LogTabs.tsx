@@ -7,7 +7,6 @@ interface Props {
   onSelect: (id: string) => void;
   onCreateLog: () => void;
   onCreateTest: () => void;
-  onDuplicate: () => void;
   onClose: (id: string) => void;
   onRename: (id: string, name: string) => void;
 }
@@ -159,9 +158,6 @@ export function LogTabs(props: Props) {
           </div>
         )}
       </div>
-      <button className="log-tab-duplicate" title="复制当前 Tab" onClick={props.onDuplicate}>
-        复制
-      </button>
       <span className="log-tabs-hint">双击名称或 F2 重命名</span>
     </div>
   );

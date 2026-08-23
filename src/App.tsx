@@ -969,12 +969,6 @@ export default function App() {
     showLogTab(tab);
   };
 
-  const handleDuplicateLogTab = () => {
-    const lastId = allEntries[allEntries.length - 1]?.id ?? -1;
-    const tab = logTabs.duplicateTab(logTabs.activeTab, lastId);
-    showLogTab(tab);
-  };
-
   const handleCloseLogTab = (id: string) => {
     if (logTabs.tabs.length <= 1) {
       setPendingCloseTabId(null);
@@ -1343,7 +1337,6 @@ export default function App() {
           onSelect={handleSelectLogTab}
           onCreateLog={handleCreateLogTab}
           onCreateTest={handleOpenTestTabCreate}
-          onDuplicate={handleDuplicateLogTab}
           onClose={setPendingCloseTabId}
           onRename={logTabs.renameTab}
         />
@@ -1520,7 +1513,7 @@ export default function App() {
               </div>
             </>
           )}
-          <span className="count">共 {tabEntries.length} 条</span>
+          <span className="count toolbar-log-count">共 {tabEntries.length} 条</span>
           {waiting && (
             <span className="count" style={{ color: "#f5a623" }}>
               等待设备连接…
