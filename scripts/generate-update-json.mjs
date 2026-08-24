@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 //! 生成 Tauri updater 的 latest.json：
-//!   - 读取 .app.tar.gz.sig 的内容作为 signature（注意：是内容，不是 URL）
+//!   - 读取 updater 产物对应 .sig 的内容作为 signature（注意：是内容，不是 URL）
 //!   - 生成/合并 <out>/latest.json（支持多架构：--merge 时合并到已有 latest.json）
 //!
 //! 两种 URL 生成方式：
@@ -17,6 +17,9 @@
 //!     --tar TestBench_aarch64.app.tar.gz --sig TestBench_aarch64.app.tar.gz.sig \
 //!     --out release-output --url "https://github.com/OWNER/REPO/releases/download/v0.0.4/TestBench_aarch64.app.tar.gz" \
 //!     --no-copy --notes "说明" --merge
+//!
+//! Windows 可分别写入 windows-x86_64-nsis / windows-x86_64-msi，
+//! 并用 windows-x86_64 兼容旧版本 updater 的回退匹配。
 
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -44,7 +47,15 @@ const notes = arg("notes", false);
 const merge = process.argv.includes("--merge");
 const noCopy = process.argv.includes("--no-copy");
 
-if (!["darwin-aarch64", "darwin-x86_64", "windows-x86_64"].includes(platform)) {
+if (
+  ![
+    "darwin-aarch64",
+    "darwin-x86_64",
+    "windows-x86_64",
+    "windows-x86_64-nsis",
+    "windows-x86_64-msi",
+  ].includes(platform)
+) {
   console.error(`不支持的平台: ${platform}`);
   process.exit(1);
 }
