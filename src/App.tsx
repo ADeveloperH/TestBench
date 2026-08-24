@@ -436,11 +436,14 @@ export default function App() {
 
   useEffect(() => {
     let disposed = false;
+    let polling = false;
     const poll = async () => {
+      if (disposed || polling) return;
       if (!selectedDevice) {
         if (!disposed) setAppRuntime(null);
         return;
       }
+      polling = true;
       try {
         const status = await invoke<{ installed: string[]; running: string[] }>(
           "app_runtime_status",
@@ -449,6 +452,8 @@ export default function App() {
         if (!disposed) setAppRuntime(status);
       } catch {
         // 静默：瞬时失败保留上次结果，避免状态闪烁
+      } finally {
+        polling = false;
       }
     };
     poll();
@@ -531,7 +536,11 @@ export default function App() {
     if (!selectedPackage || !selectedDevice) return;
     const tabId = logTabs.activeTabId;
     const isTestMonitor = logTabs.activeTab.kind === "test";
+    let disposed = false;
+    let polling = false;
     const poll = async () => {
+      if (disposed || polling) return;
+      polling = true;
       try {
         const pids = await invoke<string[]>("resolve_pids", {
           device: selectedDevice,
@@ -559,11 +568,16 @@ export default function App() {
         });
       } catch {
         // 静默失败，下个周期再试
+      } finally {
+        polling = false;
       }
     };
     poll();
     const timer = setInterval(poll, 3000);
-    return () => clearInterval(timer);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
   }, [
     selectedPackage,
     selectedDevice,
@@ -1443,60 +1457,60 @@ export default function App() {
             </div>
           ) : (
             <>
-              <div className="toolbar-search-with-regex">
-            <HistoryInput
-              value={filters.search}
-              onChange={(v) => setFilters({ ...filters, search: v })}
-              favorites={prefs.prefs.searchFavorites}
-              history={prefs.prefs.searchHistory}
-              onAddHistory={(v) => prefs.addHistory("search", v)}
-              onPin={(v, description) =>
-                prefs.addFavorite("search", v, description)
-              }
-              onUnpin={(v) => prefs.removeFavorite("search", v)}
-              onRemoveHistory={(v) => prefs.removeHistory("search", v)}
-              placeholder="搜索（消息或 Tag）"
-              protectedValues={IS_DEBUG ? NO_PROTECTED_VALUES : getBuiltinSearchValues()}
-            />
-            <button
-              type="button"
-              className={`toolbar-regex-toggle ${filters.regex ? "on" : ""}`}
-              aria-pressed={filters.regex}
-              title="正则表达式"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setFilters({ ...filters, regex: !filters.regex })}
-            >
-              .*
-            </button>
-              </div>
               <HistoryInput
-            value={filters.tags}
-            onChange={(v) => setFilters({ ...filters, tags: v })}
-            favorites={prefs.prefs.tagFavorites}
-            history={prefs.prefs.tagHistory}
-            onAddHistory={(v) => prefs.addHistory("tags", v)}
-              onPin={(v, description) =>
-                prefs.addFavorite("tags", v, description)
-              }
-            onUnpin={(v) => prefs.removeFavorite("tags", v)}
-            onRemoveHistory={(v) => prefs.removeHistory("tags", v)}
-            placeholder="Tag（逗号分隔，!排除）"
-            protectedValues={IS_DEBUG ? NO_PROTECTED_VALUES : getBuiltinTagValues()}
-          />
-          <label className="toolbar-field-label">过滤器</label>
-          <Select
-            className="filter-select"
-            title="已保存的过滤器"
-            value={activeFilterId}
-            options={[
-              { value: "", label: "（当前过滤）", fullLabel: "（当前过滤）" },
-              ...savedFilters.map((f) => ({
-                value: f.id,
-                label: f.name,
-              })),
-            ]}
-            onChange={(v) => handleApplyFilter(v)}
-          />
+                value={filters.tags}
+                onChange={(v) => setFilters({ ...filters, tags: v })}
+                favorites={prefs.prefs.tagFavorites}
+                history={prefs.prefs.tagHistory}
+                onAddHistory={(v) => prefs.addHistory("tags", v)}
+                onPin={(v, description) =>
+                  prefs.addFavorite("tags", v, description)
+                }
+                onUnpin={(v) => prefs.removeFavorite("tags", v)}
+                onRemoveHistory={(v) => prefs.removeHistory("tags", v)}
+                placeholder="Tag（逗号分隔，!排除）"
+                protectedValues={IS_DEBUG ? NO_PROTECTED_VALUES : getBuiltinTagValues()}
+              />
+              <div className="toolbar-search-with-regex">
+                <HistoryInput
+                  value={filters.search}
+                  onChange={(v) => setFilters({ ...filters, search: v })}
+                  favorites={prefs.prefs.searchFavorites}
+                  history={prefs.prefs.searchHistory}
+                  onAddHistory={(v) => prefs.addHistory("search", v)}
+                  onPin={(v, description) =>
+                    prefs.addFavorite("search", v, description)
+                  }
+                  onUnpin={(v) => prefs.removeFavorite("search", v)}
+                  onRemoveHistory={(v) => prefs.removeHistory("search", v)}
+                  placeholder="搜索（消息或 Tag）"
+                  protectedValues={IS_DEBUG ? NO_PROTECTED_VALUES : getBuiltinSearchValues()}
+                />
+                <button
+                  type="button"
+                  className={`toolbar-regex-toggle ${filters.regex ? "on" : ""}`}
+                  aria-pressed={filters.regex}
+                  title="正则表达式"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setFilters({ ...filters, regex: !filters.regex })}
+                >
+                  .*
+                </button>
+              </div>
+              <label className="toolbar-field-label">过滤器</label>
+              <Select
+                className="filter-select"
+                title="已保存的过滤器"
+                value={activeFilterId}
+                options={[
+                  { value: "", label: "（当前过滤）", fullLabel: "（当前过滤）" },
+                  ...savedFilters.map((f) => ({
+                    value: f.id,
+                    label: f.name,
+                  })),
+                ]}
+                onChange={(v) => handleApplyFilter(v)}
+              />
               <div className="toolbar-filter-save">
                 <button
                   className={`toolbar-icon-action ${showFilterSave ? "active" : ""}`}
@@ -1698,6 +1712,11 @@ export default function App() {
             selectedId={selectedId}
             onSelect={handleSelect}
             scrollCommand={scrollCommand}
+            tabId={logTabs.activeTabId}
+            findState={logTabs.activeTab.find}
+            onFindStateChange={(find) =>
+              logTabs.updateTab(logTabs.activeTabId, { find })
+            }
             layoutKey={`${logTabs.activeTabId}|${filters.search}|${filters.regex}|${filters.tags}|${filters.app}|${filters.minLevel}|${logTabs.activeTab.clearedBeforeId}|${logTabs.activeTab.pausedAtId ?? "live"}`}
           />
           {selectedEntry && (

@@ -41,7 +41,19 @@ struct RecordingState {
 #[tauri::command]
 async fn list_devices() -> Result<Vec<Device>, String> {
     log::debug!("收到前端命令 list_devices");
-    adb_list_devices()
+    run_blocking(adb_list_devices).await
+}
+
+/// 阻塞式 ADB/文件系统任务必须与 Tauri 异步运行时隔离。
+/// Windows 上 adb 偶发变慢时，否则会占住更新检查和其他 invoke 使用的工作线程。
+async fn run_blocking<T, F>(task: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|e| format!("后台任务执行失败：{e}"))?
 }
 
 #[tauri::command]
@@ -198,13 +210,13 @@ async fn mdns_connect_address() -> Result<Option<String>, String> {
 #[tauri::command]
 async fn resolve_pids(device: Option<String>, package: String) -> Result<Vec<String>, String> {
     log::debug!("收到前端命令 resolve_pids：device={:?} package={package}", device);
-    adb_resolve_pids(device.as_deref(), &package)
+    run_blocking(move || adb_resolve_pids(device.as_deref(), &package)).await
 }
 
 #[tauri::command]
 async fn app_runtime_status(device: Option<String>) -> Result<AppRuntimeStatus, String> {
     log::debug!("收到前端命令 app_runtime_status：device={:?}", device);
-    adb_list_app_runtime_status(device.as_deref())
+    run_blocking(move || adb_list_app_runtime_status(device.as_deref())).await
 }
 
 #[tauri::command]
@@ -398,7 +410,7 @@ async fn screenshot(app: AppHandle, device: Option<String>) -> Result<Option<Str
     log::info!("收到前端命令 screenshot：device={:?}", device);
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let name = format!("screenshot_{ts}.png");
-    let picked = save_file_dialog(&app, &name, "图片", &["png"])?;
+    let picked = save_file_dialog(&app, &name, "图片", &["png"]).await?;
     let Some(path) = picked else {
         return Ok(None);
     };
@@ -411,7 +423,7 @@ async fn screenshot(app: AppHandle, device: Option<String>) -> Result<Option<Str
 #[tauri::command]
 async fn pick_apk(app: AppHandle) -> Result<Option<String>, String> {
     log::debug!("收到前端命令 pick_apk");
-    let picked = pick_file_dialog(&app, "APK 安装包", &["apk"])?;
+    let picked = pick_file_dialog(&app, "APK 安装包", &["apk"]).await?;
     match picked {
         Some(p) => Ok(Some(p.display().to_string())),
         None => Ok(None),
@@ -458,7 +470,7 @@ async fn start_recording(
     log::info!("收到前端命令 start_recording：device={:?} mbps={mbps}", device);
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let name = format!("recording_{ts}.mp4");
-    let picked = save_file_dialog(&app, &name, "视频", &["mp4"])?;
+    let picked = save_file_dialog(&app, &name, "视频", &["mp4"]).await?;
     let Some(path) = picked else {
         return Ok(None);
     };
@@ -503,7 +515,7 @@ async fn app_performance(device: Option<String>, package: String) -> Result<Stri
 #[tauri::command]
 async fn export_logs(app: AppHandle, text: String) -> Result<Option<String>, String> {
     log::info!("收到前端命令 export_logs，日志长度 {} 字节", text.len());
-    let picked = save_file_dialog(&app, "logcat.txt", "日志文件", &["txt", "log"])?;
+    let picked = save_file_dialog(&app, "logcat.txt", "日志文件", &["txt", "log"]).await?;
     match picked {
         Some(p) => {
             std::fs::write(&p, text).map_err(|e| format!("写入文件失败：{e}"))?;
@@ -520,7 +532,7 @@ async fn export_logs(app: AppHandle, text: String) -> Result<Option<String>, Str
 #[tauri::command]
 async fn export_config(app: AppHandle, text: String) -> Result<Option<String>, String> {
     log::info!("收到前端命令 export_config，配置长度 {} 字节", text.len());
-    let picked = save_file_dialog(&app, "testbench-config.json", "配置文件", &["json"])?;
+    let picked = save_file_dialog(&app, "testbench-config.json", "配置文件", &["json"]).await?;
     match picked {
         Some(p) => {
             std::fs::write(&p, text).map_err(|e| format!("写入文件失败：{e}"))?;
@@ -537,7 +549,7 @@ async fn export_config(app: AppHandle, text: String) -> Result<Option<String>, S
 #[tauri::command]
 async fn import_config(app: AppHandle) -> Result<Option<String>, String> {
     log::debug!("收到前端命令 import_config");
-    let picked = pick_file_dialog(&app, "配置文件", &["json"])?;
+    let picked = pick_file_dialog(&app, "配置文件", &["json"]).await?;
     match picked {
         Some(p) => {
             let text = std::fs::read_to_string(&p).map_err(|e| format!("读取文件失败：{e}"))?;
@@ -570,20 +582,10 @@ async fn export_debug_log(app: AppHandle) -> Result<Option<String>, String> {
         report.push_str(&format!("屏幕 DPI：{dpi}（缩放 {}%）\n", dpi * 100 / 96));
     }
 
-    // 设备列表
+    // 设备列表由应用日志中的轮询记录提供。这里不再另外启动 adb，
+    // 避免恰好在 adb 异常时连调试报告也无法导出。
     report.push_str("\n===== 设备列表 =====\n");
-    match adb_list_devices() {
-        Ok(devices) if devices.is_empty() => report.push_str("（无设备）\n"),
-        Ok(devices) => {
-            for d in devices {
-                report.push_str(&format!(
-                    "{}  状态={}  型号={}  连接={}\n",
-                    d.serial, d.state, d.model, d.transport
-                ));
-            }
-        }
-        Err(e) => report.push_str(&format!("获取失败：{e}\n")),
-    }
+    report.push_str("（请查看下方应用日志中的最近设备轮询记录）\n");
 
     // 应用日志（tauri-plugin-log 写入的文件）
     report.push_str("\n===== 应用日志 =====\n");
@@ -605,7 +607,8 @@ async fn export_debug_log(app: AppHandle) -> Result<Option<String>, String> {
         &format!("testbench-debug-{ts}.txt"),
         "文本文件",
         &["txt"],
-    )?;
+    )
+    .await?;
     match picked {
         Some(p) => {
             std::fs::write(&p, report).map_err(|e| format!("写入文件失败：{e}"))?;
@@ -622,7 +625,7 @@ async fn export_debug_log(app: AppHandle) -> Result<Option<String>, String> {
 /// 显示保存文件对话框（非阻塞回调 + channel）。
 /// 不用 blocking_*：它在 Windows 的异步线程上调用系统对话框会失败/挂起，
 /// 导致导出配置、导出日志、截图等功能不可用。
-fn save_file_dialog(
+async fn save_file_dialog(
     app: &AppHandle,
     file_name: &str,
     filter_name: &str,
@@ -637,7 +640,10 @@ fn save_file_dialog(
         .save_file(move |picked| {
             let _ = tx.send(picked);
         });
-    match rx.recv() {
+    let picked = tauri::async_runtime::spawn_blocking(move || rx.recv())
+        .await
+        .map_err(|e| format!("对话框等待失败：{e}"))?;
+    match picked {
         Ok(Some(path)) => Ok(Some(path.into_path().map_err(|e| e.to_string())?)),
         Ok(None) => Ok(None),
         Err(e) => Err(format!("对话框调用失败：{e}")),
@@ -645,7 +651,7 @@ fn save_file_dialog(
 }
 
 /// 显示打开文件对话框（非阻塞回调 + channel，Windows 兼容）。
-fn pick_file_dialog(
+async fn pick_file_dialog(
     app: &AppHandle,
     filter_name: &str,
     extensions: &[&str],
@@ -658,7 +664,10 @@ fn pick_file_dialog(
         .pick_file(move |picked| {
             let _ = tx.send(picked);
         });
-    match rx.recv() {
+    let picked = tauri::async_runtime::spawn_blocking(move || rx.recv())
+        .await
+        .map_err(|e| format!("对话框等待失败：{e}"))?;
+    match picked {
         Ok(Some(path)) => Ok(Some(path.into_path().map_err(|e| e.to_string())?)),
         Ok(None) => Ok(None),
         Err(e) => Err(format!("对话框调用失败：{e}")),

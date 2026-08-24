@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { LogEntry, LogLevel, ScrollCommand } from "../../core/types";
+import type { LogFindState } from "./useLogTabs";
 
 const ROW_HEIGHT = 20;
 const LONG_THRESHOLD = 1200;
@@ -250,6 +251,9 @@ interface Props {
   scrollCommand: ScrollCommand | null;
   /** 筛选或 Tab 切换时变化，用于主动清空虚拟列表的旧行高缓存。 */
   layoutKey: string;
+  tabId: string;
+  findState: LogFindState;
+  onFindStateChange: (state: LogFindState) => void;
 }
 
 /**
@@ -264,6 +268,9 @@ export function LogList({
   onSelect,
   scrollCommand,
   layoutKey,
+  tabId,
+  findState,
+  onFindStateChange,
 }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -272,11 +279,16 @@ export function LogList({
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   // —— Ctrl+F 查找状态 ——
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [caseSensitive, setCaseSensitive] = useState(false);
-  const [useRegex, setUseRegex] = useState(false);
-  const [currentMatch, setCurrentMatch] = useState(0);
+  const {
+    open: searchOpen,
+    query,
+    caseSensitive,
+    useRegex,
+    currentMatch,
+  } = findState;
+  const updateFind = (patch: Partial<LogFindState>) => {
+    onFindStateChange({ ...findState, ...patch });
+  };
   const [findSnapshot, setFindSnapshot] = useState<LogEntry[]>([]);
   const findInputRef = useRef<HTMLInputElement>(null);
   const entriesRef = useRef(entries);
@@ -439,16 +451,18 @@ export function LogList({
   );
 
   const closeFind = () => {
-    setSearchOpen(false);
-    setQuery("");
-    setCurrentMatch(0);
-    setCaseSensitive(false);
-    setUseRegex(false);
+    onFindStateChange({
+      open: false,
+      query: "",
+      currentMatch: 0,
+      caseSensitive: false,
+      useRegex: false,
+    });
   };
 
   useEffect(() => {
     if (searchOpen) findInputRef.current?.focus();
-  }, [searchOpen]);
+  }, [searchOpen, tabId]);
 
   // 全局快捷键：Ctrl/Cmd+F 打开查找，Esc 关闭。
   useEffect(() => {
@@ -459,7 +473,7 @@ export function LogList({
         (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
-        setSearchOpen(true);
+        updateFind({ open: true });
         return;
       }
       if (e.key === "Escape" && !inField && searchOpen) {
@@ -470,18 +484,18 @@ export function LogList({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchOpen]);
+  }, [searchOpen, tabId]);
 
   // 查询/选项变化时重置到第一个匹配并跳过去。
-  const queryKeyRef = useRef("");
+  const queryKeysRef = useRef(new Map<string, string>());
   useEffect(() => {
     const key = `${query}\u0000${caseSensitive}\u0000${useRegex}`;
-    if (!searchOpen || queryKeyRef.current === key) return;
-    queryKeyRef.current = key;
-    setCurrentMatch(0);
+    if (!searchOpen || queryKeysRef.current.get(tabId) === key) return;
+    queryKeysRef.current.set(tabId, key);
+    updateFind({ currentMatch: 0 });
     if (findIndex.total > 0) scrollToOccurrence(0, findIndex);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchOpen, query, caseSensitive, useRegex, findIndex]);
+  }, [searchOpen, query, caseSensitive, useRegex, findIndex, tabId]);
 
   const scrollToOccurrence = (occ: number, idx: FindIndex = findIndex) => {
     if (occ < 0 || occ >= idx.total) return;
@@ -497,14 +511,14 @@ export function LogList({
   const goNext = () => {
     if (!searchOpen || findIndex.total === 0) return;
     const next = Math.min(currentMatch + 1, findIndex.total - 1);
-    setCurrentMatch(next);
+    updateFind({ currentMatch: next });
     scrollToOccurrence(next);
   };
 
   const goPrev = () => {
     if (!searchOpen || findIndex.total === 0) return;
     const next = Math.max(currentMatch - 1, 0);
-    setCurrentMatch(next);
+    updateFind({ currentMatch: next });
     scrollToOccurrence(next);
   };
 
@@ -651,7 +665,7 @@ export function LogList({
           <input
             ref={findInputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => updateFind({ query: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -693,14 +707,14 @@ export function LogList({
           </button>
           <button
             className={`find-btn ${caseSensitive ? "on" : ""}`}
-            onClick={() => setCaseSensitive(!caseSensitive)}
+            onClick={() => updateFind({ caseSensitive: !caseSensitive })}
             title="区分大小写"
           >
             Aa
           </button>
           <button
             className={`find-btn ${useRegex ? "on" : ""}`}
-            onClick={() => setUseRegex(!useRegex)}
+            onClick={() => updateFind({ useRegex: !useRegex })}
             title="正则表达式"
           >
             .*

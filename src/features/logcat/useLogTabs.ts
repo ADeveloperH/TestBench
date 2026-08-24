@@ -12,11 +12,29 @@ export const EMPTY_LOG_FILTERS: FilterState = {
   app: "",
 };
 
+export interface LogFindState {
+  open: boolean;
+  query: string;
+  caseSensitive: boolean;
+  useRegex: boolean;
+  currentMatch: number;
+}
+
+export const EMPTY_LOG_FIND: LogFindState = {
+  open: false,
+  query: "",
+  caseSensitive: false,
+  useRegex: false,
+  currentMatch: 0,
+};
+
 export interface LogTabState {
   id: string;
   name: string;
   kind: "log" | "test";
   filters: FilterState;
+  /** Ctrl/Cmd+F 查找条状态，每个 Tab 独立。 */
+  find: LogFindState;
   activeFilterId: string;
   pausedAtId: number | null;
   clearedBeforeId: number;
@@ -49,6 +67,7 @@ function makeTab(
     name,
     kind,
     filters: { ...filters, pid: "" },
+    find: { ...EMPTY_LOG_FIND },
     activeFilterId: "",
     pausedAtId: null,
     clearedBeforeId: -1,
@@ -74,6 +93,11 @@ function loadWorkspace(): { tabs: LogTabState[]; activeTabId: string } {
           name: (tab.name as string).trim() || "未命名日志",
           kind: tab.kind === "test" ? "test" : "log",
           filters: { ...EMPTY_LOG_FILTERS, ...tab.filters, pid: "" },
+          find: {
+            ...EMPTY_LOG_FIND,
+            ...tab.find,
+            currentMatch: 0,
+          },
           // 日志 ID 每次启动都会重置，运行态不跨进程恢复。
           pausedAtId: null,
           clearedBeforeId: -1,

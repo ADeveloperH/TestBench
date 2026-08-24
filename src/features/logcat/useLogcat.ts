@@ -88,6 +88,7 @@ export function useLogcat(
   const selectedDeviceRef = useRef<string | null>(null);
   const bufferForResumeRef = useRef(buffer);
   const mergeStackRef = useRef(mergeStack);
+  const refreshDevicesInFlightRef = useRef(false);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -110,6 +111,8 @@ export function useLogcat(
   }, [mergeStack]);
 
   const refreshDevices = useCallback(async (silent = false) => {
+    if (refreshDevicesInFlightRef.current) return;
+    refreshDevicesInFlightRef.current = true;
     log.info("刷新设备列表");
     try {
       const list = await invoke<Device[]>("list_devices");
@@ -132,6 +135,8 @@ export function useLogcat(
       log.error(`刷新设备列表失败：${String(e)}`);
       // 轮询时的瞬时失败静默处理，避免 adb 抖动反复弹错误横幅
       if (!silent) setError(String(e));
+    } finally {
+      refreshDevicesInFlightRef.current = false;
     }
   }, []);
 
