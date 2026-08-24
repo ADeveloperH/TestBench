@@ -1,1 +1,1 @@
-精简测试用例监控界面的重复信息，将设备连接状态集中到设备区域；修复 Windows 自动更新发布链路，Release 现在包含 NSIS/MSI 更新包与签名，latest.json 同时提供 Windows 安装器专用平台项及兼容回退项。
+精简测试用例监控界面的重复信息，将设备连接状态集中到设备区域；修复 Windows 自动更新发布链路，Release 现在包含 NSIS/MSI 安装包及对应签名，latest.json 同时提供 Windows 安装器专用平台项及兼容回退项。

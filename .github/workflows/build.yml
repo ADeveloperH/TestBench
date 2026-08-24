@@ -3,8 +3,8 @@
 #   1. 手动：仓库页面 → Actions → 本 workflow → Run workflow
 #      产物在每次运行的 Artifacts 里下载（内部测试用）
 #   2. 自动：推送 v* 标签（如 v0.1.0）
-#      构建完成后自动创建 GitHub Release 并上传安装包与 macOS 更新产物
-#      （.app.tar.gz + latest.json），用户从 Releases 下载、App 内自动更新
+#      构建完成后自动创建 GitHub Release 并上传各平台安装包、更新签名
+#      与 latest.json，用户从 Releases 下载、App 内自动更新
 #
 # 依赖仓库 Secrets：
 #   TAURI_SIGNING_PRIVATE_KEY           updater 签名私钥内容（~/.tauri/internal-workbench.key）
@@ -63,11 +63,9 @@ jobs:
           if-no-files-found: error
           path: |
             src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/msi/*.zip
-            src-tauri/target/release/bundle/msi/*.zip.sig
+            src-tauri/target/release/bundle/msi/*.msi.sig
             src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/nsis/*.zip
-            src-tauri/target/release/bundle/nsis/*.zip.sig
+            src-tauri/target/release/bundle/nsis/*.exe.sig
 
   build-macos:
     name: macOS 安装包（${{ matrix.arch }}）
@@ -205,10 +203,10 @@ jobs:
               $MERGE
           done
 
-          # Windows 根据安装来源优先匹配 installer-specific 平台键；
-          # 同时保留 windows-x86_64 作为旧版本 updater 的回退项。
-          NSIS=$(find artifacts -type f \( -name '*.nsis.zip' -o -name '*-setup.exe.zip' \) | head -1)
-          MSI=$(find artifacts -type f -name '*.msi.zip' | head -1)
+          # Tauri v2 直接复用 Windows 安装包作为更新产物，签名与安装包同名追加 .sig。
+          # 根据安装来源优先匹配 installer-specific 平台键，并保留通用回退项。
+          NSIS=$(find artifacts -type f -name '*.exe' | head -1)
+          MSI=$(find artifacts -type f -name '*.msi' | head -1)
           [ -n "$NSIS" ] && [ -f "$NSIS.sig" ] || { echo "缺少 Windows NSIS 更新产物或签名"; exit 1; }
           [ -n "$MSI" ] && [ -f "$MSI.sig" ] || { echo "缺少 Windows MSI 更新产物或签名"; exit 1; }
 
@@ -254,11 +252,12 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ github.ref_name }}"
-          # 安装包 + macOS/Windows 更新包与签名 + latest.json
+          # 安装包 + 各平台更新签名 + latest.json
           mapfile -t FILES < <(
             find artifacts -type f \( \
               -name '*.dmg' -o -name '*.exe' -o -name '*.msi' \
-              -o -name '*.app.tar.gz' -o -name '*.zip' -o -name '*.zip.sig' \
+              -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \
+              -o -name '*.exe.sig' -o -name '*.msi.sig' \
             \) | sort
             find release-output -type f -name 'latest.json'
           )
