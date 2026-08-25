@@ -1,0 +1,27 @@
+{
+  "version": "0.0.10",
+  "notes": "修复 Windows 上日志、配置和调试日志无法导出的问题；更新检查改用稳定清单地址并避免自动检查与手动检查并发，提升 Windows 自动更新可靠性。",
+  "pub_date": "2026-08-25T03:23:43.953Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkRYZ2J2b1dpUTdUclIzaTF1U2sySFFQK3d0Mm5vb0dxN2Q3TjdIQ29UcHBYUVV6bFNuUHNESTBDWWtRSWFDM2FaUmpHa01DUzlxNFhoeFZkNEtURWc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3NjI3ODEyCWZpbGU6VGVzdEJlbmNoLmFwcC50YXIuZ3oKNHE1ekltUUtwSXhibS9EK0M3clorRGovSFhrTFNuL2hnL1Y1RnRKT0FFSm8vOTcrenp4OGF1L1VodjVqOUc1YUFseGhTUGh4cWhIMURqc2dOcURzQ1E9PQo=",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.10/TestBench_arm64.app.tar.gz"
+    },
+    "darwin-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkRCWE5pNFFpNDhWWUpCekZJa0E2NFJJcVFUeFpvQTlJZDV1eDZSR0lPMkJQT2Z6ZStoa1BMSGN5bktzMU52c2pyQU1pbE9iNG9EUlVpSXRHRGt2VUFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3NjI4MTM5CWZpbGU6VGVzdEJlbmNoLmFwcC50YXIuZ3oKV0VZejA5dUxpZHIrUzd2YXVIV2gyZDhvZ2l2NlV0SVRmd2xhSHF5YlVhNFBIMjQrU2VITmF3OFVaU3lXSmVYK1MwRUV4Y1ltQUZ6eHZmSjNFYTg2QVE9PQo=",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.10/TestBench_x64.app.tar.gz"
+    },
+    "windows-x86_64-nsis": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVk5nMW5FL05odUlRUVpXWG5LV0g3MFA5R0UzNXdzYnNkeU92aTFZNU9XWGpKRXlsa21yWWpMa1dxT2JmbjNkbnB2bDFFUEdmMGlhdVMxZGJKNGtOaHdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3NjI3OTg4CWZpbGU6VGVzdEJlbmNoXzAuMC4xMF94NjQtc2V0dXAuZXhlCkdia1E3WHZHRmtHdHA3WTlZcUtFdkhsdXdsNlkxUTNNSHRrOFVJejhaY294U3JpSWJ6eHZDT3hlUWNVeDREbnhaRTdLVHExdmlyVHFLYzd5eTF0V0NnPT0K",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.10/TestBench_0.0.10_x64-setup.exe"
+    },
+    "windows-x86_64-msi": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVk5iUmx2MFh1M3p4amFjYVhNOEN3OWc4OVR5eGlRNlBrOXYzREpBMnI1SUkyUjZrb1g5QUFjSWNYSHhhVWpBVUNuTkpndUtuMm9TeGg4cm9vSnFkcWdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3NjI3OTg4CWZpbGU6VGVzdEJlbmNoXzAuMC4xMF94NjRfZW4tVVMubXNpCitYemhwVk44YTBoOG9yZEh0SDRlZjNJdis1VnpkYUJ3S2JYNG5BSE9PbkdXcHNoWExGYjhIQ2dUc0tUMkliYnZzemsyT3pEYVptYVZDbC9sbkUwSERnPT0K",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.10/TestBench_0.0.10_x64_en-US.msi"
+    },
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVk5nMW5FL05odUlRUVpXWG5LV0g3MFA5R0UzNXdzYnNkeU92aTFZNU9XWGpKRXlsa21yWWpMa1dxT2JmbjNkbnB2bDFFUEdmMGlhdVMxZGJKNGtOaHdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3NjI3OTg4CWZpbGU6VGVzdEJlbmNoXzAuMC4xMF94NjQtc2V0dXAuZXhlCkdia1E3WHZHRmtHdHA3WTlZcUtFdkhsdXdsNlkxUTNNSHRrOFVJejhaY294U3JpSWJ6eHZDT3hlUWNVeDREbnhaRTdLVHExdmlyVHFLYzd5eTF0V0NnPT0K",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.10/TestBench_0.0.10_x64-setup.exe"
+    }
+  }
+}
