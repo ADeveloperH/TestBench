@@ -410,7 +410,7 @@ async fn screenshot(app: AppHandle, device: Option<String>) -> Result<Option<Str
     log::info!("收到前端命令 screenshot：device={:?}", device);
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let name = format!("screenshot_{ts}.png");
-    let picked = save_file_dialog(&app, &name, "图片", &["png"]).await?;
+    let picked = save_file_dialog(&app, &name, "图片", &["png"])?;
     let Some(path) = picked else {
         return Ok(None);
     };
@@ -423,7 +423,7 @@ async fn screenshot(app: AppHandle, device: Option<String>) -> Result<Option<Str
 #[tauri::command]
 async fn pick_apk(app: AppHandle) -> Result<Option<String>, String> {
     log::debug!("收到前端命令 pick_apk");
-    let picked = pick_file_dialog(&app, "APK 安装包", &["apk"]).await?;
+    let picked = pick_file_dialog(&app, "APK 安装包", &["apk"])?;
     match picked {
         Some(p) => Ok(Some(p.display().to_string())),
         None => Ok(None),
@@ -470,7 +470,7 @@ async fn start_recording(
     log::info!("收到前端命令 start_recording：device={:?} mbps={mbps}", device);
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let name = format!("recording_{ts}.mp4");
-    let picked = save_file_dialog(&app, &name, "视频", &["mp4"]).await?;
+    let picked = save_file_dialog(&app, &name, "视频", &["mp4"])?;
     let Some(path) = picked else {
         return Ok(None);
     };
@@ -515,7 +515,7 @@ async fn app_performance(device: Option<String>, package: String) -> Result<Stri
 #[tauri::command]
 async fn export_logs(app: AppHandle, text: String) -> Result<Option<String>, String> {
     log::info!("收到前端命令 export_logs，日志长度 {} 字节", text.len());
-    let picked = save_file_dialog(&app, "logcat.txt", "日志文件", &["txt", "log"]).await?;
+    let picked = save_file_dialog(&app, "logcat.txt", "日志文件", &["txt", "log"])?;
     match picked {
         Some(p) => {
             std::fs::write(&p, text).map_err(|e| format!("写入文件失败：{e}"))?;
@@ -532,7 +532,7 @@ async fn export_logs(app: AppHandle, text: String) -> Result<Option<String>, Str
 #[tauri::command]
 async fn export_config(app: AppHandle, text: String) -> Result<Option<String>, String> {
     log::info!("收到前端命令 export_config，配置长度 {} 字节", text.len());
-    let picked = save_file_dialog(&app, "testbench-config.json", "配置文件", &["json"]).await?;
+    let picked = save_file_dialog(&app, "testbench-config.json", "配置文件", &["json"])?;
     match picked {
         Some(p) => {
             std::fs::write(&p, text).map_err(|e| format!("写入文件失败：{e}"))?;
@@ -549,7 +549,7 @@ async fn export_config(app: AppHandle, text: String) -> Result<Option<String>, S
 #[tauri::command]
 async fn import_config(app: AppHandle) -> Result<Option<String>, String> {
     log::debug!("收到前端命令 import_config");
-    let picked = pick_file_dialog(&app, "配置文件", &["json"]).await?;
+    let picked = pick_file_dialog(&app, "配置文件", &["json"])?;
     match picked {
         Some(p) => {
             let text = std::fs::read_to_string(&p).map_err(|e| format!("读取文件失败：{e}"))?;
@@ -607,8 +607,7 @@ async fn export_debug_log(app: AppHandle) -> Result<Option<String>, String> {
         &format!("testbench-debug-{ts}.txt"),
         "文本文件",
         &["txt"],
-    )
-    .await?;
+    )?;
     match picked {
         Some(p) => {
             std::fs::write(&p, report).map_err(|e| format!("写入文件失败：{e}"))?;
@@ -622,55 +621,43 @@ async fn export_debug_log(app: AppHandle) -> Result<Option<String>, String> {
     }
 }
 
-/// 显示保存文件对话框（非阻塞回调 + channel）。
-/// 不用 blocking_*：它在 Windows 的异步线程上调用系统对话框会失败/挂起，
-/// 导致导出配置、导出日志、截图等功能不可用。
-async fn save_file_dialog(
+/// 显示保存文件对话框。
+/// Tauri 的命令运行在工作线程，直接使用 dialog 插件提供的 blocking API。
+/// 该路径与插件自身的 JS `save` 命令一致，并已在旧版 Windows 包中验证可用。
+fn save_file_dialog(
     app: &AppHandle,
     file_name: &str,
     filter_name: &str,
     extensions: &[&str],
 ) -> Result<Option<std::path::PathBuf>, String> {
     use tauri_plugin_dialog::DialogExt;
-    let (tx, rx) = std::sync::mpsc::channel();
-    app.dialog()
+    let picked = app
+        .dialog()
         .file()
         .set_file_name(file_name)
         .add_filter(filter_name, extensions)
-        .save_file(move |picked| {
-            let _ = tx.send(picked);
-        });
-    let picked = tauri::async_runtime::spawn_blocking(move || rx.recv())
-        .await
-        .map_err(|e| format!("对话框等待失败：{e}"))?;
+        .blocking_save_file();
     match picked {
-        Ok(Some(path)) => Ok(Some(path.into_path().map_err(|e| e.to_string())?)),
-        Ok(None) => Ok(None),
-        Err(e) => Err(format!("对话框调用失败：{e}")),
+        Some(path) => Ok(Some(path.into_path().map_err(|e| e.to_string())?)),
+        None => Ok(None),
     }
 }
 
-/// 显示打开文件对话框（非阻塞回调 + channel，Windows 兼容）。
-async fn pick_file_dialog(
+/// 显示打开文件对话框（与保存弹窗使用同一条 Windows 兼容路径）。
+fn pick_file_dialog(
     app: &AppHandle,
     filter_name: &str,
     extensions: &[&str],
 ) -> Result<Option<std::path::PathBuf>, String> {
     use tauri_plugin_dialog::DialogExt;
-    let (tx, rx) = std::sync::mpsc::channel();
-    app.dialog()
+    let picked = app
+        .dialog()
         .file()
         .add_filter(filter_name, extensions)
-        .pick_file(move |picked| {
-            let _ = tx.send(picked);
-        });
-    let picked = tauri::async_runtime::spawn_blocking(move || rx.recv())
-        .await
-        .map_err(|e| format!("对话框等待失败：{e}"))?;
+        .blocking_pick_file();
     match picked {
-        Ok(Some(path)) => Ok(Some(path.into_path().map_err(|e| e.to_string())?)),
-        Ok(None) => Ok(None),
-        Err(e) => Err(format!("对话框调用失败：{e}")),
+        Some(path) => Ok(Some(path.into_path().map_err(|e| e.to_string())?)),
+        None => Ok(None),
     }
 }
 

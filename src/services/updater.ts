@@ -20,29 +20,49 @@ export interface AppUpdateInfo {
   update: Update;
 }
 
+/**
+ * 启动自动检查和用户手动检查共用同一个原生请求。
+ * Windows 上同时发起多个 updater check 时可能互相等待，因此在模块层做 single-flight。
+ */
+let activeCheck: Promise<AppUpdateInfo | null> | null = null;
+
 /** 检查更新：无更新返回 null；失败抛错（由调用方决定提示方式）。 */
-export async function checkForUpdate(): Promise<AppUpdateInfo | null> {
-  try {
-    info("[Updater] checking update");
-    const update = await check({ timeout: 30_000 });
-    if (!update) {
-      info("[Updater] no update available");
-      return null;
-    }
-    info(
-      `[Updater] update available: current ${update.currentVersion} -> latest ${update.version}`,
-    );
-    return {
-      version: update.version,
-      currentVersion: update.currentVersion,
-      notes: update.body ?? undefined,
-      date: update.date ?? undefined,
-      update,
-    };
-  } catch (e) {
-    error(`[Updater] check failed: ${String(e)}`);
-    throw e;
+export function checkForUpdate(): Promise<AppUpdateInfo | null> {
+  if (activeCheck) {
+    info("[Updater] reusing active check");
+    return activeCheck;
   }
+
+  const request = (async (): Promise<AppUpdateInfo | null> => {
+    try {
+      info("[Updater] checking update");
+      const update = await check({ timeout: 30_000 });
+      if (!update) {
+        info("[Updater] no update available");
+        return null;
+      }
+      info(
+        `[Updater] update available: current ${update.currentVersion} -> latest ${update.version}`,
+      );
+      return {
+        version: update.version,
+        currentVersion: update.currentVersion,
+        notes: update.body ?? undefined,
+        date: update.date ?? undefined,
+        update,
+      };
+    } catch (e) {
+      error(`[Updater] check failed: ${String(e)}`);
+      throw e;
+    }
+  })();
+
+  activeCheck = request;
+  const clearActiveCheck = () => {
+    if (activeCheck === request) activeCheck = null;
+  };
+  void request.then(clearActiveCheck, clearActiveCheck);
+  return request;
 }
 
 /**

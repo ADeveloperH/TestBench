@@ -273,3 +273,28 @@ jobs:
           else
             gh release create "$TAG" "${FILES[@]}" --generate-notes --title "TestBench $TAG"
           fi
+
+      # Windows 上 updater 使用 GitHub releases/latest/download 时，可能在跳转到
+      # release-assets 临时地址后请求失败。把同一份签名清单同步到仓库稳定直链，
+      # 应用优先读取该地址，Release 地址只作为最后兜底。
+      - name: 发布稳定更新清单
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          API_PATH="repos/$GH_REPO/contents/updates/latest.json"
+          CONTENT=$(base64 -w 0 release-output/latest.json)
+          SHA=$(gh api "$API_PATH?ref=main" --jq .sha 2>/dev/null || true)
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API_PATH" \
+              -f message="chore: publish updater manifest for ${{ github.ref_name }}" \
+              -f content="$CONTENT" \
+              -f branch=main \
+              -f sha="$SHA"
+          else
+            gh api --method PUT "$API_PATH" \
+              -f message="chore: publish updater manifest for ${{ github.ref_name }}" \
+              -f content="$CONTENT" \
+              -f branch=main
+          fi
