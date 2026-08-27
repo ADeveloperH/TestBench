@@ -20,13 +20,16 @@ export const DEFAULT_BACKDOOR =
 
 // 内置默认清单：首次安装或离线时兜底，之后以远程配置为准。
 export const BUILTIN_APPS: AppInfo[] = [
+  { name: "Block Pop!", package: "com.block.blast.pop" },
   { name: "Fortuna Block Blast", package: "com.unitegrandauto.fortunablock" },
   { name: "Fortuna Block Crush!", package: "com.fortuna.blockcrush" },
   { name: "Fortuna Bubble Shooter", package: "com.fortuna.bubble" },
   { name: "Cut Fruit", package: "com.fortuna.cutfruit" },
+  { name: "Fortuna Knit Out", package: "com.fortuna.knit" },
   { name: "Fortuna Mahjong", package: "com.fortuna.mahjong" },
   { name: "Fortuna Sheep Arrow", package: "com.unitegrandauto.fortunasheep" },
   { name: "Sheep Go", package: "com.fortuna.sheepgo" },
+  { name: "Joy Kitchen Tile Match", package: "com.injoy.tilematch.kitchen" },
   { name: "Lucky Candy Tiles", package: "com.lucky.candytiles" },
   { name: "Dog Arrow Out", package: "com.lucky.dogarrowout" },
   { name: "Fruit Quest Master", package: "com.lucky.fruit.quest" },
@@ -37,7 +40,12 @@ export const BUILTIN_APPS: AppInfo[] = [
   { name: "Snake Arrow", package: "com.lucky.snakearrow" },
   { name: "Lucky Tile Match", package: "com.lucky.tilematch" },
   { name: "Lucky Triple Mahjong", package: "com.lucky.tilematch.mahjong" },
+  { name: "Lucky Watermelon", package: "com.lucky.watermelon" },
+  { name: "Mahjong Pop!", package: "com.sinoauto.mahjong.match" },
+  { name: "Sheep Arrow PoP!", package: "com.sinoauto.sheeparrow" },
+  { name: "Sweet Fruit Slice", package: "com.sweet.fruitslice" },
   { name: "Watermelon Merge Fun", package: "com.yuhuitech.fruitgarden" },
+  { name: "Yarn Pop!", package: "com.sinoauto.yarn.knitout" },
 ];
 
 /**

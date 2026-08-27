@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-19T08:04:42.307Z",
+  "updatedAt": "2026-08-27T08:38:27.000Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -73,6 +73,38 @@
     {
       "name": "Watermelon Merge Fun",
       "package": "com.yuhuitech.fruitgarden"
+    },
+    {
+      "name": "Block Pop!",
+      "package": "com.block.blast.pop"
+    },
+    {
+      "name": "Fortuna Knit Out",
+      "package": "com.fortuna.knit"
+    },
+    {
+      "name": "Joy Kitchen Tile Match",
+      "package": "com.injoy.tilematch.kitchen"
+    },
+    {
+      "name": "Lucky Watermelon",
+      "package": "com.lucky.watermelon"
+    },
+    {
+      "name": "Mahjong Pop!",
+      "package": "com.sinoauto.mahjong.match"
+    },
+    {
+      "name": "Sheep Arrow PoP!",
+      "package": "com.sinoauto.sheeparrow"
+    },
+    {
+      "name": "Sweet Fruit Slice",
+      "package": "com.sweet.fruitslice"
+    },
+    {
+      "name": "Yarn Pop!",
+      "package": "com.sinoauto.yarn.knitout"
     }
   ],
   "searchFavorites": [

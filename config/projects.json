@@ -143,6 +143,70 @@
       "package": "com.yuhuitech.fruitgarden",
       "store_name": "Watermelon Merge Fun",
       "company_name": "YuHui Tech Flora"
+    },
+    {
+      "id": "com_block_blast_pop",
+      "project_name": "Block Pop!",
+      "app_name": "Block Pop!",
+      "package": "com.block.blast.pop",
+      "store_name": "",
+      "company_name": "SinoAuto Tech"
+    },
+    {
+      "id": "com_fortuna_knit",
+      "project_name": "Fortuna Knit out",
+      "app_name": "Fortuna Knit Out",
+      "package": "com.fortuna.knit",
+      "store_name": "Fortuna Knit Out",
+      "company_name": "UniteGrand Auto"
+    },
+    {
+      "id": "com_injoy_tilematch_kitchen",
+      "project_name": "Joy Kitchen Tile Match",
+      "app_name": "Joy Kitchen Tile Match",
+      "package": "com.injoy.tilematch.kitchen",
+      "store_name": "Kitchen Tile Match",
+      "company_name": "INJOY Tech Info"
+    },
+    {
+      "id": "com_lucky_watermelon",
+      "project_name": "Lucky Watermelon",
+      "app_name": "Lucky Watermelon",
+      "package": "com.lucky.watermelon",
+      "store_name": "Lucky Watermelon",
+      "company_name": ""
+    },
+    {
+      "id": "com_sinoauto_mahjong_match",
+      "project_name": "Mahjong Pop!",
+      "app_name": "Mahjong Pop!",
+      "package": "com.sinoauto.mahjong.match",
+      "store_name": "",
+      "company_name": "SinoAuto Tech"
+    },
+    {
+      "id": "com_sinoauto_sheeparrow",
+      "project_name": "Sheep Arrow PoP!",
+      "app_name": "Sheep Arrow PoP!",
+      "package": "com.sinoauto.sheeparrow",
+      "store_name": "",
+      "company_name": "SinoAuto Tech"
+    },
+    {
+      "id": "com_sweet_fruitslice",
+      "project_name": "Sweet Fruit Slice",
+      "app_name": "Sweet Fruit Slice",
+      "package": "com.sweet.fruitslice",
+      "store_name": "Sweet Fruit Slice",
+      "company_name": "FunTech Technology"
+    },
+    {
+      "id": "com_sinoauto_yarn_knitout",
+      "project_name": "Yarn Pop!",
+      "app_name": "Yarn Pop!",
+      "package": "com.sinoauto.yarn.knitout",
+      "store_name": "",
+      "company_name": "SinoAuto Tech"
     }
   ]
 }
