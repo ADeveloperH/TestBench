@@ -5,6 +5,7 @@
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { info, error } from "@tauri-apps/plugin-log";
+import { invoke } from "@tauri-apps/api/core";
 
 export interface UpdateProgress {
   downloaded: number;
@@ -78,6 +79,13 @@ export async function installUpdate(
 
   info("[Updater] download started");
   try {
+    // 安装前先清理 adb/scrcpy 子进程，避免 Windows 上孤儿进程锁住
+    // AdbWinApi.dll 等文件导致安装器「Error opening file for writing」。
+    try {
+      await invoke("cleanup_for_update");
+    } catch (e) {
+      info(`[Updater] cleanup_for_update failed (non-fatal): ${String(e)}`);
+    }
     await update.downloadAndInstall((event) => {
       switch (event.event) {
         case "Started":

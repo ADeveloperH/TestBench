@@ -500,6 +500,41 @@ async fn mirror(device: Option<String>, mbps: u32) -> Result<(), String> {
     adb_mirror(device.as_deref(), mbps)
 }
 
+/// 更新安装前清理子进程。
+/// Windows 上 App 更新时 updater 会直接 exit 并运行安装器，若不杀掉 adb/scrcpy
+/// 子进程，它们会以孤儿进程继续运行并锁住 AdbWinApi.dll / scrcpy 文件，
+/// 导致安装器「Error opening file for writing」。
+#[tauri::command]
+async fn cleanup_for_update(
+    logcat_state: State<'_, RunningLogcat>,
+    recording_state: State<'_, RecordingState>,
+) -> Result<(), String> {
+    log::info!("收到前端命令 cleanup_for_update：停止子进程以准备更新");
+
+    // 1. 停止 logcat（adb）
+    logcat_state.generation.fetch_add(1, Ordering::SeqCst);
+    if let Some(mut proc) = logcat_state.child.lock().unwrap().take() {
+        proc.stop();
+    }
+
+    // 2. 停止录屏（scrcpy）
+    if let Some(mut session) = recording_state.session.lock().unwrap().take() {
+        session.child.stop();
+    }
+
+    // 3. Windows：兜底杀掉可能残留的 adb.exe / scrcpy.exe 孤儿进程
+    #[cfg(target_os = "windows")]
+    {
+        for exe in ["adb.exe", "scrcpy.exe"] {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/IM", exe, "/T"])
+                .output();
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 async fn app_alarm(device: Option<String>, package: String) -> Result<String, String> {
     log::info!("收到前端命令 app_alarm：package={package}");
@@ -842,6 +877,7 @@ pub fn run() {
             start_recording,
             stop_recording,
             mirror,
+            cleanup_for_update,
             app_alarm,
             app_performance,
             export_logs,
