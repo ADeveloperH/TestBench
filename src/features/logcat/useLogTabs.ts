@@ -39,6 +39,8 @@ export interface LogTabState {
   pausedAtId: number | null;
   clearedBeforeId: number;
   selectedLogId: number | null;
+  /** 是否自动跟随最新日志；运行期间每个 Tab 独立。 */
+  followLatest: boolean;
   showTestCases: boolean;
   /** 测试用例监控 Tab 固定的应用包名。 */
   testPackage: string;
@@ -72,6 +74,7 @@ function makeTab(
     pausedAtId: null,
     clearedBeforeId: -1,
     selectedLogId: null,
+    followLatest: true,
     showTestCases: kind === "test",
     testPackage: kind === "test" ? (filters.app ?? "") : "",
     testStartedAtId: -1,
@@ -102,6 +105,7 @@ function loadWorkspace(): { tabs: LogTabState[]; activeTabId: string } {
           pausedAtId: null,
           clearedBeforeId: -1,
           selectedLogId: null,
+          followLatest: true,
           testStartedAtId: -1,
           pidHistory: [],
         }));
@@ -134,6 +138,7 @@ export function useLogTabs() {
             pausedAtId: null,
             clearedBeforeId: -1,
             selectedLogId: null,
+            followLatest: true,
             testStartedAtId: -1,
             pidHistory: [],
           })),
@@ -242,6 +247,7 @@ export function useLogTabs() {
         pausedAtId: null,
         clearedBeforeId: -1,
         selectedLogId: null,
+        followLatest: true,
         testStartedAtId: -1,
         pidHistory: [],
       })),

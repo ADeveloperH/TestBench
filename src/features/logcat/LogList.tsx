@@ -248,10 +248,13 @@ interface Props {
   entries: LogEntry[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  onClearSelection: () => void;
   scrollCommand: ScrollCommand | null;
   /** 筛选或 Tab 切换时变化，用于主动清空虚拟列表的旧行高缓存。 */
   layoutKey: string;
   tabId: string;
+  followLatest: boolean;
+  onFollowLatestChange: (follow: boolean) => void;
   findState: LogFindState;
   onFindStateChange: (state: LogFindState) => void;
 }
@@ -266,17 +269,73 @@ export function LogList({
   entries,
   selectedId,
   onSelect,
+  onClearSelection,
   scrollCommand,
   layoutKey,
   tabId,
+  followLatest,
+  onFollowLatestChange,
   findState,
   onFindStateChange,
 }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const atBottomRef = useRef(true);
+  const followLatestRef = useRef(followLatest);
+  followLatestRef.current = followLatest;
   const lastScrollTopRef = useRef(0);
-  const [stuck, setStuck] = useState(false);
+  const userScrollingRef = useRef(false);
+  const userScrollTimerRef = useRef<number | null>(null);
+  const tabScrollOffsetsRef = useRef(new Map<string, number>());
+  const displayedTabIdRef = useRef(tabId);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  const updateFollowLatest = (follow: boolean) => {
+    if (followLatestRef.current === follow) return;
+    followLatestRef.current = follow;
+    onFollowLatestChange(follow);
+  };
+
+  const scrollToLatest = () => {
+    const el = parentRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    lastScrollTopRef.current = el.scrollTop;
+    tabScrollOffsetsRef.current.set(displayedTabIdRef.current, el.scrollTop);
+  };
+
+  // 用户滚轮、触控或拖动滚动条期间，暂时禁止新日志抢占位置。
+  // 如果手势结束时仍未超过 160px 暂停阈值，则继续原有的跟随行为。
+  const beginUserScrolling = () => {
+    userScrollingRef.current = true;
+    if (userScrollTimerRef.current != null) {
+      window.clearTimeout(userScrollTimerRef.current);
+      userScrollTimerRef.current = null;
+    }
+  };
+
+  const finishUserScrolling = () => {
+    if (userScrollTimerRef.current != null) {
+      window.clearTimeout(userScrollTimerRef.current);
+    }
+    userScrollTimerRef.current = window.setTimeout(() => {
+      userScrollingRef.current = false;
+      userScrollTimerRef.current = null;
+      if (followLatestRef.current) scrollToLatest();
+    }, 220);
+  };
+
+  const markUserScrolling = () => {
+    beginUserScrolling();
+    finishUserScrolling();
+  };
+
+  useEffect(
+    () => () => {
+      if (userScrollTimerRef.current != null) {
+        window.clearTimeout(userScrollTimerRef.current);
+      }
+    },
+    [],
+  );
 
   // —— Ctrl+F 查找状态 ——
   const {
@@ -367,6 +426,22 @@ export function LogList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutKey]);
 
+  // 切换 Tab 时恢复各自的浏览位置；仍在跟随的 Tab 直接显示最新日志。
+  useLayoutEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    displayedTabIdRef.current = tabId;
+    if (followLatestRef.current) {
+      scrollToLatest();
+    } else {
+      const saved = tabScrollOffsetsRef.current.get(tabId);
+      if (saved != null) el.scrollTop = saved;
+      lastScrollTopRef.current = el.scrollTop;
+    }
+    // 只在 Tab 身份变化时恢复，不让日志/测量变化重复执行。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabId]);
+
   const onScroll = () => {
     const el = parentRef.current;
     if (!el) return;
@@ -375,14 +450,17 @@ export function LogList({
     // 行高测量导致的内容增长（scrollTop 不变或变大）不会误触发暂停。
     const scrolledUp = el.scrollTop < lastScrollTopRef.current;
     lastScrollTopRef.current = el.scrollTop;
+    tabScrollOffsetsRef.current.set(displayedTabIdRef.current, el.scrollTop);
+    // 只允许用户产生的滚动改变跟随状态；详情展开、虚拟列表测量和
+    // 程序定位造成的 scroll 事件不能擅自恢复跟随。
+    if (!userScrollingRef.current) return;
+    finishUserScrolling();
     if (dist < RESUME_DISTANCE) {
       // 回到底部附近 → 恢复跟随
-      atBottomRef.current = true;
-      setStuck(false);
+      updateFollowLatest(true);
     } else if (dist > PAUSE_DISTANCE && scrolledUp) {
       // 明显向上滚动 → 暂停跟随
-      atBottomRef.current = false;
-      setStuck(true);
+      updateFollowLatest(false);
     }
     // 中间地带保持当前状态（迟滞），轻微滑动不改变跟随状态
   };
@@ -394,17 +472,18 @@ export function LogList({
   const totalSize = virtualizer.getTotalSize();
   useEffect(() => {
     const el = parentRef.current;
-    if (atBottomRef.current && el) {
-      el.scrollTop = el.scrollHeight;
+    if (followLatestRef.current && !userScrollingRef.current && el) {
+      scrollToLatest();
     }
-  }, [entries, totalSize]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, totalSize, followLatest, tabId]);
 
   // 回到最新：滚到底部并恢复跟随。
   const backToLatest = () => {
-    const el = parentRef.current;
-    atBottomRef.current = true;
-    setStuck(false);
-    if (el) el.scrollTop = el.scrollHeight;
+    userScrollingRef.current = false;
+    onClearSelection();
+    updateFollowLatest(true);
+    scrollToLatest();
   };
 
   // 收到滚动指令时执行：定位到指定日志 / 跳到最早、最新、指定行号。
@@ -412,13 +491,17 @@ export function LogList({
     if (!scrollCommand || entries.length === 0) return;
     const { kind } = scrollCommand;
     if (kind === "top") {
+      updateFollowLatest(false);
       virtualizer.scrollToIndex(0, { align: "start" });
     } else if (kind === "bottom") {
+      updateFollowLatest(true);
       virtualizer.scrollToIndex(entries.length - 1, { align: "end" });
     } else if (kind === "index" && scrollCommand.index != null) {
+      updateFollowLatest(false);
       const idx = Math.min(Math.max(scrollCommand.index, 0), entries.length - 1);
       virtualizer.scrollToIndex(idx, { align: "center" });
     } else if (kind === "id" && scrollCommand.id != null) {
+      updateFollowLatest(false);
       const idx = entries.findIndex((e) => e.id === scrollCommand.id);
       if (idx >= 0) {
         virtualizer.scrollToIndex(idx, { align: "center" });
@@ -505,6 +588,7 @@ export function LogList({
     const liveIdx = entries.findIndex((e) => e.id === row.id);
     const target =
       liveIdx >= 0 ? liveIdx : Math.min(row.rowIndex, entries.length - 1);
+    updateFollowLatest(false);
     virtualizer.scrollToIndex(target, { align: "center" });
   };
 
@@ -524,7 +608,17 @@ export function LogList({
 
   return (
     <div className="log-pane">
-      <div className="log-list" ref={parentRef} onScroll={onScroll}>
+      <div
+        className="log-list"
+        ref={parentRef}
+        onScroll={onScroll}
+        onWheel={markUserScrolling}
+        onPointerDown={markUserScrolling}
+        onPointerUp={finishUserScrolling}
+        onPointerCancel={finishUserScrolling}
+        onTouchStart={markUserScrolling}
+        onTouchEnd={finishUserScrolling}
+      >
         {/* 固定表头：sticky 于滚动容器内，与数据行同宽，天然对齐；列宽可拖拽调整 */}
         <div className="log-head-wrap">
           <div className="log-head">
@@ -574,7 +668,10 @@ export function LogList({
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
                 className={selected ? "log-row selected" : "log-row"}
-                onClick={() => onSelect(entry.id)}
+                onClick={() => {
+                  updateFollowLatest(false);
+                  onSelect(entry.id);
+                }}
                 onDoubleClick={() => {
                   if (isLong) toggleExpand(entry.id);
                 }}
@@ -724,7 +821,7 @@ export function LogList({
           </button>
         </div>
       )}
-      {stuck && entries.length > 0 && (
+      {!followLatest && entries.length > 0 && (
         <button
           className="back-latest"
           onClick={backToLatest}

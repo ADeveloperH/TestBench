@@ -29,6 +29,9 @@ export interface LogEntry {
   tag: string;
   message: string;
   raw: string;
+  /** 仅供界面堆栈分组判断相邻间隔；列表仍显示首条记录的时间。 */
+  groupEndDate?: string;
+  groupEndTime?: string;
 }
 
 export interface Device {

@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type Dispatch,
@@ -10,9 +9,8 @@ import {
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { error as logError, info } from "@tauri-apps/plugin-log";
-import { parseLogLine, stripAnsi } from "../../core/logcat";
+import { LongLogParser, stripAnsi } from "../../core/logcat";
 import type { Device, FilterState, LogEntry } from "../../core/types";
-import { LEVEL_SEVERITY } from "../../core/types";
 
 // 前端日志统一走 tauri-plugin-log（写入文件与终端），失败时静默忽略。
 const log = {
@@ -54,10 +52,7 @@ export interface UseLogcatResult {
   waiting: boolean;
 }
 
-export function useLogcat(
-  mergeStack = true,
-  initialFilters?: FilterState,
-): UseLogcatResult {
+export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [buffer, setBuffer] = useState("main");
@@ -79,15 +74,16 @@ export function useLogcat(
   const [error, setError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
 
+  /** 未经过展示合并的原始 Logcat 记录。 */
   const bufferRef = useRef<LogEntry[]>([]);
   const pendingRef = useRef<string[]>([]);
+  const parserRef = useRef(new LongLogParser());
   const idRef = useRef(0);
   const pausedRef = useRef(false);
   const runningRef = useRef(false);
   const manualStopRef = useRef(false);
   const selectedDeviceRef = useRef<string | null>(null);
   const bufferForResumeRef = useRef(buffer);
-  const mergeStackRef = useRef(mergeStack);
   const refreshDevicesInFlightRef = useRef(false);
 
   useEffect(() => {
@@ -105,10 +101,6 @@ export function useLogcat(
   useEffect(() => {
     bufferForResumeRef.current = buffer;
   }, [buffer]);
-
-  useEffect(() => {
-    mergeStackRef.current = mergeStack;
-  }, [mergeStack]);
 
   const refreshDevices = useCallback(async (silent = false) => {
     if (refreshDevicesInFlightRef.current) return;
@@ -147,6 +139,7 @@ export function useLogcat(
     setError(null);
     bufferRef.current = [];
     pendingRef.current = [];
+    parserRef.current.reset();
     idRef.current = 0;
     setEntries([]);
     try {
@@ -178,6 +171,7 @@ export function useLogcat(
     log.info("清空日志");
     bufferRef.current = [];
     pendingRef.current = [];
+    parserRef.current.reset();
     idRef.current = 0;
     setEntries([]);
     if (selectedDevice) {
@@ -256,26 +250,10 @@ export function useLogcat(
       if (batch.length === 0) return;
       pendingRef.current = [];
       for (const line of batch) {
-        const clean = stripAnsi(line);
-        const entry = parseLogLine(clean, idRef.current++);
-        if (entry) {
-          const last = bufferRef.current[bufferRef.current.length - 1];
-          if (
-            mergeStackRef.current &&
-            last &&
-            isStackFrame(entry.message) &&
-            sameContext(last, entry)
-          ) {
-            // Unity 等引擎逐行输出的堆栈帧，合并回上一条（带缩进）
-            last.message += "\n  " + entry.message;
-            last.raw += "\n" + clean;
-          } else {
-            bufferRef.current.push(entry);
-          }
-        } else if (bufferRef.current.length > 0) {
-          const last = bufferRef.current[bufferRef.current.length - 1];
-          last.message += "\n" + clean;
-          last.raw += "\n" + clean;
+        const parsed = parserRef.current.pushLine(stripAnsi(line));
+        for (const item of parsed) {
+          const entry: LogEntry = { ...item, id: idRef.current++ };
+          bufferRef.current.push(entry);
         }
       }
       if (bufferRef.current.length > MAX_ENTRIES) {
@@ -319,56 +297,8 @@ export function useLogcat(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buffer]);
 
-  const filtered = useMemo(() => {
-    const minSev = LEVEL_SEVERITY[filters.minLevel];
-    const tags = filters.tags
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    // Tag 过滤语法：普通项 = 包含匹配；`!` 前缀项 = 排除匹配（如 Unity, !Audio）
-    const includeTags = tags.filter((t) => !t.startsWith("!"));
-    const excludeTags = tags
-      .filter((t) => t.startsWith("!"))
-      .map((t) => t.slice(1).trim())
-      .filter(Boolean);
-    const pids = filters.pid
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    let searchRe: RegExp | null = null;
-    if (filters.search) {
-      try {
-        searchRe = filters.regex
-          ? new RegExp(filters.search, "i")
-          : new RegExp(escapeRegExp(filters.search), "i");
-      } catch {
-        searchRe = null;
-      }
-    }
-    return entries.filter((e) => {
-      if (LEVEL_SEVERITY[e.level] < minSev) return false;
-      if (pids.length && !pids.includes(e.pid)) return false;
-      if (
-        includeTags.length &&
-        !includeTags.some((t) => e.tag.toLowerCase().includes(t.toLowerCase()))
-      ) {
-        return false;
-      }
-      if (
-        excludeTags.length &&
-        excludeTags.some((t) => e.tag.toLowerCase().includes(t.toLowerCase()))
-      ) {
-        return false;
-      }
-      if (searchRe && !searchRe.test(e.message) && !searchRe.test(e.tag)) {
-        return false;
-      }
-      return true;
-    });
-  }, [entries, filters]);
-
   const exportLogs = useCallback(async (items?: LogEntry[]) => {
-    const output = items ?? filtered;
+    const output = items ?? entries;
     log.info(`导出日志，共 ${output.length} 条`);
     try {
       const text = output.map((e) => e.raw).join("\n");
@@ -381,7 +311,7 @@ export function useLogcat(
       log.error(`导出失败：${String(e)}`);
       setError(String(e));
     }
-  }, [filtered]);
+  }, [entries]);
 
   return {
     devices,
@@ -397,7 +327,7 @@ export function useLogcat(
     stop,
     clear,
     exportLogs,
-    entries: filtered,
+    entries,
     allEntries: entries,
     filters,
     setFilters,
@@ -405,31 +335,4 @@ export function useLogcat(
     setError,
     waiting,
   };
-}
-
-function escapeRegExp(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * 判断 message 是否为 C# 堆栈帧格式：类名:方法名(参数)
- * 例：Network.HttpClient:Send(HttpRequest, Boolean)
- * 普通日志（如 NetWorkLog:Response Url:...）不匹配，不会被误合并。
- */
-const STACK_FRAME_RE = /^[A-Za-z_][\w.<>`]*:[A-Za-z_][\w<>`]*\(.*\)$/;
-
-function isStackFrame(message: string): boolean {
-  return STACK_FRAME_RE.test(message);
-}
-
-/** 同一条堆栈被逐行拆开的特征：tag/pid/tid/level 与时间戳（精确到毫秒）完全相同。 */
-function sameContext(a: LogEntry, b: LogEntry): boolean {
-  return (
-    a.tag === b.tag &&
-    a.pid === b.pid &&
-    a.tid === b.tid &&
-    a.level === b.level &&
-    a.date === b.date &&
-    a.time === b.time
-  );
 }

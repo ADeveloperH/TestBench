@@ -13,6 +13,7 @@ import { info as logInfo } from "@tauri-apps/plugin-log";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { notify } from "./core/notify";
+import { appendDisplayEntry, filterLogEntries } from "./core/logcat";
 import { useLogcat } from "./features/logcat/useLogcat";
 import { usePrefs } from "./features/settings/usePrefs";
 import { useSavedFilters } from "./features/filters/useSavedFilters";
@@ -52,7 +53,12 @@ import {
 /** 调试模式下允许在日志页取消常用内置项（正式包受保护）。 */
 const NO_PROTECTED_VALUES = new Set<string>();
 import { LEVELS, LEVEL_LABELS } from "./core/types";
-import type { DeviceInfo, LogLevel, ScrollCommand } from "./core/types";
+import type {
+  DeviceInfo,
+  LogEntry,
+  LogLevel,
+  ScrollCommand,
+} from "./core/types";
 import "./App.css";
 
 // 日志详情面板高度：可拖动调整，持久化记住上次高度。
@@ -129,7 +135,7 @@ export default function App() {
     error,
     setError,
     waiting,
-  } = useLogcat(true, logTabs.activeTab.filters); // 合并堆栈固定开启
+  } = useLogcat(logTabs.activeTab.filters);
 
   const [view, setView] = useState<"log" | "manage" | "tools">("log");
   const [showWifi, setShowWifi] = useState(false);
@@ -311,19 +317,29 @@ export default function App() {
     activeTestStartedAtId,
   ]);
 
+  // 先应用当前 Tab 的清空/暂停边界，再做展示合并。这样在用户清空日志或
+  // 启动测试监控的边界上，新的堆栈续行不会被合并进已经隐藏的旧记录。
   const tabEntries = useMemo(() => {
     const source = isTestTab ? testSessionEntries : entries;
-    return source.filter(
-      (entry) =>
-        entry.id > activeTabClearedBeforeId &&
-        (activeTabPausedAtId == null || entry.id <= activeTabPausedAtId),
-    );
+    const display: LogEntry[] = [];
+    for (const entry of source) {
+      if (
+        entry.id <= activeTabClearedBeforeId ||
+        (activeTabPausedAtId != null && entry.id > activeTabPausedAtId)
+      ) {
+        continue;
+      }
+      appendDisplayEntry(display, entry, prefs.prefs.mergeStack);
+    }
+    return isTestTab ? display : filterLogEntries(display, filters);
   }, [
     entries,
     testSessionEntries,
     isTestTab,
     activeTabClearedBeforeId,
     activeTabPausedAtId,
+    prefs.prefs.mergeStack,
+    filters,
   ]);
 
   const tabAllEntries = useMemo(() => {
@@ -811,7 +827,11 @@ export default function App() {
 
   const clearCurrentTab = () => {
     const lastId = allEntries[allEntries.length - 1]?.id ?? -1;
-    logTabs.updateActiveTab({ clearedBeforeId: lastId, selectedLogId: null });
+    logTabs.updateActiveTab({
+      clearedBeforeId: lastId,
+      selectedLogId: null,
+      followLatest: true,
+    });
     setSelectedId(null);
   };
 
@@ -1711,8 +1731,13 @@ export default function App() {
             entries={tabEntries}
             selectedId={selectedId}
             onSelect={handleSelect}
+            onClearSelection={() => setSelectedId(null)}
             scrollCommand={scrollCommand}
             tabId={logTabs.activeTabId}
+            followLatest={logTabs.activeTab.followLatest}
+            onFollowLatestChange={(followLatest) =>
+              logTabs.updateTab(logTabs.activeTabId, { followLatest })
+            }
             findState={logTabs.activeTab.find}
             onFindStateChange={(find) =>
               logTabs.updateTab(logTabs.activeTabId, { find })

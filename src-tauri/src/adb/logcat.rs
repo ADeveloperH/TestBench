@@ -31,13 +31,14 @@ pub struct LogcatProcess {
 }
 
 impl LogcatProcess {
-    /// 启动 `adb [-s <device>] logcat -v threadtime [-b <buffer>]`。
+    /// 启动 `adb [-s <device>] logcat -v long [-b <buffer>]`。
+    /// long 格式会保留底层日志记录的多行边界，避免前端依赖时间戳猜测合并。
     pub fn start(device: Option<&str>, buffer: Option<&str>) -> Result<Self, String> {
         let mut cmd = adb_command();
         if let Some(d) = device {
             cmd.arg("-s").arg(d);
         }
-        cmd.args(["logcat", "-v", "threadtime"]);
+        cmd.args(["logcat", "-v", "long"]);
         if let Some(b) = buffer {
             cmd.arg("-b").arg(b);
         }
