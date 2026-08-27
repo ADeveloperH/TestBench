@@ -19,7 +19,8 @@ use adb::{
     open_backdoor as adb_open_backdoor, pair as adb_pair, resolve_pids as adb_resolve_pids,
     restart_app as adb_restart_app, screencap_png as adb_screencap_png,
     uninstall_app as adb_uninstall_app, App, AppRuntimeStatus, Device, DeviceInfo,
-    LogcatProcess, PairingInfo, ScrcpyRecord,
+    BugreportController, BugreportProgress, BugreportResult, LogcatProcess, PairingInfo,
+    ScrcpyRecord,
 };
 
 /// 全局运行状态：当前 logcat 进程 + 代号（用于识别过期读取线程）。
@@ -36,6 +37,11 @@ struct RecordingSession {
 
 struct RecordingState {
     session: Mutex<Option<RecordingSession>>,
+}
+
+/// 当前 Bugreport 任务；用于防止重复导出，并在退出/更新前停止 adb 子进程。
+struct BugreportState {
+    controller: BugreportController,
 }
 
 #[tauri::command]
@@ -500,6 +506,66 @@ async fn mirror(device: Option<String>, mbps: u32) -> Result<(), String> {
     adb_mirror(device.as_deref(), mbps)
 }
 
+#[tauri::command]
+async fn export_bugreport(
+    app: AppHandle,
+    state: State<'_, BugreportState>,
+    recording_state: State<'_, RecordingState>,
+    device: Option<String>,
+) -> Result<Option<BugreportResult>, String> {
+    log::info!("收到前端命令 export_bugreport：device={:?}", device);
+    if state.controller.is_running() {
+        return Err("已有故障报告正在生成，请稍候".to_string());
+    }
+    if recording_state.session.lock().unwrap().is_some() {
+        return Err("请先停止录屏，再导出故障报告".to_string());
+    }
+
+    let serial = device.as_deref().unwrap_or("device");
+    let safe_serial: String = serial
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let file_name = format!("TestBench-Bugreport-{safe_serial}-{ts}.zip");
+    let Some(mut output_path) =
+        save_file_dialog(&app, &file_name, "Bugreport 压缩包", &["zip"])?
+    else {
+        return Ok(None);
+    };
+    let has_zip_extension = output_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("zip"))
+        .unwrap_or(false);
+    if !has_zip_extension {
+        output_path.set_extension("zip");
+    }
+
+    let controller = state.controller.clone();
+    let app_for_progress = app.clone();
+    let selected_device = device.clone();
+    let result = run_blocking(move || {
+        controller.generate(
+            selected_device.as_deref(),
+            &output_path,
+            move |progress: BugreportProgress| {
+                if let Err(error) = app_for_progress.emit("bugreport-progress", progress) {
+                    log::debug!("发送 Bugreport 进度失败：{error}");
+                }
+            },
+        )
+    })
+    .await?;
+    Ok(Some(result))
+}
+
 /// 更新安装前清理子进程。
 /// Windows 上 App 更新时 updater 会直接 exit 并运行安装器，若不杀掉 adb/scrcpy
 /// 子进程，它们会以孤儿进程继续运行并锁住 AdbWinApi.dll / scrcpy 文件，
@@ -508,6 +574,7 @@ async fn mirror(device: Option<String>, mbps: u32) -> Result<(), String> {
 async fn cleanup_for_update(
     logcat_state: State<'_, RunningLogcat>,
     recording_state: State<'_, RecordingState>,
+    bugreport_state: State<'_, BugreportState>,
 ) -> Result<(), String> {
     log::info!("收到前端命令 cleanup_for_update：停止子进程以准备更新");
 
@@ -522,7 +589,10 @@ async fn cleanup_for_update(
         session.child.stop();
     }
 
-    // 3. Windows：兜底杀掉可能残留的 adb.exe / scrcpy.exe 孤儿进程
+    // 3. 停止 Bugreport（adb）
+    bugreport_state.controller.stop();
+
+    // 4. Windows：兜底杀掉可能残留的 adb.exe / scrcpy.exe 孤儿进程
     #[cfg(target_os = "windows")]
     {
         for exe in ["adb.exe", "scrcpy.exe"] {
@@ -746,10 +816,18 @@ fn quit_app(app: &tauri::AppHandle) {
         is_recording
     };
 
-    if recording {
+    let bugreport_running = app.state::<BugreportState>().controller.is_running();
+
+    if recording || bugreport_running {
+        let message = match (recording, bugreport_running) {
+            (true, true) => "正在录屏并生成故障报告，确定退出？退出会停止这些任务。",
+            (true, false) => "正在录屏，确定退出？退出会停止录屏。",
+            (false, true) => "正在生成故障报告，确定退出？退出会停止导出。",
+            (false, false) => unreachable!(),
+        };
         let app_for_quit = app.clone();
         app.dialog()
-            .message("正在录屏，确定退出？退出会停止录屏。")
+            .message(message)
             .title("确认退出")
             .kind(tauri_plugin_dialog::MessageDialogKind::Warning)
             .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancel)
@@ -775,6 +853,7 @@ fn stop_all_and_exit(app: &tauri::AppHandle) {
     if let Some(mut proc) = logcat.child.lock().unwrap().take() {
         proc.stop();
     }
+    app.state::<BugreportState>().controller.stop();
     app.exit(0);
 }
 
@@ -842,6 +921,9 @@ pub fn run() {
         .manage(RecordingState {
             session: Mutex::new(None),
         })
+        .manage(BugreportState {
+            controller: BugreportController::default(),
+        })
         .setup(|app| {
             let resource_dir = app.path().resource_dir().ok();
             adb::init_binary_paths(resource_dir);
@@ -877,6 +959,7 @@ pub fn run() {
             start_recording,
             stop_recording,
             mirror,
+            export_bugreport,
             cleanup_for_update,
             app_alarm,
             app_performance,

@@ -9,9 +9,11 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { info as logInfo } from "@tauri-apps/plugin-log";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { message } from "@tauri-apps/plugin-dialog";
 import { notify } from "./core/notify";
 import { appendDisplayEntry, filterLogEntries } from "./core/logcat";
 import { useLogcat } from "./features/logcat/useLogcat";
@@ -30,7 +32,11 @@ import { LogTabs } from "./features/logcat/LogTabs";
 import { useLogTabs } from "./features/logcat/useLogTabs";
 import { ManagePage, type ManageTab } from "./features/settings/ManagePage";
 import { TestCaseSidebar } from "./features/testcases/TestCaseSidebar";
-import { ToolsPage } from "./features/tools/ToolsPage";
+import {
+  ToolsPage,
+  type BugreportProgress,
+  type BugreportResult,
+} from "./features/tools/ToolsPage";
 import { WifiPanel } from "./features/devices/WifiPanel";
 import { DEFAULT_BACKDOOR } from "./core/apps";
 import type { AppInfo } from "./core/apps";
@@ -138,6 +144,8 @@ export default function App() {
   } = useLogcat(logTabs.activeTab.filters);
 
   const [view, setView] = useState<"log" | "manage" | "tools">("log");
+  const [bugreportProgress, setBugreportProgress] = useState<BugreportProgress | null>(null);
+  const [bugreportStatus, setBugreportStatus] = useState("");
   const [showWifi, setShowWifi] = useState(false);
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [selectedPackage, setSelectedPackage] = useState(
@@ -156,6 +164,23 @@ export default function App() {
   const [testTabName, setTestTabName] = useState("");
   const [manageTab, setManageTab] = useState<ManageTab>("apps");
   const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // Bugreport 属于设备级后台任务，状态必须跨页面保留；否则返回日志页后
+  // 再进入工具页会丢失进度，看起来像任务已经停止。
+  useEffect(() => {
+    let disposed = false;
+    let stopListening: (() => void) | undefined;
+    listen<BugreportProgress>("bugreport-progress", (event) => {
+      setBugreportProgress(event.payload);
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else stopListening = unlisten;
+    });
+    return () => {
+      disposed = true;
+      stopListening?.();
+    };
+  }, []);
 
   // 「更多」菜单：点击外部或按 Esc 关闭（与 Select/HistoryInput 行为一致）。
   useEffect(() => {
@@ -683,6 +708,45 @@ export default function App() {
 
   const handleCurrentActivity = async () => {
     return await invoke<string>("current_activity", { device: selectedDevice });
+  };
+
+  const handleExportBugreport = async () => {
+    setBugreportStatus("");
+    setBugreportProgress({
+      stage: "generating",
+      percent: null,
+      message: "设备正在生成故障报告，可能需要几分钟…",
+    });
+    try {
+      const result = await invoke<BugreportResult | null>("export_bugreport", {
+        device: selectedDevice,
+      });
+      if (!result) {
+        setBugreportStatus("已取消导出故障报告");
+        setBugreportProgress(null);
+        return;
+      }
+      const size = (result.sizeBytes / 1024 / 1024).toFixed(1);
+      const summary = result.summaryPath
+        ? `\n快速摘要：${result.summaryPath}\n识别到 ANR ${result.anrMatches} 条、Java Crash ${result.javaCrashMatches} 条、Native Crash ${result.nativeCrashMatches} 条线索。`
+        : "";
+      const warning = result.warning ? `\n提示：${result.warning}` : "";
+      setBugreportStatus(
+        `故障报告已保存（${size} MB）：${result.reportPath}${summary}${warning}`,
+      );
+      const summaryNotice = result.summaryPath
+        ? `\n\n快速摘要：${result.summaryPath}\nANR ${result.anrMatches} 条，Java Crash ${result.javaCrashMatches} 条，Native Crash ${result.nativeCrashMatches} 条线索。`
+        : "";
+      void message(
+        `故障报告已导出完成。\n\n完整报告：${result.reportPath}${summaryNotice}${warning}`,
+        { title: "故障报告导出完成", kind: "info" },
+      ).catch((error) => {
+        logInfo(`显示故障报告完成提醒失败：${String(error)}`).catch(() => {});
+      });
+    } catch (error) {
+      setBugreportProgress(null);
+      setBugreportStatus("失败：" + String(error));
+    }
   };
 
   const handleStartRecording = async (mbps: number) => {
@@ -1229,6 +1293,9 @@ export default function App() {
           onInstallApk={handleInstallApk}
           onDeviceInfo={handleDeviceInfo}
           onCurrentActivity={handleCurrentActivity}
+          bugreportProgress={bugreportProgress}
+          bugreportStatus={bugreportStatus}
+          onExportBugreport={handleExportBugreport}
           onStartRecording={handleStartRecording}
           onStopRecording={handleStopRecording}
           onMirror={handleMirror}

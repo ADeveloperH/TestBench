@@ -7,6 +7,22 @@ import { Select } from "../../components/Select";
 /** 应用运行状态（与日志页一致）：running 运行中 / installed 已安装未运行 / missing 未安装 / unknown 未知。 */
 export type AppRunState = "running" | "installed" | "missing" | "unknown";
 
+export interface BugreportProgress {
+  stage: "generating" | "pulling" | "analyzing" | "complete";
+  percent: number | null;
+  message: string;
+}
+
+export interface BugreportResult {
+  reportPath: string;
+  summaryPath: string | null;
+  sizeBytes: number;
+  anrMatches: number;
+  javaCrashMatches: number;
+  nativeCrashMatches: number;
+  warning: string | null;
+}
+
 interface Props {
   apps: AppInfo[];
   hasDevice: boolean;
@@ -22,6 +38,9 @@ interface Props {
   onInstallApk: () => Promise<string>;
   onDeviceInfo: () => Promise<DeviceInfo>;
   onCurrentActivity: () => Promise<string>;
+  bugreportProgress: BugreportProgress | null;
+  bugreportStatus: string;
+  onExportBugreport: () => Promise<void>;
   onStartRecording: (mbps: number) => Promise<string | null>;
   onStopRecording: () => Promise<string>;
   onMirror: (mbps: number) => Promise<string>;
@@ -39,7 +58,7 @@ export function ToolsPage(props: Props) {
   const [output, setOutput] = useState<Output | null>(null);
   const [recording, setRecording] = useState(false);
   const [bitrate, setBitrate] = useState("8");
-  const [tab, setTab] = useState<"app" | "device">("app");
+  const [tab, setTab] = useState<"app" | "device">("device");
 
   const appReady = props.hasDevice && !!pkg;
 
@@ -144,6 +163,23 @@ export function ToolsPage(props: Props) {
     }
   };
 
+  const doBugreport = async () => {
+    const ok = await ask(
+      "生成故障报告可能需要几分钟，报告中可能包含设备、应用和系统日志等敏感信息。是否继续？",
+      { title: "导出故障报告", kind: "warning" },
+    );
+    if (!ok) return;
+
+    setBusy(true);
+    try {
+      await props.onExportBugreport();
+    } catch (e) {
+      setStatus("失败：" + String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const switchTab = (t: "app" | "device") => {
     setTab(t);
     // 切换 tab 时清空上个 tab 的结果展示，避免串台
@@ -174,13 +210,13 @@ export function ToolsPage(props: Props) {
         <aside className="manage-nav tools-nav" aria-label="工具分类">
           <div className="manage-nav-group">
             <span className="manage-nav-label">工具</span>
+            <button className={tab === "device" ? "active" : ""} onClick={() => switchTab("device")}>
+              <span>设备工具</span>
+              <small>文件、诊断与屏幕</small>
+            </button>
             <button className={tab === "app" ? "active" : ""} onClick={() => switchTab("app")}>
               <span>应用工具</span>
               <small>运行、诊断与数据</small>
-            </button>
-            <button className={tab === "device" ? "active" : ""} onClick={() => switchTab("device")}>
-              <span>设备工具</span>
-              <small>文件、信息与屏幕</small>
             </button>
           </div>
         </aside>
@@ -273,7 +309,48 @@ export function ToolsPage(props: Props) {
                     <button disabled={!props.hasDevice || busy} onClick={() => runOutput(props.onCurrentActivity, "当前 Activity")}>当前 Activity</button>
                   </div>
                 </article>
-                <article className="tool-card tool-card-wide">
+                <article className="tool-card">
+                  <div>
+                    <h3>故障报告</h3>
+                    <p>调用 Android Bugreport 导出完整系统报告，并同步生成便于定位的 ANR / Crash 摘要。</p>
+                  </div>
+                  {props.bugreportProgress && (
+                    <div className="bugreport-progress" aria-live="polite">
+                      <div className="bugreport-progress-head">
+                        <span>{props.bugreportProgress.message}</span>
+                        {props.bugreportProgress.percent !== null && <strong>{props.bugreportProgress.percent}%</strong>}
+                      </div>
+                      <div className="bugreport-progress-track">
+                        <div
+                          className={`bugreport-progress-fill ${
+                            props.bugreportProgress.percent === null ? "indeterminate" : ""
+                          }`}
+                          style={
+                            props.bugreportProgress.percent === null
+                              ? undefined
+                              : { width: `${props.bugreportProgress.percent}%` }
+                          }
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="tool-card-actions">
+                    <button
+                      disabled={
+                        !props.hasDevice ||
+                        busy ||
+                        recording ||
+                        (!!props.bugreportProgress && props.bugreportProgress.stage !== "complete")
+                      }
+                      onClick={doBugreport}
+                    >
+                      {props.bugreportProgress && props.bugreportProgress.stage !== "complete"
+                        ? "正在导出…"
+                        : "导出故障报告"}
+                    </button>
+                  </div>
+                </article>
+                <article className="tool-card">
                   <div><h3>屏幕工具</h3><p>投屏与录屏共用码率设置，范围为 1–100 Mbps。</p></div>
                   <div className="tool-card-actions screen-tool-actions">
                     <label htmlFor="screen-bitrate">码率</label>
@@ -295,6 +372,9 @@ export function ToolsPage(props: Props) {
           )}
 
           {status && <div className="tools-status">{status}</div>}
+          {tab === "device" && props.bugreportStatus && (
+            <div className="tools-status">{props.bugreportStatus}</div>
+          )}
 
           {output && (
             <section className="output-panel">

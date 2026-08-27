@@ -1,6 +1,7 @@
 //! ADB / scrcpy 操作封装：二进制路径初始化、共享 helper 与子模块重导出。
 
 mod apps;
+mod bugreport;
 mod devices;
 mod info;
 mod install;
@@ -157,6 +158,7 @@ pub use apps::{
     clear_app_data, fetch_remote_apps, list_app_runtime_status, open_backdoor, resolve_pids,
     restart_app, uninstall_app, App, AppRuntimeStatus,
 };
+pub use bugreport::{BugreportController, BugreportProgress, BugreportResult};
 pub use devices::{
     connect, disconnect, generate_pairing, list_devices, mdns_connect_address,
     mdns_pairing_address, pair, Device, PairingInfo,
