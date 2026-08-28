@@ -189,8 +189,8 @@ export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
     let disposed = false;
     const cleanups: UnlistenFn[] = [];
 
-    listen<string>("logcat-line", (e) => {
-      pendingRef.current.push(e.payload);
+    listen<string[]>("logcat-lines", (e) => {
+      pendingRef.current.push(...e.payload);
       setWaiting(false);
     }).then((fn) => {
       if (disposed) fn();

@@ -57,9 +57,10 @@ where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(task)
-        .await
-        .map_err(|e| format!("后台任务执行失败：{e}"))?
+    log::debug!("[Blocking] 准备提交 spawn_blocking 任务");
+    let result = tauri::async_runtime::spawn_blocking(task).await;
+    log::debug!("[Blocking] spawn_blocking 任务已返回：is_ok={}", result.is_ok());
+    result.map_err(|e| format!("后台任务执行失败：{e}"))?
 }
 
 #[tauri::command]
@@ -86,13 +87,17 @@ fn start_logcat(
     let stderr = proc.take_stderr();
     *state.child.lock().unwrap() = Some(proc);
 
-    // stdout 读取线程：逐行读取并推给前端。
+    // stdout 读取线程：逐行读取，批量推给前端。
+    // 高频日志（如游戏一秒上万行）若逐行 emit 会淹没 Tauri 事件通道，
+    // 把其他 invoke（更新检查/导出/轮询）卡死；这里按 200 行或 50ms 批量推送。
     let app_for_thread = app.clone();
     let generation_ref = state.generation.clone();
     std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
         let mut buf: Vec<u8> = Vec::new();
         let mut count: u64 = 0;
+        let mut batch: Vec<String> = Vec::with_capacity(200);
+        let mut last_flush = std::time::Instant::now();
         loop {
             if generation_ref.load(Ordering::SeqCst) != generation {
                 break;
@@ -113,10 +118,19 @@ fn start_logcat(
                         continue;
                     }
                     count += 1;
-                    let _ = app_for_thread.emit("logcat-line", text);
+                    batch.push(text);
+                    if batch.len() >= 200
+                        || last_flush.elapsed() >= std::time::Duration::from_millis(50)
+                    {
+                        let _ = app_for_thread.emit("logcat-lines", std::mem::take(&mut batch));
+                        last_flush = std::time::Instant::now();
+                    }
                 }
                 Err(_) => break,
             }
+        }
+        if !batch.is_empty() {
+            let _ = app_for_thread.emit("logcat-lines", std::mem::take(&mut batch));
         }
         log::debug!("logcat 读取线程结束，共读取 {count} 行，generation={generation}");
         if generation_ref.load(Ordering::SeqCst) == generation {
