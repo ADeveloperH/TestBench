@@ -21,6 +21,20 @@ export interface AppUpdateInfo {
   update: Update;
 }
 
+/** 检查更新的硬超时：即便原生请求挂死在 DNS/TLS 层，也能强制结束并报错。 */
+const CHECK_HARD_TIMEOUT_MS = 40_000;
+
+/** 给 Promise 加一个硬超时，超时后 reject。 */
+function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+  let timer: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(msg)), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => {
+    if (timer) window.clearTimeout(timer);
+  }) as Promise<T>;
+}
+
 /**
  * 启动自动检查和用户手动检查共用同一个原生请求。
  * Windows 上同时发起多个 updater check 时可能互相等待，因此在模块层做 single-flight。
@@ -37,7 +51,11 @@ export function checkForUpdate(): Promise<AppUpdateInfo | null> {
   const request = (async (): Promise<AppUpdateInfo | null> => {
     try {
       info("[Updater] checking update");
-      const update = await check({ timeout: 30_000 });
+      const update = await withTimeout(
+        check({ timeout: 30_000 }),
+        CHECK_HARD_TIMEOUT_MS,
+        "检查更新超时",
+      );
       if (!update) {
         info("[Updater] no update available");
         return null;

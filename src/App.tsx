@@ -1160,6 +1160,9 @@ export default function App() {
                 <>
                   <h3>正在检查更新…</h3>
                   <p className="count">正在连接更新服务器</p>
+                  <div className="save-description-actions">
+                    <button onClick={closeUpdateDialog}>取消</button>
+                  </div>
                 </>
               )}
 
