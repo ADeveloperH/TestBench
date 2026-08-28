@@ -285,6 +285,9 @@ export default function App() {
     setUpdateStatus("downloading");
     setUpdateProgress({ downloaded: 0, percent: 0 });
     try {
+      // 先手动停止 logcat：置 manualStopRef，避免 cleanup_for_update 杀掉 adb 后
+      // 又被 useLogcat 的「非手动停止自动重连」逻辑把 adb 拉起来锁住 AdbWinApi.dll。
+      await stop();
       await installUpdate(updateInfo.update, (p) => setUpdateProgress(p));
       setUpdateStatus("installing");
       // relaunch 成功后进程会退出，这里的状态不会再被用户看到
