@@ -69,6 +69,11 @@ export function checkForUpdate(): Promise<AppUpdateInfo | null> {
 /**
  * 下载并安装更新，完成后自动 relaunch。
  * 下载进度通过 onProgress 回调（percent 0~100，total 未知时为 undefined）。
+ *
+ * 拆成 download → cleanup → install 三步：
+ *  - download 阶段 App 后台轮询仍会拉起短生命周期 adb，没关系；
+ *  - 下载完成后立刻清理 adb/scrcpy 子进程，再立刻 install，把「清理后到
+ *    安装器写文件」的窗口缩到最短，避免 Windows 上 adb 锁住 AdbWinApi.dll。
  */
 export async function installUpdate(
   update: Update,
@@ -79,14 +84,7 @@ export async function installUpdate(
 
   info("[Updater] download started");
   try {
-    // 安装前先清理 adb/scrcpy 子进程，避免 Windows 上孤儿进程锁住
-    // AdbWinApi.dll 等文件导致安装器「Error opening file for writing」。
-    try {
-      await invoke("cleanup_for_update");
-    } catch (e) {
-      info(`[Updater] cleanup_for_update failed (non-fatal): ${String(e)}`);
-    }
-    await update.downloadAndInstall((event) => {
+    await update.download((event) => {
       switch (event.event) {
         case "Started":
           total = event.data.contentLength ?? undefined;
@@ -109,9 +107,26 @@ export async function installUpdate(
       }
     });
   } catch (e) {
-    error(`[Updater] download/install failed: ${String(e)}`);
+    error(`[Updater] download failed: ${String(e)}`);
     throw e;
   }
+
+  // 下载完成后、安装前清理子进程，避免 Windows 上 adb 锁文件。
+  info("[Updater] cleaning up child processes before install");
+  try {
+    await invoke("cleanup_for_update");
+  } catch (e) {
+    info(`[Updater] cleanup_for_update failed (non-fatal): ${String(e)}`);
+  }
+
+  info("[Updater] installing");
+  try {
+    await update.install();
+  } catch (e) {
+    error(`[Updater] install failed: ${String(e)}`);
+    throw e;
+  }
+
   info("[Updater] installed, relaunching");
   await relaunch();
 }
