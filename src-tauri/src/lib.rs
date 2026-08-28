@@ -736,12 +736,17 @@ fn save_file_dialog(
     extensions: &[&str],
 ) -> Result<Option<std::path::PathBuf>, String> {
     use tauri_plugin_dialog::DialogExt;
+    log::info!("[Dialog] 打开保存文件对话框前：file_name={file_name} filter={filter_name}");
     let picked = app
         .dialog()
         .file()
         .set_file_name(file_name)
         .add_filter(filter_name, extensions)
         .blocking_save_file();
+    log::info!(
+        "[Dialog] 保存文件对话框已返回：cancelled={}",
+        picked.is_none()
+    );
     match picked {
         Some(path) => Ok(Some(path.into_path().map_err(|e| e.to_string())?)),
         None => Ok(None),
@@ -755,11 +760,16 @@ fn pick_file_dialog(
     extensions: &[&str],
 ) -> Result<Option<std::path::PathBuf>, String> {
     use tauri_plugin_dialog::DialogExt;
+    log::info!("[Dialog] 打开文件对话框前：filter={filter_name}");
     let picked = app
         .dialog()
         .file()
         .add_filter(filter_name, extensions)
         .blocking_pick_file();
+    log::info!(
+        "[Dialog] 文件对话框已返回：cancelled={}",
+        picked.is_none()
+    );
     match picked {
         Some(path) => Ok(Some(path.into_path().map_err(|e| e.to_string())?)),
         None => Ok(None),

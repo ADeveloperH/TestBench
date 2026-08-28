@@ -243,7 +243,11 @@ export default function App() {
   };
 
   const runUpdateCheck = async (silent: boolean) => {
-    if (updateStatus === "checking") return;
+    if (updateStatus === "checking") {
+      logInfo("[Updater] 已有检查在进行中，忽略本次").catch(() => {});
+      return;
+    }
+    logInfo(`[Updater] 开始检查（${silent ? "自动" : "手动"}）`).catch(() => {});
     if (silent) {
       // 后台自动检查：失败只记日志，不打扰用户
       try {
@@ -1090,6 +1094,7 @@ export default function App() {
     : null;
 
   const handleExportConfig = async () => {
+    logInfo("[Export] export_config 调用前").catch(() => {});
     try {
       const config = buildExportConfig(
         prefs.prefs,
@@ -1098,15 +1103,19 @@ export default function App() {
       );
       const json = JSON.stringify(config, null, 2);
       const path = await invoke<string | null>("export_config", { text: json });
+      logInfo(`[Export] export_config 返回：${path ?? "已取消"}`).catch(() => {});
       return path ? `配置已导出：${path}` : "已取消导出";
     } catch (e) {
+      logInfo(`[Export] export_config 失败：${String(e)}`).catch(() => {});
       return `导出失败：${String(e)}`;
     }
   };
 
   const handleImportConfig = async () => {
+    logInfo("[Import] import_config 调用前").catch(() => {});
     try {
       const json = await invoke<string | null>("import_config");
+      logInfo(`[Import] import_config 返回：${json == null ? "已取消" : "已选择文件"}`).catch(() => {});
       if (!json) return "已取消导入";
       const imported = parseImportConfig(json);
       const local = buildExportConfig(
@@ -1125,10 +1134,13 @@ export default function App() {
   };
 
   const handleExportDebugLog = async () => {
+    logInfo("[Export] export_debug_log 调用前").catch(() => {});
     try {
       const path = await invoke<string | null>("export_debug_log");
+      logInfo(`[Export] export_debug_log 返回：${path ?? "已取消"}`).catch(() => {});
       return path ? `调试日志已导出：${path}` : "已取消导出";
     } catch (e) {
+      logInfo(`[Export] export_debug_log 失败：${String(e)}`).catch(() => {});
       return `导出失败：${String(e)}`;
     }
   };
