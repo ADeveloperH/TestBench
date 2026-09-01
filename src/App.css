@@ -694,6 +694,24 @@ body.light .select-option:hover {
   color: var(--accent);
 }
 
+.select-menu-multiple .select-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.select-menu-multiple .select-option.selected .select-check {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 /* 菜单顶部搜索框（searchable 模式） */
 .select-search {
   position: sticky;
@@ -779,8 +797,20 @@ body.light .select-option:hover {
 }
 
 .select-wrap.filter-app-select .select-trigger {
-  min-width: 150px;
-  max-width: 240px;
+  width: 280px;
+  min-width: 220px;
+  max-width: 360px;
+}
+
+.filter-app-multi-menu .select-option {
+  min-height: 34px;
+  padding: 7px 12px;
+}
+
+.filter-app-multi-menu .select-search {
+  height: 32px;
+  margin: 2px 8px 6px;
+  width: calc(100% - 16px);
 }
 
 .select-wrap.tc-group-select .select-trigger {
@@ -3380,6 +3410,61 @@ body.light .tools-page {
   line-height: 1.5;
 }
 
+.settings-page .manage-add.manage-favorite-add {
+  grid-template-columns: minmax(180px, 0.7fr) minmax(260px, 1fr) auto;
+}
+
+.settings-page .manage-favorite-item {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(260px, 1.5fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-page .manage-favorite-value,
+.settings-page .manage-favorite-description,
+.settings-page .manage-favorite-actions {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.settings-page .manage-favorite-value {
+  gap: 8px;
+}
+
+.settings-page .manage-item.manage-favorite-item .manage-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+}
+
+.settings-page .manage-favorite-description {
+  gap: 6px;
+}
+
+.settings-page .manage-favorite-description .manage-desc {
+  min-width: 0;
+}
+
+.settings-page .manage-favorite-description .manage-desc.empty {
+  color: var(--text-dim);
+  opacity: 0.65;
+}
+
+.settings-page .manage-favorite-item .manage-desc-input {
+  min-width: 0;
+  width: 100%;
+}
+
+.settings-page .manage-favorite-actions {
+  gap: 2px;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
 .settings-page .manage-app-item {
   display: grid;
   grid-template-columns:
@@ -3680,5 +3765,15 @@ body.light button.danger:hover:not(:disabled) {
   .settings-page .manage-add,
   .tool-context-card {
     grid-template-columns: 1fr;
+  }
+
+  .settings-page .manage-add.manage-favorite-add,
+  .settings-page .manage-favorite-item {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-page .manage-favorite-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }

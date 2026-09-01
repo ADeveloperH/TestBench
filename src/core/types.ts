@@ -7,7 +7,7 @@ export interface FilterState {
   regex: boolean;
   tags: string;
   pid: string;
-  /** 应用包名（保存过滤器时记录，应用时重新解析 PID） */
+  /** 应用包名；多选时以逗号分隔（保存过滤器时记录，应用时重新解析 PID） */
   app?: string;
 }
 

@@ -734,7 +734,7 @@ function ListSection(p: ListSectionProps) {
   return (
     <section className="manage-section">
       <h2>常用{p.title}</h2>
-      <div className="manage-add">
+      <div className="manage-add manage-favorite-add">
         <input
           placeholder={`常用${p.title}内容`}
           value={p.favValue}
@@ -764,11 +764,13 @@ function ListSection(p: ListSectionProps) {
           const builtin = p.builtinValues.has(f.value);
           const locked = builtin && !IS_DEBUG;
           return (
-            <li key={f.value} className="manage-item">
-              <span className="manage-name" title={f.description || f.value}>
-                {f.value}
-              </span>
-              {builtin && <span className="manage-badge">内置</span>}
+            <li key={f.value} className="manage-item manage-favorite-item">
+              <div className="manage-favorite-value">
+                <span className="manage-name" title={f.value}>
+                  {f.value}
+                </span>
+                {builtin && <span className="manage-badge">内置</span>}
+              </div>
               {editing ? (
                 <input
                   className="manage-desc-input"
@@ -783,12 +785,13 @@ function ListSection(p: ListSectionProps) {
                   }}
                 />
               ) : (
-                <>
-                  {f.description && (
-                    <span className="manage-desc" title={f.description}>
-                      {f.description}
-                    </span>
-                  )}
+                <div className="manage-favorite-description">
+                  <span
+                    className={`manage-desc${f.description ? "" : " empty"}`}
+                    title={f.description || "暂无描述"}
+                  >
+                    {f.description || "暂无描述"}
+                  </span>
                   <button
                     className="manage-move"
                     disabled={locked}
@@ -797,48 +800,50 @@ function ListSection(p: ListSectionProps) {
                   >
                     ✎
                   </button>
-                </>
+                </div>
               )}
-              <button
-                className="manage-move"
-                disabled={i === 0 || locked}
-                title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "置顶"}
-                onClick={() => p.onMoveFavorite(i, 0)}
-              >
-                ⏫
-              </button>
-              <button
-                className="manage-move"
-                disabled={i === 0 || locked}
-                title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "上移"}
-                onClick={() => p.onMoveFavorite(i, i - 1)}
-              >
-                ↑
-              </button>
-              <button
-                className="manage-move"
-                disabled={i === last || locked}
-                title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "下移"}
-                onClick={() => p.onMoveFavorite(i, i + 1)}
-              >
-                ↓
-              </button>
-              <button
-                className="manage-move"
-                disabled={i === last || locked}
-                title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "置底"}
-                onClick={() => p.onMoveFavorite(i, last)}
-              >
-                ⏬
-              </button>
-              <button
-                className="manage-del"
-                disabled={locked}
-                title={locked ? "内置常用不可删除" : builtin ? "调试模式：内置常用可删除" : "删除"}
-                onClick={() => p.onRemoveFavorite(f.value)}
-              >
-                删除
-              </button>
+              <div className="manage-favorite-actions">
+                <button
+                  className="manage-move"
+                  disabled={i === 0 || locked}
+                  title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "置顶"}
+                  onClick={() => p.onMoveFavorite(i, 0)}
+                >
+                  ⏫
+                </button>
+                <button
+                  className="manage-move"
+                  disabled={i === 0 || locked}
+                  title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "上移"}
+                  onClick={() => p.onMoveFavorite(i, i - 1)}
+                >
+                  ↑
+                </button>
+                <button
+                  className="manage-move"
+                  disabled={i === last || locked}
+                  title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "下移"}
+                  onClick={() => p.onMoveFavorite(i, i + 1)}
+                >
+                  ↓
+                </button>
+                <button
+                  className="manage-move"
+                  disabled={i === last || locked}
+                  title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "置底"}
+                  onClick={() => p.onMoveFavorite(i, last)}
+                >
+                  ⏬
+                </button>
+                <button
+                  className="manage-del"
+                  disabled={locked}
+                  title={locked ? "内置常用不可删除" : builtin ? "调试模式：内置常用可删除" : "删除"}
+                  onClick={() => p.onRemoveFavorite(f.value)}
+                >
+                  删除
+                </button>
+              </div>
             </li>
           );
         })}

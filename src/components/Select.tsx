@@ -20,6 +20,13 @@ interface Props {
   searchPlaceholder?: string;
   /** 菜单通过 Portal 渲染到 body 时附加的样式类，用于弹框等独立层级。 */
   menuClassName?: string;
+  /** 多选模式下 value/onChange 使用逗号分隔的选项值，点击选项后菜单保持展开。 */
+  multiple?: boolean;
+  /** 自定义触发按钮展示内容，不影响实际选中值。 */
+  triggerLabel?: ReactNode;
+  /** 自定义浮层宽度和最大高度。 */
+  menuWidth?: number;
+  menuMaxHeight?: number;
 }
 
 /** 选项的纯文本表示（搜索匹配用）。 */
@@ -49,6 +56,10 @@ export function Select({
   searchable = false,
   searchPlaceholder = "搜索…",
   menuClassName,
+  multiple = false,
+  triggerLabel,
+  menuWidth,
+  menuMaxHeight = 320,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -88,14 +99,20 @@ export function Select({
       const rect = rootRef.current?.getBoundingClientRect();
       if (!rect) return;
 
+      const preferredWidth = menuWidth ?? (searchable ? 560 : 400);
+      const minimumWidth = menuWidth ?? (searchable ? 420 : rect.width);
       const width = Math.min(
-        searchable ? 560 : 400,
-        Math.max(rect.width, searchable ? 420 : rect.width),
+        window.innerWidth - 16,
+        preferredWidth,
+        Math.max(rect.width, minimumWidth),
       );
       const spaceBelow = window.innerHeight - rect.bottom - 8;
       const spaceAbove = rect.top - 8;
       const openAbove = spaceBelow < 180 && spaceAbove > spaceBelow;
-      const maxHeight = Math.min(320, Math.max(120, openAbove ? spaceAbove - 4 : spaceBelow));
+      const maxHeight = Math.min(
+        menuMaxHeight,
+        Math.max(120, openAbove ? spaceAbove - 4 : spaceBelow),
+      );
       const top = openAbove
         ? Math.max(8, rect.top - maxHeight - 4)
         : rect.bottom + 4;
@@ -114,19 +131,54 @@ export function Select({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open, searchable]);
+  }, [menuMaxHeight, menuWidth, open, searchable]);
 
   const current = options.find((o) => o.value === value);
+  const selectedValues = new Set(
+    multiple
+      ? value
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : [value],
+  );
+  const selectableValues = options
+    .map((option) => option.value)
+    .filter(Boolean);
+  const allSelected =
+    multiple &&
+    selectableValues.length > 0 &&
+    selectableValues.every((optionValue) => selectedValues.has(optionValue));
 
   const needle = filter.trim().toLowerCase();
   const visible = needle
     ? options.filter((o) => textOf(o).toLowerCase().includes(needle))
     : options;
 
+  const selectOption = (option: SelectOption) => {
+    if (!multiple) {
+      onChange(option.value);
+      setOpen(false);
+      return;
+    }
+
+    if (!option.value) {
+      onChange(allSelected ? "" : selectableValues.join(","));
+      return;
+    }
+
+    const next = new Set(selectedValues);
+    if (next.has(option.value)) next.delete(option.value);
+    else next.add(option.value);
+    onChange(
+      selectableValues.filter((optionValue) => next.has(optionValue)).join(","),
+    );
+  };
+
   const menu = open && (
     <div
       ref={menuRef}
-      className={`select-menu select-menu-floating${menuClassName ? ` ${menuClassName}` : ""}`}
+      className={`select-menu select-menu-floating${multiple ? " select-menu-multiple" : ""}${menuClassName ? ` ${menuClassName}` : ""}`}
       style={
         menuPosition
           ? {
@@ -148,10 +200,8 @@ export function Select({
           onChange={(e) => setFilter(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && visible.length > 0) {
-              // 回车选择第一个匹配项
               e.preventDefault();
-              onChange(visible[0].value);
-              setOpen(false);
+              selectOption(visible[0]);
             }
           }}
         />
@@ -160,7 +210,11 @@ export function Select({
         <div className="select-no-match">无匹配项</div>
       )}
       {visible.map((o) => {
-        const selected = o.value === value;
+        const selected = multiple
+          ? o.value
+            ? selectedValues.has(o.value)
+            : allSelected
+          : o.value === value;
         return (
           <button
             key={o.value}
@@ -170,10 +224,8 @@ export function Select({
               o.fullLabel ??
               (typeof o.label === "string" ? o.label : undefined)
             }
-            onClick={() => {
-              onChange(o.value);
-              setOpen(false);
-            }}
+            aria-pressed={selected}
+            onClick={() => selectOption(o)}
           >
             <span className="select-check">{selected ? "✓" : ""}</span>
             <span className="select-option-label">{o.label}</span>
@@ -195,7 +247,7 @@ export function Select({
         onClick={() => setOpen((v) => !v)}
       >
         <span className="select-label">
-          {current ? current.label : value || "—"}
+          {triggerLabel ?? (current ? current.label : value || "—")}
         </span>
         <span className="select-arrow" aria-hidden="true" />
       </button>

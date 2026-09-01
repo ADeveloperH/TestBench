@@ -74,6 +74,23 @@ const DETAIL_MAX_HEIGHT = 600;
 /** 普通日志 Tab 选择了未运行应用时，用一个不可能命中的 PID 保持空结果。 */
 const NO_RUNNING_APP_PID = "__testbench_no_running_app__";
 
+function parseAppPackages(value?: string): string[] {
+  return [
+    ...new Set(
+      (value ?? "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function appNotRunningMessage(packages: string[]): string {
+  const target =
+    packages.length === 1 ? packages[0] : `所选 ${packages.length} 个应用`;
+  return `应用「${target}」当前未运行`;
+}
+
 function loadDetailHeight(): number {
   try {
     const v = Number(localStorage.getItem(DETAIL_HEIGHT_KEY));
@@ -536,11 +553,13 @@ export default function App() {
   };
 
   const applyAppFilter = async (
-    pkg: string,
+    appValue: string,
     targetTab = logTabs.activeTab,
   ) => {
     const targetIsActive = () => activeTabIdRef.current === targetTab.id;
-    if (!pkg) {
+    const packages = parseAppPackages(appValue);
+    const normalizedValue = packages.join(",");
+    if (packages.length === 0) {
       logTabs.updateTab(targetTab.id, {
         filters: { ...targetTab.filters, pid: "", app: "" },
       });
@@ -552,17 +571,22 @@ export default function App() {
       return;
     }
     try {
-      const pids = await invoke<string[]>("resolve_pids", {
-        device: selectedDevice,
-        package: pkg,
-      });
+      const pidGroups = await Promise.all(
+        packages.map((packageName) =>
+          invoke<string[]>("resolve_pids", {
+            device: selectedDevice,
+            package: packageName,
+          }),
+        ),
+      );
+      const pids = [...new Set(pidGroups.flat())];
       const isTestTarget = targetTab.kind === "test";
       if (pids.length === 0) {
-        if (targetIsActive()) setError(`应用「${pkg}」当前未运行`);
+        if (targetIsActive()) setError(appNotRunningMessage(packages));
         const next = {
           ...targetTab.filters,
           pid: isTestTarget ? "" : NO_RUNNING_APP_PID,
-          app: pkg,
+          app: normalizedValue,
         };
         logTabs.updateTab(targetTab.id, { filters: { ...next, pid: "" } });
         if (targetIsActive()) setFilters(next);
@@ -570,7 +594,11 @@ export default function App() {
         if (isTestTarget) logTabs.addTabPids(targetTab.id, pids);
         if (targetIsActive()) {
           setError(null);
-          setFilters((f) => ({ ...f, pid: pids.join(","), app: pkg }));
+          setFilters((f) => ({
+            ...f,
+            pid: pids.join(","),
+            app: normalizedValue,
+          }));
         }
       }
     } catch (e) {
@@ -582,6 +610,8 @@ export default function App() {
   // 定期静默重解析，PID 变化即更新过滤，日志最多延迟几秒自动恢复。
   useEffect(() => {
     if (!selectedPackage || !selectedDevice) return;
+    const packages = parseAppPackages(selectedPackage);
+    const normalizedValue = packages.join(",");
     const tabId = logTabs.activeTabId;
     const isTestMonitor = logTabs.activeTab.kind === "test";
     let disposed = false;
@@ -590,10 +620,15 @@ export default function App() {
       if (disposed || polling) return;
       polling = true;
       try {
-        const pids = await invoke<string[]>("resolve_pids", {
-          device: selectedDevice,
-          package: selectedPackage,
-        });
+        const pidGroups = await Promise.all(
+          packages.map((packageName) =>
+            invoke<string[]>("resolve_pids", {
+              device: selectedDevice,
+              package: packageName,
+            }),
+          ),
+        );
+        const pids = [...new Set(pidGroups.flat())];
         const newPid = pids.join(",");
         if (isTestMonitor && pids.length > 0) {
           logTabs.addTabPids(tabId, pids);
@@ -605,14 +640,14 @@ export default function App() {
           // 应用已运行 → 自动清除「应用未运行」提示（每 3 秒检测一次）
           clearAppNotRunningError();
         } else {
-          setError(`应用「${selectedPackage}」当前未运行`);
+          setError(appNotRunningMessage(packages));
         }
         setFilters((f) => {
           const effectivePid = newPid || (isTestMonitor ? "" : NO_RUNNING_APP_PID);
-          if (f.pid === effectivePid && f.app === selectedPackage) return f;
+          if (f.pid === effectivePid && f.app === normalizedValue) return f;
           // 测试 Tab 的完整应用日志由 pidHistory 计算；这里的 pid 只表达
           // 当前运行状态。应用停止时保持包名并等待新的 PID。
-          return { ...f, pid: effectivePid, app: selectedPackage };
+          return { ...f, pid: effectivePid, app: normalizedValue };
         });
       } catch {
         // 静默失败，下个周期再试
@@ -1054,7 +1089,8 @@ export default function App() {
   };
 
   const handleOpenTestTabCreate = () => {
-    const firstPackage = selectedPackage || logPageApps[0]?.package || "";
+    const firstPackage =
+      parseAppPackages(selectedPackage)[0] || logPageApps[0]?.package || "";
     const appName = logPageApps.find((app) => app.package === firstPackage)?.name;
     setTestTabPackage(firstPackage);
     setTestTabName(appName ? `用例 · ${appName}` : "测试用例监控");
@@ -1503,6 +1539,12 @@ export default function App() {
                 className="app-select"
                 title="按应用过滤（自动解析 PID）"
                 value={selectedPackage}
+                triggerLabel={(() => {
+                  const selectedCount = parseAppPackages(selectedPackage).length;
+                  if (selectedCount <= 1) return undefined;
+                  if (selectedCount === logPageApps.length) return "全部应用";
+                  return `已选择 ${selectedCount} 个应用`;
+                })()}
                 searchable
                 searchPlaceholder="搜索应用名或包名…"
                 options={[

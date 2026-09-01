@@ -35,7 +35,11 @@ function summary(f: SavedFilter): string {
     parts.push(`搜索「${f.filters.search}」${f.filters.regex ? "（正则）" : ""}`);
   }
   if (f.filters.tags) parts.push(`Tag「${f.filters.tags}」`);
-  if (f.filters.app) parts.push(`应用「${f.filters.app}」`);
+  const appCount = f.filters.app
+    ? f.filters.app.split(",").filter(Boolean).length
+    : 0;
+  if (appCount === 1) parts.push(`应用「${f.filters.app}」`);
+  if (appCount > 1) parts.push(`应用「${appCount} 个」`);
   return parts.length ? parts.join(" · ") : "（无过滤条件）";
 }
 
@@ -149,6 +153,20 @@ export function FilterManager(props: Props) {
                       className="filter-app-select"
                       title="按应用过滤"
                       value={draftFilters.app ?? ""}
+                      multiple
+                      searchable
+                      searchPlaceholder="搜索应用名或包名…"
+                      menuClassName="filter-app-multi-menu"
+                      menuWidth={520}
+                      menuMaxHeight={560}
+                      triggerLabel={(() => {
+                        const selectedCount = (draftFilters.app ?? "")
+                          .split(",")
+                          .filter(Boolean).length;
+                        if (selectedCount === 0) return "请选择应用";
+                        if (selectedCount === props.apps.length) return "全部应用";
+                        return `已选择 ${selectedCount} 个应用`;
+                      })()}
                       options={[
                         { value: "", label: "全部应用", fullLabel: "全部应用" },
                         ...props.apps.map((a) => ({
