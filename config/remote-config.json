@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-01T11:14:43.040Z",
+  "updatedAt": "2026-09-01T12:29:24.590Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -317,7 +317,7 @@
     {
       "id": "no_crash",
       "name": "无崩溃",
-      "description": "不应出现 Android 崩溃（FATAL EXCEPTION）",
+      "description": "不应出现 Java/Kotlin FATAL EXCEPTION 或 native Fatal signal",
       "scope": {
         "global": true,
         "apps": []
@@ -326,7 +326,7 @@
       "rules": [
         {
           "effect": "error",
-          "description": "出现崩溃日志",
+          "description": "出现 Java/Kotlin 崩溃日志",
           "expr": {
             "kind": "group",
             "op": "and",
@@ -349,22 +349,10 @@
               }
             ]
           }
-        }
-      ]
-    },
-    {
-      "id": "no_anr",
-      "name": "无 ANR",
-      "description": "不应出现应用无响应（ANR）",
-      "scope": {
-        "global": true,
-        "apps": []
-      },
-      "group": "稳定性",
-      "rules": [
+        },
         {
           "effect": "error",
-          "description": "出现 ANR",
+          "description": "出现 native 崩溃信号",
           "expr": {
             "kind": "group",
             "op": "and",
@@ -374,42 +362,18 @@
                 "cond": {
                   "field": "tag",
                   "op": "equals",
-                  "value": "ActivityManager"
+                  "value": "libc"
                 }
               },
               {
                 "kind": "cond",
                 "cond": {
                   "field": "message",
-                  "op": "contains",
-                  "value": "ANR in"
+                  "op": "regex",
+                  "value": "\\bFatal signal\\s+\\d+"
                 }
               }
             ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "any_error_log",
-      "name": "出现错误级别日志",
-      "description": "任何 error 级别（E）的日志都视为疑似问题，应关注排查",
-      "scope": {
-        "global": true,
-        "apps": []
-      },
-      "group": "稳定性",
-      "rules": [
-        {
-          "effect": "warn",
-          "description": "出现 error 级别日志",
-          "expr": {
-            "kind": "cond",
-            "cond": {
-              "field": "level",
-              "op": "equals",
-              "value": "E"
-            }
           }
         }
       ]
@@ -452,7 +416,7 @@
                 "cond": {
                   "field": "message",
                   "op": "regex",
-                  "value": "\"result_code\"\\s*:\\s*(?!200(?:\\D|$))\\d+"
+                  "value": "\"result_code\"\\s*:\\s*(?!200(?:\\D|$))-?\\d+"
                 }
               }
             ]
@@ -463,7 +427,7 @@
     {
       "id": "ie_sdk_init",
       "name": "激励框架初始化完成",
-      "description": "哨兵：开始加载数据后 60 秒内应出现「所有SDK初始化完成」，未出现 = 初始化卡住或中断",
+      "description": "哨兵：用户数据开始初始化后 60 秒内应出现「所有SDK初始化完成」",
       "scope": {
         "global": true,
         "apps": []
@@ -512,12 +476,38 @@
                   "cond": {
                     "field": "message",
                     "op": "contains",
-                    "value": "开始加载全部数据"
+                    "value": "UserDataManager 初始化开始"
                   }
                 }
               ]
             },
             "withinSec": 60
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "SDK 初始化完成",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "所有SDK初始化完成"
+                }
+              }
+            ]
           }
         }
       ],
@@ -545,6 +535,56 @@
                   "field": "tag",
                   "op": "equals",
                   "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "level",
+                  "op": "equals",
+                  "value": "E"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "[Config]"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "未配置"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "可选配置未配置，框架已使用默认值或关闭对应功能",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "level",
+                  "op": "equals",
+                  "value": "W"
                 }
               },
               {
@@ -610,6 +650,14 @@
               {
                 "kind": "cond",
                 "cond": {
+                  "field": "level",
+                  "op": "equals",
+                  "value": "E"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
                   "field": "message",
                   "op": "contains",
                   "value": "[Config]"
@@ -639,8 +687,8 @@
       },
       "rules": [
         {
-          "effect": "error",
-          "description": "接口请求失败",
+          "effect": "warn",
+          "description": "接口请求返回失败（可能由重试恢复）",
           "expr": {
             "kind": "group",
             "op": "and",
@@ -651,6 +699,14 @@
                   "field": "tag",
                   "op": "equals",
                   "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "[NetworkManager]"
                 }
               },
               {
@@ -684,6 +740,14 @@
                 "cond": {
                   "field": "message",
                   "op": "contains",
+                  "value": "[NetworkManager]"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
                   "value": "请求异常:"
                 }
               }
@@ -703,6 +767,14 @@
                   "field": "tag",
                   "op": "equals",
                   "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "[NetworkManager]"
                 }
               },
               {
@@ -759,16 +831,16 @@
     },
     {
       "id": "ie_userinfo_fail",
-      "name": "用户信息拉取失败",
-      "description": "用户信息接口失败或异常（含重试耗尽）",
+      "name": "用户信息拉取异常",
+      "description": "区分可恢复的单次失败与重试耗尽，并验证初始化成功哨兵",
       "scope": {
         "global": true,
         "apps": []
       },
       "rules": [
         {
-          "effect": "error",
-          "description": "用户信息拉取失败",
+          "effect": "warn",
+          "description": "用户信息单次拉取失败或异常（可能由重试恢复）",
           "expr": {
             "kind": "group",
             "op": "and",
@@ -786,15 +858,37 @@
                 "cond": {
                   "field": "message",
                   "op": "contains",
-                  "value": "用户信息拉取失败"
+                  "value": "[UserDataManager]"
                 }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "用户信息拉取失败:"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "用户信息拉取异常:"
+                    }
+                  }
+                ]
               }
             ]
           }
         },
         {
           "effect": "error",
-          "description": "用户信息拉取异常",
+          "description": "用户信息重试耗尽",
           "expr": {
             "kind": "group",
             "op": "and",
@@ -812,7 +906,49 @@
                 "cond": {
                   "field": "message",
                   "op": "contains",
-                  "value": "用户信息拉取异常"
+                  "value": "[UserDataManager]"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "用户信息拉取失败，已达最大重试次数"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "用户信息初始化成功",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "[UserDataManager]"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "UserDataManager 初始化成功"
                 }
               }
             ]
@@ -823,16 +959,16 @@
     },
     {
       "id": "ie_withdraw_fail",
-      "name": "提现流程失败",
-      "description": "提现档位拉取失败、提现提交失败/异常",
+      "name": "提现流程异常",
+      "description": "区分档位重试过程、重试耗尽、业务拒绝和客户端请求异常",
       "scope": {
         "global": true,
         "apps": []
       },
       "rules": [
         {
-          "effect": "error",
-          "description": "提现档位拉取失败或异常",
+          "effect": "warn",
+          "description": "提现档位单次拉取失败或异常（可能由重试恢复）",
           "expr": {
             "kind": "group",
             "op": "and",
@@ -874,13 +1010,21 @@
                     }
                   }
                 ]
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "not_contains",
+                  "value": "已达最大重试次数"
+                }
               }
             ]
           }
         },
         {
           "effect": "error",
-          "description": "提现提交失败",
+          "description": "提现档位重试耗尽",
           "expr": {
             "kind": "group",
             "op": "and",
@@ -898,7 +1042,33 @@
                 "cond": {
                   "field": "message",
                   "op": "contains",
-                  "value": "提现失败"
+                  "value": "提现档位拉取失败，已达最大重试次数"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "服务端拒绝提现",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "提现失败, errorCode:"
                 }
               }
             ]
@@ -935,16 +1105,16 @@
     },
     {
       "id": "ie_prop_fail",
-      "name": "道具初始化失败",
-      "description": "道具数据初始化失败或异常（含重试）",
+      "name": "道具初始化降级或异常",
+      "description": "道具初始化异常、重试后降级，以及初始化成功哨兵",
       "scope": {
         "global": true,
         "apps": []
       },
       "rules": [
         {
-          "effect": "error",
-          "description": "道具初始化失败或异常",
+          "effect": "warn",
+          "description": "道具初始化发生异常",
           "expr": {
             "kind": "group",
             "op": "and",
@@ -962,7 +1132,25 @@
                 "cond": {
                   "field": "message",
                   "op": "contains",
-                  "value": "道具初始化"
+                  "value": "道具数据初始化异常"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "道具初始化失败并使用降级数据",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
                 }
               },
               {
@@ -974,7 +1162,7 @@
                     "cond": {
                       "field": "message",
                       "op": "contains",
-                      "value": "失败"
+                      "value": "道具初始化失败"
                     }
                   },
                   {
@@ -982,10 +1170,36 @@
                     "cond": {
                       "field": "message",
                       "op": "contains",
-                      "value": "异常"
+                      "value": "新用户兜底："
                     }
                   }
                 ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "道具初始化完成",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "道具数据初始化完成"
+                }
               }
             ]
           }
@@ -996,7 +1210,7 @@
     {
       "id": "ie_ad_fail",
       "name": "广告插件异常",
-      "description": "广告原生桥接失败、聚合未配置、广告位策略无效（不依赖 ENABLE_LOG 的校验日志）",
+      "description": "Unity 广告插件和 AndroidADLibrary 的确定性集成错误；初始化时序问题仅警告",
       "scope": {
         "global": true,
         "apps": []
@@ -1083,6 +1297,186 @@
                   "field": "message",
                   "op": "regex",
                   "value": "(Reward|Splash|Inter|Banner)AdStrategy invalid"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "广告初始化策略或代理为空",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "ADManager Init Invoke,strategy is null"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "ADManager Init Invoke,strategy invalid"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "InitAdStrategy invalid,_adDelegate is null"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "广告主线程调度器异常",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "UnityDispatcherTool.*(初始化失败|任务不能为空|回调不能为空|出错)"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "Android 广告 SDK 初始化或调用参数错误",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "AndroidAdManager"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "init exception:"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "not initialized (no mediation available)"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "mediation is required"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "unsupported mediation"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "is not initialized pid"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "pid is empty"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "广告聚合尚未初始化即被调用",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "ADCoreManager"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "is not init"
                 }
               }
             ]
@@ -1192,12 +1586,26 @@
                 }
               },
               {
-                "kind": "cond",
-                "cond": {
-                  "field": "message",
-                  "op": "contains",
-                  "value": "Failed to load popup"
-                }
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "Failed to load popup"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "Popup prefab not found in Resources folder"
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -1261,14 +1669,82 @@
               }
             ]
           }
+        },
+        {
+          "effect": "error",
+          "description": "ToastManager 或奖励组件缺失",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "ToastManager instance not found"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "提现输入字段与 prefab 绑定不一致",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "需要"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "个输入字段"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "prefab 只绑定了"
+                }
+              }
+            ]
+          }
         }
       ],
       "group": "UI"
     },
     {
       "id": "ie_save_fail",
-      "name": "存档写入失败",
-      "description": "本地存档/文件写入失败",
+      "name": "存档与文件操作失败",
+      "description": "本地存档写入、清理和资源文件读取失败",
       "scope": {
         "global": true,
         "apps": []
@@ -1299,33 +1775,1112 @@
               }
             ]
           }
+        },
+        {
+          "effect": "error",
+          "description": "清理全部存档或目录失败",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "Error deleting all game data"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "Error deleting directory"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "所需文件不存在",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "Can Not Find File"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "单个存档文件删除失败",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "Failed to delete"
+                }
+              }
+            ]
+          }
         }
       ],
       "group": "存档"
     },
     {
-      "id": "case_1787052700403",
-      "name": "新用例",
-      "description": "",
+      "id": "ie_runtime_fail",
+      "name": "激励框架兜底异常",
+      "description": "激励框架主流程捕获到未预期异常",
       "scope": {
         "global": true,
         "apps": []
       },
-      "enabled": true,
-      "rules": [],
-      "group": "自定义"
+      "rules": [
+        {
+          "effect": "error",
+          "description": "激励框架发生未预期异常",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "[IncentiveEngineManager]"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "意外错误:"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "初始化"
     },
     {
-      "id": "case_1787280745048",
-      "name": "新用例",
-      "description": "",
+      "id": "ie_task_fail",
+      "name": "任务系统配置或执行异常",
+      "description": "任务系统缺少初始化、必要参数或 UI prefab",
       "scope": {
         "global": true,
         "apps": []
       },
-      "enabled": true,
-      "rules": [],
-      "group": "自定义"
+      "rules": [
+        {
+          "effect": "error",
+          "description": "任务系统确定性配置错误",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "IAAManager 未初始化"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "互动广告任务缺少 url"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "找不到 CheckIn prefab"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "找不到 TaskItem prefab"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "group": "任务"
+    },
+    {
+      "id": "ie_task_warn",
+      "name": "任务接口或兼容性异常",
+      "description": "任务接口失败、未知任务类型或任务广告不可用",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "warn",
+          "description": "任务列表、类型或广告出现可恢复问题",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "任务列表拉取失败"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "未知任务类型:"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "任务广告加载失败"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "任务行为接口返回失败",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "[TaskActionHandler]"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "失败: code="
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "任务"
+    },
+    {
+      "id": "ie_level_fail",
+      "name": "关卡或升级流程异常",
+      "description": "服务端关卡配置异常或玩家升级流程抛出异常",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "error",
+          "description": "关卡配置或升级流程异常",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "服务端关卡配置请求异常"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "升级流程异常:"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "group": "关卡"
+    },
+    {
+      "id": "ie_reward_fail",
+      "name": "奖励接口失败",
+      "description": "升级、翻倍或悬浮宝箱奖励接口返回失败",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "error",
+          "description": "奖励接口返回失败",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "获取升级奖励失败:"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "获取翻倍奖励失败:"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "获取悬浮宝箱奖励失败:"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "group": "奖励"
+    },
+    {
+      "id": "ie_reward_fallback",
+      "name": "广告奖励降级",
+      "description": "奖励广告播放失败后执行不翻倍发放或提示不可用",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "warn",
+          "description": "奖励广告播放失败并降级",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "翻倍广告播放失败，发放当前奖励"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "宝箱激励广告播放失败"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "group": "奖励"
+    },
+    {
+      "id": "ie_cloud_config_fail",
+      "name": "云控桥接异常",
+      "description": "Unity 云控未初始化、数据转换失败或 Android 真机仍使用默认实现",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "error",
+          "description": "云控未初始化或数据转换失败",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "CloudConfig 未初始化"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "转换失败："
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "Android 真机使用 DefaultCloudConfig",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "DefaultCloudConfig "
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "云控"
+    },
+    {
+      "id": "ie_analytics_fail",
+      "name": "业务埋点异常",
+      "description": "Beyla/Firebase 埋点未初始化、参数非法或依赖初始化失败",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "error",
+          "description": "业务埋点调用或初始化失败",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "Beyla 埋点未初始化"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "Event ID cannot be null or empty"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "Failed to log event"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "Could not resolve all Firebase dependencies"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "group": "埋点"
+    },
+    {
+      "id": "plugin_analytics_fail",
+      "name": "Android 埋点桥接异常",
+      "description": "Unity/Android 埋点桥接使用了废弃初始化入口、初始化前调用或发生原生异常",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "error",
+          "description": "Unity 埋点桥接调用了已移除的初始化方法",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "Android 初始化方法已移除"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "Android 埋点桥接尚未初始化即被调用",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "AndroidAnalytics"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "has not init"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "Android 埋点桥接发生原生异常",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.BeylaAnalytics"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "level",
+                  "op": "equals",
+                  "value": "E"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "埋点"
+    },
+    {
+      "id": "plugin_promotion_fail",
+      "name": "渠道归因异常",
+      "description": "Unity 渠道桥接未初始化，或 Android 渠道/Install Referrer 查询解析失败",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "warn",
+          "description": "Unity 渠道桥接尚未初始化",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "PromotionManager GetPromotionChannel not init"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "PromotionManager GetAdjustPromotionChannel not init"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "Android 渠道或 UTM 查询解析失败",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.AndroidPromotio"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "[channel] get priority channel failed"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "[channel] get adjust channel failed"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "[utm-service] query or parse failed"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "[utm-service] startConnection failed"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "[utm-service] close connection failed"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "[utm-parse] failed"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "group": "归因"
+    },
+    {
+      "id": "sdk_beyla_data_fail",
+      "name": "Beyla 埋点数据异常",
+      "description": "Beyla 事件参数、大小或本地数据库操作异常，可能造成埋点降级或丢失",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "warn",
+          "description": "Beyla 事件参数或大小异常",
+          "expr": {
+            "kind": "group",
+            "op": "or",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "Event out of count"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "onEvent BL_ParamErr"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "Beyla 本地事件数据库操作失败",
+          "expr": {
+            "kind": "group",
+            "op": "or",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "add event failed!"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "get events failed!"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "batch insert cached events failed!"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "埋点"
+    },
+    {
+      "id": "sdk_config_storage_fail",
+      "name": "Android 云控缓存异常",
+      "description": "SDKConfig 读取云控/AB 缓存或保存自定义参数失败",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "warn",
+          "description": "Android 云控缓存读写异常",
+          "expr": {
+            "kind": "group",
+            "op": "or",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "loadAllCache--InterruptedException"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "loadAbInfoCache err"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "addCustomParams err"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "云控"
+    },
+    {
+      "id": "anticheat_runtime_fail",
+      "name": "反作弊运行异常",
+      "description": "同盾 token 获取失败并降级，或 SDK 返回明确错误码",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "warn",
+          "description": "反作弊 token 为空，已使用默认 token",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.AntiCheatingMan"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "getAcToken()  acToken is null"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "同盾 SDK 返回错误码",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.AntiCheatingMan"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "errorCode:"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "errorMsg:"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "反作弊"
+    },
+    {
+      "id": "anticheat_init",
+      "name": "反作弊 SDK 初始化完成",
+      "description": "哨兵：同盾 SDK 加载成功后 20 秒内应完成初始化",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "error",
+          "description": "同盾 SDK 初始化未完成（缺失判定）",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "TD_JAVA"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "TD sdk init success"
+                }
+              }
+            ]
+          },
+          "absence": {
+            "anchor": {
+              "kind": "group",
+              "op": "and",
+              "children": [
+                {
+                  "kind": "cond",
+                  "cond": {
+                    "field": "tag",
+                    "op": "equals",
+                    "value": "TD_JAVA"
+                  }
+                },
+                {
+                  "kind": "cond",
+                  "cond": {
+                    "field": "message",
+                    "op": "contains",
+                    "value": "TD sdk load success"
+                  }
+                }
+              ]
+            },
+            "withinSec": 20
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "同盾 SDK 初始化完成",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "TD_JAVA"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "TD sdk init success"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "反作弊"
     }
   ]
 }
