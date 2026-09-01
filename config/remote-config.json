@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-01T12:29:24.590Z",
+  "updatedAt": "2026-09-01T13:11:07.282Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -308,8 +308,8 @@
         "search": "NetWorkLog",
         "regex": false,
         "tags": "Unity",
-        "pid": "17801",
-        "app": "com.lucky.tilematch"
+        "pid": "",
+        "app": ""
       }
     }
   ],
