@@ -248,18 +248,31 @@ export function TestCaseSidebar({
                           <span>{rule.description}</span>
                           <span className="count">{ruleSummary(rule)}</span>
                         </div>
-                        {rh.hit && rh.entry && (
-                          <div
-                            className="tc-match"
-                            onClick={() => onLocate(rh.entry!.id)}
-                            title="点击定位到该日志"
-                          >
-                            <span className="tc-match-time">
-                              {rh.entry.date} {rh.entry.time}
-                            </span>
-                            <span className="tc-match-tag">{rh.entry.tag}:</span>
-                            <span>{rh.entry.message.slice(0, 120)}</span>
-                          </div>
+                        {rh.hit && rh.entries.length > 0 && (
+                          <>
+                            <div className="tc-match-summary">
+                              命中 {rh.totalCount} 条
+                              {rh.totalCount > rh.entries.length && (
+                                <span>（显示最近 {rh.entries.length} 条）</span>
+                              )}
+                            </div>
+                            <div className="tc-match-list">
+                              {[...rh.entries].reverse().map((entry) => (
+                                <div
+                                  key={entry.id}
+                                  className="tc-match"
+                                  onClick={() => onLocate(entry.id)}
+                                  title="点击定位到该日志"
+                                >
+                                  <span className="tc-match-time">
+                                    {entry.date} {entry.time}
+                                  </span>
+                                  <span className="tc-match-tag">{entry.tag}:</span>
+                                  <span>{entry.message.slice(0, 120)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </>
                         )}
                         {rh.hit && rh.missing && (
                           <div className="tc-match missing">

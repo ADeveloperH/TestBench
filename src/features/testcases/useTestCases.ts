@@ -11,7 +11,10 @@ export type CaseStatus = "fail" | "suspected" | "pass" | "pending" | "disabled";
 
 export interface RuleHit {
   hit: boolean;
-  entry: LogEntry | null;
+  /** 本轮测试的总命中数。 */
+  totalCount: number;
+  /** 最近命中的日志证据，按时间正序保存。 */
+  entries: LogEntry[];
   /** 缺失判定触发（观察窗口内未出现） */
   missing?: boolean;
   /** 触发时刻（Date.now 毫秒），用于「新出现的问题排最上」 */
@@ -20,7 +23,6 @@ export interface RuleHit {
 
 /** 内部规则状态：在 RuleHit 基础上增加计数与缺失判定状态机。 */
 interface RuleState extends RuleHit {
-  count: number;
   absence: "idle" | "waiting" | "satisfied";
   anchorAt: number;
 }
@@ -37,13 +39,16 @@ export interface TestCaseResult {
   ruleHits: RuleHit[];
 }
 
+/** 每条规则只保留最近的日志引用，命中总数仍完整累计。 */
+const MAX_RULE_HIT_ENTRIES = 50;
+
 function initStates(tc: TestCase): RuleState[] {
   return tc.rules.map(() => ({
     hit: false,
-    entry: null,
+    totalCount: 0,
+    entries: [],
     missing: false,
     triggeredAt: 0,
-    count: 0,
     absence: "idle",
     anchorAt: 0,
   }));
@@ -179,8 +184,8 @@ export function useTestCases(
         for (let r = 0; r < tc.rules.length; r++) {
           const rule = tc.rules[r];
           const st = cs.rules[r];
-          if (st.hit) continue;
           if (rule.absence) {
+            if (st.hit) continue;
             // 缺失判定：锚点出现即开始新的观察窗口；窗口内匹配 expr 则满足
             if (evalExpr(rule.absence.anchor, entry)) {
               st.absence = "waiting";
@@ -190,10 +195,13 @@ export function useTestCases(
             }
           } else if (ruleMatches(rule, entry)) {
             const min = rule.minCount && rule.minCount > 1 ? rule.minCount : 1;
-            st.count += 1;
-            if (st.count >= min) {
+            st.totalCount += 1;
+            st.entries.push(entry);
+            if (st.entries.length > MAX_RULE_HIT_ENTRIES) {
+              st.entries.splice(0, st.entries.length - MAX_RULE_HIT_ENTRIES);
+            }
+            if (st.totalCount >= min) {
               st.hit = true;
-              st.entry = entry;
               st.triggeredAt = Date.now();
             }
           }
@@ -213,7 +221,8 @@ export function useTestCases(
         status: computeStatus(tc, cs),
         ruleHits: cs.rules.map((s) => ({
           hit: s.hit,
-          entry: s.entry,
+          totalCount: s.totalCount,
+          entries: [...s.entries],
           missing: s.missing,
           triggeredAt: s.triggeredAt,
         })),

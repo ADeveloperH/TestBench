@@ -1940,6 +1940,21 @@ body.detail-resizing {
   margin: 4px 0;
 }
 
+.tc-match-summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0 2px 12px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.tc-match-list {
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 .tc-match {
   margin: 4px 0 4px 12px;
   padding: 4px 6px;
