@@ -93,16 +93,21 @@ const IE_CASES: TestCase[] = [
   ieCase(
     "ie_sdk_init",
     "激励框架初始化完成",
-    "哨兵：开始加载数据后 60 秒内应出现「所有SDK初始化完成」，未出现 = 初始化卡住或中断",
+    "哨兵：用户数据开始初始化后 60 秒内应出现「所有SDK初始化完成」",
     [
       {
         effect: "error",
         description: "SDK 初始化未完成（缺失判定）",
         expr: all(unityTag(), has("所有SDK初始化完成")),
         absence: {
-          anchor: all(unityTag(), has("开始加载全部数据")),
+          anchor: all(unityTag(), has("UserDataManager 初始化开始")),
           withinSec: 60,
         },
+      },
+      {
+        effect: "pass",
+        description: "SDK 初始化完成",
+        expr: all(unityTag(), has("所有SDK初始化完成")),
       },
     ],
   ),
@@ -114,7 +119,22 @@ const IE_CASES: TestCase[] = [
       {
         effect: "error",
         description: "配置项未配置（必填项）",
-        expr: all(unityTag(), has("[Config]"), has("未配置")),
+        expr: all(
+          unityTag(),
+          cond("level", "equals", "E"),
+          has("[Config]"),
+          has("未配置"),
+        ),
+      },
+      {
+        effect: "warn",
+        description: "可选配置未配置，框架已使用默认值或关闭对应功能",
+        expr: all(
+          unityTag(),
+          cond("level", "equals", "W"),
+          has("[Config]"),
+          has("未配置"),
+        ),
       },
       {
         effect: "error",
@@ -124,7 +144,12 @@ const IE_CASES: TestCase[] = [
       {
         effect: "error",
         description: "国家配置错误（未勾选支持国家 / defaultCountry 非法）",
-        expr: all(unityTag(), has("[Config]"), has("国家")),
+        expr: all(
+          unityTag(),
+          cond("level", "equals", "E"),
+          has("[Config]"),
+          has("国家"),
+        ),
       },
     ],
   ),
@@ -134,19 +159,23 @@ const IE_CASES: TestCase[] = [
     "框架接口请求失败或异常（统一出口 ApiManager）",
     [
       {
-        effect: "error",
-        description: "接口请求失败",
-        expr: all(unityTag(), has("请求失败:")),
+        effect: "warn",
+        description: "接口请求返回失败（可能由重试恢复）",
+        expr: all(unityTag(), has("[NetworkManager]"), has("请求失败:")),
       },
       {
         effect: "error",
         description: "接口请求异常",
-        expr: all(unityTag(), has("请求异常:")),
+        expr: all(unityTag(), has("[NetworkManager]"), has("请求异常:")),
       },
       {
         effect: "error",
         description: "NetworkManager 未初始化",
-        expr: all(unityTag(), has("NetworkManager未初始化")),
+        expr: all(
+          unityTag(),
+          has("[NetworkManager]"),
+          has("NetworkManager未初始化"),
+        ),
       },
     ],
   ),
@@ -164,35 +193,62 @@ const IE_CASES: TestCase[] = [
   ),
   ieCase(
     "ie_userinfo_fail",
-    "用户信息拉取失败",
-    "用户信息接口失败或异常（含重试耗尽）",
+    "用户信息拉取异常",
+    "区分可恢复的单次失败与重试耗尽，并验证初始化成功哨兵",
     [
       {
-        effect: "error",
-        description: "用户信息拉取失败",
-        expr: all(unityTag(), has("用户信息拉取失败")),
+        effect: "warn",
+        description: "用户信息单次拉取失败或异常（可能由重试恢复）",
+        expr: all(
+          unityTag(),
+          has("[UserDataManager]"),
+          hasAny("用户信息拉取失败:", "用户信息拉取异常:"),
+        ),
       },
       {
         effect: "error",
-        description: "用户信息拉取异常",
-        expr: all(unityTag(), has("用户信息拉取异常")),
+        description: "用户信息重试耗尽",
+        expr: all(
+          unityTag(),
+          has("[UserDataManager]"),
+          has("用户信息拉取失败，已达最大重试次数"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "用户信息初始化成功",
+        expr: all(
+          unityTag(),
+          has("[UserDataManager]"),
+          has("UserDataManager 初始化成功"),
+        ),
       },
     ],
   ),
   ieCase(
     "ie_withdraw_fail",
-    "提现流程失败",
-    "提现档位拉取失败、提现提交失败/异常",
+    "提现流程异常",
+    "区分档位重试过程、重试耗尽、业务拒绝和客户端请求异常",
     [
       {
-        effect: "error",
-        description: "提现档位拉取失败或异常",
-        expr: all(unityTag(), has("提现档位拉取"), hasAny("失败", "异常")),
+        effect: "warn",
+        description: "提现档位单次拉取失败或异常（可能由重试恢复）",
+        expr: all(
+          unityTag(),
+          has("提现档位拉取"),
+          hasAny("失败", "异常"),
+          cond("message", "not_contains", "已达最大重试次数"),
+        ),
       },
       {
         effect: "error",
-        description: "提现提交失败",
-        expr: all(unityTag(), has("提现失败")),
+        description: "提现档位重试耗尽",
+        expr: all(unityTag(), has("提现档位拉取失败，已达最大重试次数")),
+      },
+      {
+        effect: "warn",
+        description: "服务端拒绝提现",
+        expr: all(unityTag(), has("提现失败, errorCode:")),
       },
       {
         effect: "error",
@@ -203,20 +259,33 @@ const IE_CASES: TestCase[] = [
   ),
   ieCase(
     "ie_prop_fail",
-    "道具初始化失败",
-    "道具数据初始化失败或异常（含重试）",
+    "道具初始化降级或异常",
+    "道具初始化异常、重试后降级，以及初始化成功哨兵",
     [
       {
-        effect: "error",
-        description: "道具初始化失败或异常",
-        expr: all(unityTag(), has("道具初始化"), hasAny("失败", "异常")),
+        effect: "warn",
+        description: "道具初始化发生异常",
+        expr: all(unityTag(), has("道具数据初始化异常")),
+      },
+      {
+        effect: "warn",
+        description: "道具初始化失败并使用降级数据",
+        expr: all(
+          unityTag(),
+          hasAny("道具初始化失败", "新用户兜底："),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "道具初始化完成",
+        expr: all(unityTag(), has("道具数据初始化完成")),
       },
     ],
   ),
   ieCase(
     "ie_ad_fail",
     "广告插件异常",
-    "广告原生桥接失败、聚合未配置、广告位策略无效（不依赖 ENABLE_LOG 的校验日志）",
+    "Unity 广告插件和 AndroidADLibrary 的确定性集成错误；初始化时序问题仅警告",
     [
       {
         effect: "error",
@@ -234,6 +303,54 @@ const IE_CASES: TestCase[] = [
         expr: all(
           unityTag(),
           cond("message", "regex", "(Reward|Splash|Inter|Banner)AdStrategy invalid"),
+        ),
+      },
+      {
+        effect: "error",
+        description: "广告初始化策略或代理为空",
+        expr: all(
+          unityTag(),
+          hasAny(
+            "ADManager Init Invoke,strategy is null",
+            "ADManager Init Invoke,strategy invalid",
+            "InitAdStrategy invalid,_adDelegate is null",
+          ),
+        ),
+      },
+      {
+        effect: "error",
+        description: "广告主线程调度器异常",
+        expr: all(
+          unityTag(),
+          cond(
+            "message",
+            "regex",
+            "UnityDispatcherTool.*(初始化失败|任务不能为空|回调不能为空|出错)",
+          ),
+        ),
+      },
+      {
+        effect: "error",
+        description: "Android 广告 SDK 初始化或调用参数错误",
+        expr: all(
+          cond("message", "contains", "AndroidAdManager"),
+          hasAny(
+            "init exception:",
+            "not initialized (no mediation available)",
+            "mediation is required",
+            "unsupported mediation",
+            "is not initialized pid",
+            "pid is empty",
+          ),
+        ),
+      },
+      {
+        effect: "warn",
+        description: "广告聚合尚未初始化即被调用",
+        expr: all(
+          unityTag(),
+          has("ADCoreManager"),
+          has("is not init"),
         ),
       },
     ],
@@ -270,7 +387,10 @@ const IE_CASES: TestCase[] = [
       {
         effect: "error",
         description: "弹窗加载失败",
-        expr: all(unityTag(), has("Failed to load popup")),
+        expr: all(
+          unityTag(),
+          hasAny("Failed to load popup", "Popup prefab not found in Resources folder"),
+        ),
       },
       {
         effect: "error",
@@ -282,17 +402,352 @@ const IE_CASES: TestCase[] = [
         description: "宝箱预制体未设置",
         expr: all(unityTag(), has("宝箱预制体未设置")),
       },
+      {
+        effect: "error",
+        description: "ToastManager 或奖励组件缺失",
+        expr: all(unityTag(), has("ToastManager instance not found")),
+      },
+      {
+        effect: "error",
+        description: "提现输入字段与 prefab 绑定不一致",
+        expr: all(
+          unityTag(),
+          has("需要"),
+          has("个输入字段"),
+          has("prefab 只绑定了"),
+        ),
+      },
     ],
   ),
   ieCase(
     "ie_save_fail",
-    "存档写入失败",
-    "本地存档/文件写入失败",
+    "存档与文件操作失败",
+    "本地存档写入、清理和资源文件读取失败",
     [
       {
         effect: "error",
         description: "写入文件失败",
         expr: all(unityTag(), has("写入文件失败")),
+      },
+      {
+        effect: "error",
+        description: "清理全部存档或目录失败",
+        expr: all(
+          unityTag(),
+          hasAny("Error deleting all game data", "Error deleting directory"),
+        ),
+      },
+      {
+        effect: "error",
+        description: "所需文件不存在",
+        expr: all(unityTag(), has("Can Not Find File")),
+      },
+      {
+        effect: "warn",
+        description: "单个存档文件删除失败",
+        expr: all(unityTag(), has("Failed to delete")),
+      },
+    ],
+  ),
+  ieCase(
+    "ie_runtime_fail",
+    "激励框架兜底异常",
+    "激励框架主流程捕获到未预期异常",
+    [
+      {
+        effect: "error",
+        description: "激励框架发生未预期异常",
+        expr: all(
+          unityTag(),
+          has("[IncentiveEngineManager]"),
+          has("意外错误:"),
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "ie_task_fail",
+    "任务系统配置或执行异常",
+    "任务系统缺少初始化、必要参数或 UI prefab",
+    [
+      {
+        effect: "error",
+        description: "任务系统确定性配置错误",
+        expr: all(
+          unityTag(),
+          hasAny(
+            "IAAManager 未初始化",
+            "互动广告任务缺少 url",
+            "找不到 CheckIn prefab",
+            "找不到 TaskItem prefab",
+          ),
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "ie_task_warn",
+    "任务接口或兼容性异常",
+    "任务接口失败、未知任务类型或任务广告不可用",
+    [
+      {
+        effect: "warn",
+        description: "任务列表、类型或广告出现可恢复问题",
+        expr: all(
+          unityTag(),
+          hasAny(
+            "任务列表拉取失败",
+            "未知任务类型:",
+            "任务广告加载失败",
+          ),
+        ),
+      },
+      {
+        effect: "warn",
+        description: "任务行为接口返回失败",
+        expr: all(
+          unityTag(),
+          has("[TaskActionHandler]"),
+          has("失败: code="),
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "ie_level_fail",
+    "关卡或升级流程异常",
+    "服务端关卡配置异常或玩家升级流程抛出异常",
+    [
+      {
+        effect: "error",
+        description: "关卡配置或升级流程异常",
+        expr: all(
+          unityTag(),
+          hasAny("服务端关卡配置请求异常", "升级流程异常:"),
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "ie_reward_fail",
+    "奖励接口失败",
+    "升级、翻倍或悬浮宝箱奖励接口返回失败",
+    [
+      {
+        effect: "error",
+        description: "奖励接口返回失败",
+        expr: all(
+          unityTag(),
+          hasAny(
+            "获取升级奖励失败:",
+            "获取翻倍奖励失败:",
+            "获取悬浮宝箱奖励失败:",
+          ),
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "ie_reward_fallback",
+    "广告奖励降级",
+    "奖励广告播放失败后执行不翻倍发放或提示不可用",
+    [
+      {
+        effect: "warn",
+        description: "奖励广告播放失败并降级",
+        expr: all(
+          unityTag(),
+          hasAny("翻倍广告播放失败，发放当前奖励", "宝箱激励广告播放失败"),
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "ie_cloud_config_fail",
+    "云控桥接异常",
+    "Unity 云控未初始化、数据转换失败或 Android 真机仍使用默认实现",
+    [
+      {
+        effect: "error",
+        description: "云控未初始化或数据转换失败",
+        expr: all(
+          unityTag(),
+          hasAny("CloudConfig 未初始化", "转换失败："),
+        ),
+      },
+      {
+        effect: "error",
+        description: "Android 真机使用 DefaultCloudConfig",
+        expr: all(unityTag(), has("DefaultCloudConfig ")),
+      },
+    ],
+  ),
+  ieCase(
+    "ie_analytics_fail",
+    "业务埋点异常",
+    "Beyla/Firebase 埋点未初始化、参数非法或依赖初始化失败",
+    [
+      {
+        effect: "error",
+        description: "业务埋点调用或初始化失败",
+        expr: all(
+          unityTag(),
+          hasAny(
+            "Beyla 埋点未初始化",
+            "Event ID cannot be null or empty",
+            "Failed to log event",
+            "Could not resolve all Firebase dependencies",
+          ),
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "plugin_analytics_fail",
+    "Android 埋点桥接异常",
+    "Unity/Android 埋点桥接使用了废弃初始化入口、初始化前调用或发生原生异常",
+    [
+      {
+        effect: "error",
+        description: "Unity 埋点桥接调用了已移除的初始化方法",
+        expr: all(unityTag(), has("Android 初始化方法已移除")),
+      },
+      {
+        effect: "warn",
+        description: "Android 埋点桥接尚未初始化即被调用",
+        expr: all(has("AndroidAnalytics"), has("has not init")),
+      },
+      {
+        effect: "error",
+        description: "Android 埋点桥接发生原生异常",
+        expr: all(
+          cond("tag", "equals", "Android.BeylaAnalytics"),
+          cond("level", "equals", "E"),
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "plugin_promotion_fail",
+    "渠道归因异常",
+    "Unity 渠道桥接未初始化，或 Android 渠道/Install Referrer 查询解析失败",
+    [
+      {
+        effect: "warn",
+        description: "Unity 渠道桥接尚未初始化",
+        expr: all(
+          unityTag(),
+          hasAny(
+            "PromotionManager GetPromotionChannel not init",
+            "PromotionManager GetAdjustPromotionChannel not init",
+          ),
+        ),
+      },
+      {
+        effect: "warn",
+        description: "Android 渠道或 UTM 查询解析失败",
+        expr: all(
+          cond("tag", "equals", "Android.AndroidPromotio"),
+          hasAny(
+            "[channel] get priority channel failed",
+            "[channel] get adjust channel failed",
+            "[utm-service] query or parse failed",
+            "[utm-service] startConnection failed",
+            "[utm-service] close connection failed",
+            "[utm-parse] failed",
+          ),
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "sdk_beyla_data_fail",
+    "Beyla 埋点数据异常",
+    "Beyla 事件参数、大小或本地数据库操作异常，可能造成埋点降级或丢失",
+    [
+      {
+        effect: "warn",
+        description: "Beyla 事件参数或大小异常",
+        expr: hasAny("Event out of count", "onEvent BL_ParamErr"),
+      },
+      {
+        effect: "warn",
+        description: "Beyla 本地事件数据库操作失败",
+        expr: hasAny(
+          "add event failed!",
+          "get events failed!",
+          "batch insert cached events failed!",
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "sdk_config_storage_fail",
+    "Android 云控缓存异常",
+    "SDKConfig 读取云控/AB 缓存或保存自定义参数失败",
+    [
+      {
+        effect: "warn",
+        description: "Android 云控缓存读写异常",
+        expr: hasAny(
+          "loadAllCache--InterruptedException",
+          "loadAbInfoCache err",
+          "addCustomParams err",
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "anticheat_runtime_fail",
+    "反作弊运行异常",
+    "同盾 token 获取失败并降级，或 SDK 返回明确错误码",
+    [
+      {
+        effect: "warn",
+        description: "反作弊 token 为空，已使用默认 token",
+        expr: all(
+          cond("tag", "equals", "Android.AntiCheatingMan"),
+          has("getAcToken()  acToken is null"),
+        ),
+      },
+      {
+        effect: "error",
+        description: "同盾 SDK 返回错误码",
+        expr: all(
+          cond("tag", "equals", "Android.AntiCheatingMan"),
+          has("errorCode:"),
+          has("errorMsg:"),
+        ),
+      },
+    ],
+  ),
+  ieCase(
+    "anticheat_init",
+    "反作弊 SDK 初始化完成",
+    "哨兵：同盾 SDK 加载成功后 20 秒内应完成初始化",
+    [
+      {
+        effect: "error",
+        description: "同盾 SDK 初始化未完成（缺失判定）",
+        expr: all(
+          cond("tag", "equals", "TD_JAVA"),
+          has("TD sdk init success"),
+        ),
+        absence: {
+          anchor: all(
+            cond("tag", "equals", "TD_JAVA"),
+            has("TD sdk load success"),
+          ),
+          withinSec: 20,
+        },
+      },
+      {
+        effect: "pass",
+        description: "同盾 SDK 初始化完成",
+        expr: all(
+          cond("tag", "equals", "TD_JAVA"),
+          has("TD sdk init success"),
+        ),
       },
     ],
   ),
@@ -312,6 +767,20 @@ const IE_GROUPS: Record<string, string> = {
   ie_localization_fail: "本地化",
   ie_ui_fail: "UI",
   ie_save_fail: "存档",
+  ie_runtime_fail: "初始化",
+  ie_task_fail: "任务",
+  ie_task_warn: "任务",
+  ie_level_fail: "关卡",
+  ie_reward_fail: "奖励",
+  ie_reward_fallback: "奖励",
+  ie_cloud_config_fail: "云控",
+  ie_analytics_fail: "埋点",
+  plugin_analytics_fail: "埋点",
+  plugin_promotion_fail: "归因",
+  sdk_beyla_data_fail: "埋点",
+  sdk_config_storage_fail: "云控",
+  anticheat_runtime_fail: "反作弊",
+  anticheat_init: "反作弊",
 };
 
 const IE_CASES_GROUPED: TestCase[] = IE_CASES.map((tc) => ({
@@ -324,48 +793,25 @@ export const BUILTIN_TEST_CASES: TestCase[] = [
   {
     id: "no_crash",
     name: "无崩溃",
-    description: "不应出现 Android 崩溃（FATAL EXCEPTION）",
+    description: "不应出现 Java/Kotlin FATAL EXCEPTION 或 native Fatal signal",
     scope: { global: true, apps: [] },
     group: "稳定性",
     rules: [
       {
         effect: "error",
-        description: "出现崩溃日志",
+        description: "出现 Java/Kotlin 崩溃日志",
         expr: all(
           cond("tag", "equals", "AndroidRuntime"),
           cond("message", "contains", "FATAL EXCEPTION"),
         ),
       },
-    ],
-  },
-  {
-    id: "no_anr",
-    name: "无 ANR",
-    description: "不应出现应用无响应（ANR）",
-    scope: { global: true, apps: [] },
-    group: "稳定性",
-    rules: [
       {
         effect: "error",
-        description: "出现 ANR",
+        description: "出现 native 崩溃信号",
         expr: all(
-          cond("tag", "equals", "ActivityManager"),
-          cond("message", "contains", "ANR in"),
+          cond("tag", "equals", "libc"),
+          cond("message", "regex", "\\bFatal signal\\s+\\d+"),
         ),
-      },
-    ],
-  },
-  {
-    id: "any_error_log",
-    name: "出现错误级别日志",
-    description: "任何 error 级别（E）的日志都视为疑似问题，应关注排查",
-    scope: { global: true, apps: [] },
-    group: "稳定性",
-    rules: [
-      {
-        effect: "warn",
-        description: "出现 error 级别日志",
-        expr: cond("level", "equals", "E"),
       },
     ],
   },
@@ -385,7 +831,7 @@ export const BUILTIN_TEST_CASES: TestCase[] = [
           cond(
             "message",
             "regex",
-            `"result_code"\\s*:\\s*(?!200(?:\\D|$))\\d+`,
+            `"result_code"\\s*:\\s*(?!200(?:\\D|$))-?\\d+`,
           ),
         ),
       },

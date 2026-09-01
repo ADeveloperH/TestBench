@@ -9,12 +9,14 @@ import type { AppInfo } from "./apps";
 import type { Favorite } from "../features/settings/usePrefs";
 import type { SavedFilter } from "../features/filters/useSavedFilters";
 import type { TestCase } from "../features/testcases/engine";
+import localRemoteConfig from "../../config/remote-config.json";
 import {
   applyBuiltins,
   getCodeBuiltins,
   resetBuiltinsToCode,
   type BuiltinSet,
 } from "./builtinRegistry";
+import { IS_DEBUG } from "./debug";
 
 export interface RemoteConfig {
   schemaVersion: number;
@@ -27,7 +29,7 @@ export interface RemoteConfig {
 }
 
 export interface RemoteStatus {
-  source: "remote" | "cache" | "code" | "error";
+  source: "local" | "remote" | "cache" | "code" | "error";
   updatedAt?: string;
   /** 用户可读的状态说明。 */
   detail: string;
@@ -35,7 +37,7 @@ export interface RemoteStatus {
 
 const SCHEMA_VERSION = 1;
 const CACHE_KEY = "remote-config-cache-v1";
-const TTL_MS = 12 * 60 * 60 * 1000; // 缓存有效期 12 小时
+const TTL_MS = 5 * 60 * 60 * 1000; // 缓存有效期 5 小时
 const FETCH_TIMEOUT_MS = 8000;
 
 /** 远程配置地址（按顺序尝试：raw 失败后走 jsDelivr 镜像）。 */
@@ -212,6 +214,18 @@ function mergeRemote(code: BuiltinSet, remote: RemoteConfig): BuiltinSet {
  * 兜底顺序：远程 → 本地缓存 → 代码内置。
  */
 export async function refreshRemoteConfig(force = false): Promise<RemoteStatus> {
+  // 开发版优先预览仓库内的待发布配置；手动刷新仍可强制核对线上版本。
+  if (IS_DEBUG && !force) {
+    const local = validateRemoteConfig(localRemoteConfig);
+    applyBuiltins(mergeRemote(getCodeBuiltins(), local));
+    lastStatus = {
+      source: "local",
+      updatedAt: local.updatedAt,
+      detail: "使用本地开发配置",
+    };
+    return lastStatus;
+  }
+
   if (!force) {
     const cache = readCache();
     if (cache && Date.now() - cache.fetchedAt < TTL_MS) {

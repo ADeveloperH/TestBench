@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   isBuiltinTestCase,
   type TestCase,
@@ -13,6 +13,13 @@ import { IS_DEBUG } from "../../core/debug";
 const KEY = "logcat-testcases-v4";
 /** 调试模式删除的内置用例 id 名单（正式包忽略，内置不可删）。 */
 const REMOVED_KEY = "logcat-removed-builtin-cases-v1";
+/** 已从内置配置移除的历史 id，用于清理旧版本写入的完整用例缓存。 */
+const RETIRED_BUILTIN_IDS = new Set([
+  "no_anr",
+  "any_error_log",
+  "case_1787052700403",
+  "case_1787280745048",
+]);
 
 function loadRemovedIds(): string[] {
   try {
@@ -36,14 +43,36 @@ function saveRemovedIds(ids: string[]): void {
 }
 
 /** 内置用例以最新生效定义为准，用户自定义用例保留在后；调试模式下应用删除名单。 */
-function applyBuiltinLayer(custom: TestCase[]): TestCase[] {
+function applyBuiltinLayer(
+  cached: TestCase[],
+  previouslyBuiltinIds: ReadonlySet<string> = new Set(),
+): TestCase[] {
   const builtinIds = getBuiltinTestCaseIds();
   const removed = IS_DEBUG ? new Set(loadRemovedIds()) : new Set<string>();
-  const builtins = getBuiltinTestCases().filter((c) => !removed.has(c.id));
-  const kept = custom.filter(
-    (c) => c && typeof c.id === "string" && !builtinIds.has(c.id),
+  const builtins = getBuiltinTestCases().filter(
+    (c) => !removed.has(c.id) && !RETIRED_BUILTIN_IDS.has(c.id),
+  );
+  const kept = cached.filter(
+    (c) =>
+      c &&
+      typeof c.id === "string" &&
+      !builtinIds.has(c.id) &&
+      !previouslyBuiltinIds.has(c.id) &&
+      !RETIRED_BUILTIN_IDS.has(c.id),
   );
   return [...builtins, ...kept];
+}
+
+/** 本地只保存用户自定义用例，内置定义始终由代码或远程配置提供。 */
+function customCasesOnly(cases: TestCase[]): TestCase[] {
+  const builtinIds = getBuiltinTestCaseIds();
+  return cases.filter(
+    (c) =>
+      c &&
+      typeof c.id === "string" &&
+      !builtinIds.has(c.id) &&
+      !RETIRED_BUILTIN_IDS.has(c.id),
+  );
 }
 
 function loadCases(): TestCase[] {
@@ -74,17 +103,20 @@ export interface TestCasesStore {
 /** 测试用例的持久化存储（localStorage，内置用例作为默认值）。 */
 export function useTestCasesStore(): TestCasesStore {
   const [cases, setCases] = useState<TestCase[]>(loadCases);
+  const previousBuiltinIdsRef = useRef(getBuiltinTestCaseIds());
 
   // 远程配置变化（内置层替换）时重算：内置用例以最新定义为准，用户用例保留。
   useEffect(() => {
     return subscribeBuiltins(() => {
-      setCases((prev) => applyBuiltinLayer(prev));
+      const previousBuiltinIds = previousBuiltinIdsRef.current;
+      previousBuiltinIdsRef.current = getBuiltinTestCaseIds();
+      setCases((prev) => applyBuiltinLayer(prev, previousBuiltinIds));
     });
   }, []);
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify(cases));
+      localStorage.setItem(KEY, JSON.stringify(customCasesOnly(cases)));
     } catch {
       // 忽略写入失败
     }

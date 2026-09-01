@@ -88,10 +88,45 @@ function normalizeFavorites(x: unknown): Favorite[] {
   return out;
 }
 
+function mergeFavoritesWithBuiltins(
+  current: Favorite[],
+  builtins: Favorite[],
+  builtinValues: Set<string>,
+  removed: Set<string>,
+): Favorite[] {
+  const visibleBuiltins = builtins.filter((f) => !removed.has(f.value));
+  const hasBuiltinInCurrent = current.some((f) => builtinValues.has(f.value));
+  const seen = new Set<string>();
+
+  // 兼容旧数据：如果本地还没保存过内置项，就先沿用“内置在前”的旧布局。
+  if (!hasBuiltinInCurrent) {
+    const custom = current.filter(
+      (f) => !builtinValues.has(f.value) || removed.has(f.value),
+    );
+    return [...visibleBuiltins, ...custom];
+  }
+
+  // 新数据：保留本地当前顺序，远程新增项再按远程顺序补到末尾。
+  const merged: Favorite[] = [];
+  for (const item of current) {
+    if (removed.has(item.value) || seen.has(item.value)) continue;
+    merged.push(item);
+    seen.add(item.value);
+  }
+  for (const item of visibleBuiltins) {
+    if (seen.has(item.value)) continue;
+    merged.push(item);
+    seen.add(item.value);
+  }
+  return merged;
+}
+
 /**
- * 内置常用排最前；过滤掉与当前内置重复的旧副本（远程配置变化后据此重算）。
- * 调试模式下应用「已删除内置」名单：被删的内置不再显示，且允许用户用同名 value
- * 重建自己的常用；正式包忽略删除名单，内置始终保留且不可删。
+ * 内置常用与本地常用合并：
+ * - 旧数据继续兼容“内置在前”
+ * - 新数据保留当前本地顺序
+ * - 远程新增内置项按远程顺序补到末尾
+ * 调试模式下应用「已删除内置」名单：被删的内置不再显示。
  */
 function applyBuiltinLayer(base: Prefs): Prefs {
   const searchValues = getBuiltinSearchValues();
@@ -100,18 +135,18 @@ function applyBuiltinLayer(base: Prefs): Prefs {
   const removedTags = IS_DEBUG ? new Set(base.removedBuiltinTags) : new Set<string>();
   return {
     ...base,
-    searchFavorites: [
-      ...getBuiltinSearchFavorites().filter((f) => !removedSearch.has(f.value)),
-      ...base.searchFavorites.filter(
-        (f) => !searchValues.has(f.value) || removedSearch.has(f.value),
-      ),
-    ],
-    tagFavorites: [
-      ...getBuiltinTagFavorites().filter((f) => !removedTags.has(f.value)),
-      ...base.tagFavorites.filter(
-        (f) => !tagValues.has(f.value) || removedTags.has(f.value),
-      ),
-    ],
+    searchFavorites: mergeFavoritesWithBuiltins(
+      base.searchFavorites,
+      getBuiltinSearchFavorites(),
+      searchValues,
+      removedSearch,
+    ),
+    tagFavorites: mergeFavoritesWithBuiltins(
+      base.tagFavorites,
+      getBuiltinTagFavorites(),
+      tagValues,
+      removedTags,
+    ),
     // 兼容旧数据：正式包里内置应用不可删除，清理历史版本记录的隐藏项；
     // 调试模式下保留（维护者删除内置应用后需要记住删除状态）。
     removedPackages: IS_DEBUG
@@ -149,19 +184,13 @@ export function usePrefs() {
     });
   }, []);
 
-  // 持久化时过滤内置常用（内置以当前生效配置为准，不写入本地存储）。
+  // 持久化当前完整顺序，方便保留用户对内置/自定义常用项的排序。
   useEffect(() => {
     try {
-      const searchValues = getBuiltinSearchValues();
-      const tagValues = getBuiltinTagValues();
       localStorage.setItem(
         KEY,
         JSON.stringify({
           ...prefs,
-          searchFavorites: prefs.searchFavorites.filter(
-            (f) => !searchValues.has(f.value),
-          ),
-          tagFavorites: prefs.tagFavorites.filter((f) => !tagValues.has(f.value)),
         }),
       );
     } catch {

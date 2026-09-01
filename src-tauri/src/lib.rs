@@ -11,6 +11,7 @@ use adb::{
     clear_app_data as adb_clear_app_data, clear_log as adb_clear_log,
     connect as adb_connect, current_activity as adb_current_activity,
     device_info as adb_device_info, disconnect as adb_disconnect,
+    discover_installed_package_source as adb_discover_installed_package_source,
     fetch_remote_apps as adb_fetch_remote_apps, generate_pairing as adb_generate_pairing,
     install_apk as adb_install_apk, list_app_runtime_status as adb_list_app_runtime_status,
     list_devices as adb_list_devices,
@@ -19,8 +20,8 @@ use adb::{
     open_backdoor as adb_open_backdoor, pair as adb_pair, resolve_pids as adb_resolve_pids,
     restart_app as adb_restart_app, screencap_png as adb_screencap_png,
     uninstall_app as adb_uninstall_app, App, AppRuntimeStatus, Device, DeviceInfo,
-    BugreportController, BugreportProgress, BugreportResult, LogcatProcess, PairingInfo,
-    ScrcpyRecord,
+    BugreportController, BugreportProgress, BugreportResult, InstalledPackageSource,
+    LogcatProcess, PairingInfo, ScrcpyRecord,
 };
 
 /// 全局运行状态：当前 logcat 进程 + 代号（用于识别过期读取线程）。
@@ -237,6 +238,24 @@ async fn resolve_pids(device: Option<String>, package: String) -> Result<Vec<Str
 async fn app_runtime_status(device: Option<String>) -> Result<AppRuntimeStatus, String> {
     log::debug!("收到前端命令 app_runtime_status：device={:?}", device);
     run_blocking(move || adb_list_app_runtime_status(device.as_deref())).await
+}
+
+/// Preflight for Unity audio export: discover the complete installed APK set
+/// without pulling files or starting a long-running extraction task.
+#[tauri::command]
+async fn inspect_audio_export_source(
+    device: Option<String>,
+    package: String,
+) -> Result<InstalledPackageSource, String> {
+    log::info!(
+        "收到前端命令 inspect_audio_export_source：device={:?} package={}",
+        device,
+        package
+    );
+    run_blocking(move || {
+        adb_discover_installed_package_source(device.as_deref(), &package)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -967,6 +986,7 @@ pub fn run() {
             mdns_connect_address,
             resolve_pids,
             app_runtime_status,
+            inspect_audio_export_source,
             fetch_remote_apps,
             open_in_browser,
             publish_remote_config,

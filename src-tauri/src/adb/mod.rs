@@ -1,6 +1,7 @@
 //! ADB / scrcpy 操作封装：二进制路径初始化、共享 helper 与子模块重导出。
 
 mod apps;
+mod audio_export;
 mod bugreport;
 mod devices;
 mod info;
@@ -157,6 +158,9 @@ pub(crate) fn run_adb_capture(args: &[&str]) -> Result<String, String> {
 pub use apps::{
     clear_app_data, fetch_remote_apps, list_app_runtime_status, open_backdoor, resolve_pids,
     restart_app, uninstall_app, App, AppRuntimeStatus,
+};
+pub use audio_export::{
+    discover_installed_package_source, InstalledPackageSource,
 };
 pub use bugreport::{BugreportController, BugreportProgress, BugreportResult};
 pub use devices::{
