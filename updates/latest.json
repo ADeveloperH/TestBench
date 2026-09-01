@@ -1,27 +1,27 @@
 {
-  "version": "0.0.16",
-  "notes": "修复高频日志导致界面卡死的问题：日志推送改为批量处理，避免大量日志淹没事件通道使更新检查、导出等功能无响应。",
-  "pub_date": "2026-08-28T08:42:24.754Z",
+  "version": "0.0.17",
+  "notes": "修复高频日志导致界面卡死的问题：日志推送改为批量处理，避免大量日志淹没事件通道使更新检查、导出等功能无响应（验证自动更新安装流程）。",
+  "pub_date": "2026-08-28T09:04:34.043Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkhPZWNFZ2lpYnM3dDVNVkJGcmNSMEo3bFc2RUNLdmFTU1hhbStKVUR6NktNakxBVUpMSU5hVXhmYjF6blJKQk0vbTlYd1BwdFk0dkc3WEN6YURSeGdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTA1ODkxCWZpbGU6VGVzdEJlbmNoLmFwcC50YXIuZ3oKMHdWZThMMEtBeHh0V2pBSkZwTHFaallrUmRHenE0c1dPNytUSFdPYlU2RFhEZ3czajd2V1hCZ0FUdDlKZ25NRWdNUUVQQWM1Q3dCcDY3bVJwcmFMREE9PQo=",
-      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.16/TestBench_arm64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVk1PSHYzKzF2MXhBSFRFZ3FMWmVZZkdhQ0lXTlAxV3AxTStSc1RDQ010Sm9Pd2s4aDd3SWdpaUk3UjgwZTlhdDNIT0IvUjF3UjBWdmh0OHU4bG5JRnc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTA3NDc0CWZpbGU6VGVzdEJlbmNoLmFwcC50YXIuZ3oKSGR3Y3JJQkN4dHNiZUo3OWkwZHhkcks2emV4S0JBUWluSy9FS0x2dzhIbFBjNGhXZk53MmoxMG8wT3RseDFkaVp0WW0rbUhzZUlHRUNmYTNIbG9hQ1E9PQo=",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.17/TestBench_arm64.app.tar.gz"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVktQUDFDQlZpakM2dy9oYUpJb0lJMGoyZDZVeEp2NC9FbVgxT2hVQW54YmpPLzJYWmtlV0RaSHhjSTh3c1AxeGt2Q25ISldwMDJZR1FrSlB2SW9CUHdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTA2NDI5CWZpbGU6VGVzdEJlbmNoLmFwcC50YXIuZ3oKS0w0dmN3Q3hCWGcxNGRYeGN2SkZ6eFZrWXd3am4xWHp2VkdPaEh6K0UzZktYVUpUcml1V1hEcXovZUhObUtUTHEzSVdwNE5HMzdFMEdxUElQVFhFQmc9PQo=",
-      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.16/TestBench_x64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkpIOXNKWUVXYks3Z3VhNFA2RHNTdlFCbkRSNit2MXZHclEwTFE0bWFDQ3VPUUxOMnkvRFNTNHcxcUF1bk8waXNEQml3UU5MaVJqTzdGaEVWT1dIdkF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTA3NzU4CWZpbGU6VGVzdEJlbmNoLmFwcC50YXIuZ3oKT3R5K0hmUWNMYTR3MTNnVjJRbFh2VXIwSkxnQXk3c0twUVVMaWFFVUo0RnorSk0yNHJGL09NMUdjVDdqTlN6bTNvQW5CVVNubzdhWE5KalJGNVJyREE9PQo=",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.17/TestBench_x64.app.tar.gz"
     },
     "windows-x86_64-nsis": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVktXT2RkQ3k4ZWpZT1NPR3hrVWtCSWs5UHg3U21PYW12a0NYV1diVXhJT09IMTB1Njc2QzRKZzYybXh1ei8wOE4vWFB4aEp4ZFRyZ0t3bHMzSmNpRHc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTA2MjA1CWZpbGU6VGVzdEJlbmNoXzAuMC4xNl94NjQtc2V0dXAuZXhlCjhqNTJMUWdzWVI4ZDcxUkM1YmE1c1MrdG9peDNEUExSU2ZSYlZWK2JtRUwwTTAzRDZOaXppcTVKeC9wTnlWdUlOSnpZbS9WNG5ZWGdBZ2Y2M2FmS0FnPT0K",
-      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.16/TestBench_0.0.16_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkU2N0c4Q2tOV3ZUTzFWd090M1dockFJZktKRTFNS2JMbWloYSszcVFCMW5JWWQxeVp2OFNUZmRkWWpheVlQYVRoVitLQ0g1dERKMHBLdEt3clFERkFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTA3Njg0CWZpbGU6VGVzdEJlbmNoXzAuMC4xN194NjQtc2V0dXAuZXhlCi9qVURHMmd5RnZPbVBncDMvMjhweUdzUjVPVWJRL2lET21wVGlRQ1oyT01mbEZoREtwNjdqUVViUnd1TkJHSnBwUExnOTZkWFV6ZW1aTE5vS3dhZ0NRPT0K",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.17/TestBench_0.0.17_x64-setup.exe"
     },
     "windows-x86_64-msi": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkc0U3BnUHZvczlLQkFNOWpUSjFYNnR4T1Q5TUJ6aE90c0c3cFpaZERYTGQvZC90d3hNYXhlS1VpazdnVDQzaUYwTGgvRCs0MVBONEN0WFF6bDJJVndJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTA2MjA1CWZpbGU6VGVzdEJlbmNoXzAuMC4xNl94NjRfZW4tVVMubXNpCjdnL044VWY0WlBhMG9keTNLU0NtUUdjakxMcWpBWmM1N1pJcU1mMUlrOHlmSjA0ODFBUFkyNkx6N2NEVmkyOGNmM3A4YUFVWERRM3ROSkxxazBwNkFRPT0K",
-      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.16/TestBench_0.0.16_x64_en-US.msi"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVktCR1IveC9peVlZai9GRjc1Szlkd296V2lnK3ZURmhleU1sQytBQzRxZXdSeUFueTJubU1zSEJpUUx3bWFOL3RzSmtQdmMzMUJkSFdlMXYvOVFpMUFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTA3Njg0CWZpbGU6VGVzdEJlbmNoXzAuMC4xN194NjRfZW4tVVMubXNpClpYRmlWREtTTFIzUGswNGRTVkxoSXhkV1dxUmZDMnJBT3BiOXpNRzhYTHRKbDc3M1l2U1I1TEZjKy9IdTBlWjFkUkFiLys0cUNpWkdCT3hmbFFMTUF3PT0K",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.17/TestBench_0.0.17_x64_en-US.msi"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVktXT2RkQ3k4ZWpZT1NPR3hrVWtCSWs5UHg3U21PYW12a0NYV1diVXhJT09IMTB1Njc2QzRKZzYybXh1ei8wOE4vWFB4aEp4ZFRyZ0t3bHMzSmNpRHc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTA2MjA1CWZpbGU6VGVzdEJlbmNoXzAuMC4xNl94NjQtc2V0dXAuZXhlCjhqNTJMUWdzWVI4ZDcxUkM1YmE1c1MrdG9peDNEUExSU2ZSYlZWK2JtRUwwTTAzRDZOaXppcTVKeC9wTnlWdUlOSnpZbS9WNG5ZWGdBZ2Y2M2FmS0FnPT0K",
-      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.16/TestBench_0.0.16_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkU2N0c4Q2tOV3ZUTzFWd090M1dockFJZktKRTFNS2JMbWloYSszcVFCMW5JWWQxeVp2OFNUZmRkWWpheVlQYVRoVitLQ0g1dERKMHBLdEt3clFERkFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTA3Njg0CWZpbGU6VGVzdEJlbmNoXzAuMC4xN194NjQtc2V0dXAuZXhlCi9qVURHMmd5RnZPbVBncDMvMjhweUdzUjVPVWJRL2lET21wVGlRQ1oyT01mbEZoREtwNjdqUVViUnd1TkJHSnBwUExnOTZkWFV6ZW1aTE5vS3dhZ0NRPT0K",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.17/TestBench_0.0.17_x64-setup.exe"
     }
   }
 }
