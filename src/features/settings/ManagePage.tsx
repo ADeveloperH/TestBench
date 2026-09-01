@@ -21,12 +21,18 @@ import type { TestCasesStore } from "../testcases/useTestCasesStore";
 import type { FilterState } from "../../core/types";
 import { FilterManager } from "../filters/FilterManager";
 import { TestCaseManager } from "../testcases/TestCaseManager";
+import { TagBlockManager } from "./TagBlockManager";
+import type {
+  EffectiveTagBlockRule,
+  TagBlockMatch,
+} from "../../core/tagBlockRules";
 
 export type ManageTab =
   | "general"
   | "apps"
   | "search"
   | "tags"
+  | "tag-blocking"
   | "testcases"
   | "filters"
   | "help"
@@ -54,6 +60,17 @@ interface Props {
   onMoveFavorite: (kind: ListKind, fromIndex: number, toIndex: number) => void;
   onRemoveHistory: (kind: ListKind, value: string) => void;
   onClearHistory: (kind: ListKind) => void;
+  tagBlockRules: EffectiveTagBlockRule[];
+  onSetTagBlockingEnabled: (enabled: boolean) => void;
+  onAddTagBlockRule: (
+    value: string,
+    description: string,
+    match: TagBlockMatch,
+    group: string,
+  ) => string;
+  onRemoveTagBlockRule: (id: string) => void;
+  onSetTagBlockRuleEnabled: (id: string, enabled: boolean) => void;
+  onSetTagBlockGroupEnabled: (group: string, enabled: boolean) => void;
   savedFilters: SavedFilter[];
   onSaveFilter: (name: string, filters: FilterState) => string;
   onRenameFilter: (id: string, name: string) => void;
@@ -114,6 +131,12 @@ export function ManagePage(props: Props) {
       apps: props.effectiveApps,
       searchFavorites: props.prefs.searchFavorites,
       tagFavorites: props.prefs.tagFavorites,
+      tagBlockRules: props.tagBlockRules.map(
+        ({ builtin: _builtin, enabled, ...rule }) => ({
+          ...rule,
+          enabledByDefault: enabled,
+        }),
+      ),
       filters: props.savedFilters,
       testCases: props.testCaseStore.cases,
     });
@@ -126,7 +149,7 @@ export function ManagePage(props: Props) {
       const data: unknown = JSON.parse(remoteJson);
       const cfg = validateRemoteConfig(data);
       setPublishMsg(
-        `校验通过（schemaVersion ${cfg.schemaVersion}：应用 ${cfg.apps?.length ?? 0} 个、搜索常用 ${cfg.searchFavorites?.length ?? 0} 条、Tag 常用 ${cfg.tagFavorites?.length ?? 0} 条、过滤器 ${cfg.filters?.length ?? 0} 个、测试用例 ${cfg.testCases?.length ?? 0} 条）`,
+        `校验通过（schemaVersion ${cfg.schemaVersion}：应用 ${cfg.apps?.length ?? 0} 个、搜索常用 ${cfg.searchFavorites?.length ?? 0} 条、Tag 常用 ${cfg.tagFavorites?.length ?? 0} 条、Tag 屏蔽 ${cfg.tagBlockRules?.length ?? 0} 条、过滤器 ${cfg.filters?.length ?? 0} 个、测试用例 ${cfg.testCases?.length ?? 0} 条）`,
       );
     } catch (e) {
       setPublishMsg(`校验失败：${String(e)}`);
@@ -266,6 +289,15 @@ export function ManagePage(props: Props) {
             <button className={tab === "tags" ? "active" : ""} onClick={() => setTab("tags")}>
               <span>常用 Tag</span>
               <small>{props.prefs.tagFavorites.length} 项</small>
+            </button>
+            <button
+              className={tab === "tag-blocking" ? "active" : ""}
+              onClick={() => setTab("tag-blocking")}
+            >
+              <span>Tag 屏蔽</span>
+              <small>
+                {props.tagBlockRules.filter((rule) => rule.enabled).length} / {props.tagBlockRules.length} 条
+              </small>
             </button>
             <button className={tab === "filters" ? "active" : ""} onClick={() => setTab("filters")}>
               <span>过滤器</span>
@@ -534,6 +566,18 @@ export function ManagePage(props: Props) {
         />
       )}
 
+      {tab === "tag-blocking" && (
+        <TagBlockManager
+          enabled={props.prefs.tagBlockingEnabled}
+          rules={props.tagBlockRules}
+          onSetEnabled={props.onSetTagBlockingEnabled}
+          onAdd={props.onAddTagBlockRule}
+          onRemove={props.onRemoveTagBlockRule}
+          onSetRuleEnabled={props.onSetTagBlockRuleEnabled}
+          onSetGroupEnabled={props.onSetTagBlockGroupEnabled}
+        />
+      )}
+
       {tab === "testcases" && (
         <TestCaseManager store={props.testCaseStore} apps={props.effectiveApps} />
       )}
@@ -629,7 +673,8 @@ export function ManagePage(props: Props) {
             把当前界面上的配置（内置 + 本地）生成为 remote-config.json，
             一键提交到仓库后，所有用户下次启动自动更新，无需发版。
             JSON 各字段对应：apps=应用、searchFavorites=搜索常用、
-            tagFavorites=Tag 常用、filters=过滤器、testCases=测试用例。
+            tagFavorites=Tag 常用、tagBlockRules=Tag 屏蔽、filters=过滤器、
+            testCases=测试用例。
           </p>
           <div className="manage-add">
             <button onClick={doGenerateRemoteJson}>生成配置 JSON</button>
@@ -680,7 +725,8 @@ export function ManagePage(props: Props) {
           <p className="count">
             当前生效配置：应用 {props.effectiveApps.length} · 搜索常用{" "}
             {props.prefs.searchFavorites.length} · Tag 常用{" "}
-            {props.prefs.tagFavorites.length} · 过滤器 {props.savedFilters.length}{" "}
+            {props.prefs.tagFavorites.length} · Tag 屏蔽 {props.tagBlockRules.length}{" "}
+            · 过滤器 {props.savedFilters.length}{" "}
             · 测试用例 {props.testCaseStore.cases.length}
           </p>
           <textarea

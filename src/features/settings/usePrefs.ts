@@ -1,14 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AppInfo } from "../../core/apps";
 import { isBuiltinApp } from "../../core/apps";
 import {
   getBuiltinSearchFavorites,
   getBuiltinSearchValues,
   getBuiltinTagFavorites,
+  getBuiltinTagBlockRules,
   getBuiltinTagValues,
   subscribeBuiltins,
 } from "../../core/builtinRegistry";
 import { IS_DEBUG } from "../../core/debug";
+import type {
+  EffectiveTagBlockRule,
+  TagBlockMatch,
+  TagBlockRule,
+} from "../../core/tagBlockRules";
 
 export type ListKind = "search" | "tags";
 
@@ -22,6 +28,12 @@ export interface Prefs {
   searchHistory: string[];
   tagFavorites: Favorite[];
   tagHistory: string[];
+  /** 普通日志页是否启用全局 Tag 屏蔽。 */
+  tagBlockingEnabled: boolean;
+  /** 用户本地添加的 Tag 屏蔽规则。 */
+  customTagBlockRules: TagBlockRule[];
+  /** 用户对内置/自定义规则启用状态的明确覆盖。 */
+  tagBlockEnabledOverrides: Record<string, boolean>;
   /** 用户手动添加的应用 */
   addedApps: AppInfo[];
   /** 用户手动删除（隐藏）的内置应用包名 */
@@ -59,6 +71,9 @@ const DEFAULTS: Prefs = {
   searchHistory: [],
   tagFavorites: [],
   tagHistory: [],
+  tagBlockingEnabled: true,
+  customTagBlockRules: [],
+  tagBlockEnabledOverrides: {},
   addedApps: [],
   removedPackages: [],
   appOrder: [],
@@ -86,6 +101,73 @@ function normalizeFavorites(x: unknown): Favorite[] {
     }
   }
   return out;
+}
+
+function normalizeTagBlockRules(x: unknown): TagBlockRule[] {
+  if (!Array.isArray(x)) return [];
+  const out: TagBlockRule[] = [];
+  const seen = new Set<string>();
+  for (const item of x) {
+    if (!item || typeof item !== "object") continue;
+    const rule = item as Partial<TagBlockRule>;
+    if (
+      typeof rule.id !== "string" ||
+      !rule.id ||
+      seen.has(rule.id) ||
+      typeof rule.value !== "string" ||
+      !rule.value.trim() ||
+      (rule.match !== "exact" && rule.match !== "prefix")
+    ) {
+      continue;
+    }
+    seen.add(rule.id);
+    out.push({
+      id: rule.id,
+      value: rule.value.trim(),
+      description:
+        typeof rule.description === "string" ? rule.description.trim() : "",
+      match: rule.match,
+      group:
+        typeof rule.group === "string" && rule.group.trim()
+          ? rule.group.trim()
+          : "自定义",
+      enabledByDefault: rule.enabledByDefault !== false,
+    });
+  }
+  return out;
+}
+
+function normalizeBooleanRecord(x: unknown): Record<string, boolean> {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return {};
+  const out: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(x)) {
+    if (key && typeof value === "boolean") out[key] = value;
+  }
+  return out;
+}
+
+function mergeTagBlockRules(base: Prefs): EffectiveTagBlockRule[] {
+  const builtins = getBuiltinTagBlockRules();
+  const builtinIds = new Set(builtins.map((rule) => rule.id));
+  const definitions = [
+    ...builtins.map((rule) => ({ ...rule, builtin: true })),
+    ...base.customTagBlockRules
+      .filter((rule) => !builtinIds.has(rule.id))
+      .map((rule) => ({ ...rule, builtin: false })),
+  ];
+  return definitions
+    .map((rule) => ({
+      ...rule,
+      enabled:
+        base.tagBlockEnabledOverrides[rule.id] ?? rule.enabledByDefault,
+    }))
+    .sort(
+      (a, b) =>
+        a.value.localeCompare(b.value, "en", {
+          sensitivity: "base",
+          numeric: true,
+        }) || a.id.localeCompare(b.id),
+    );
 }
 
 function mergeFavoritesWithBuiltins(
@@ -162,8 +244,15 @@ function load(): Prefs {
     if (raw) {
       const d = JSON.parse(raw) as Partial<Prefs>;
       Object.assign(base, d);
+      delete (base as Prefs & { tagBlockOrder?: unknown }).tagBlockOrder;
       base.searchFavorites = normalizeFavorites(d.searchFavorites);
       base.tagFavorites = normalizeFavorites(d.tagFavorites);
+      base.tagBlockingEnabled =
+        typeof d.tagBlockingEnabled === "boolean" ? d.tagBlockingEnabled : true;
+      base.customTagBlockRules = normalizeTagBlockRules(d.customTagBlockRules);
+      base.tagBlockEnabledOverrides = normalizeBooleanRecord(
+        d.tagBlockEnabledOverrides,
+      );
     }
   } catch {
     // 忽略损坏的缓存
@@ -176,6 +265,7 @@ function load(): Prefs {
 
 export function usePrefs() {
   const [prefs, setPrefs] = useState<Prefs>(load);
+  const tagBlockRules = useMemo(() => mergeTagBlockRules(prefs), [prefs]);
 
   // 远程配置变化（内置层替换）时重算：内置置顶，用户数据保留。
   useEffect(() => {
@@ -360,6 +450,90 @@ export function usePrefs() {
     });
   }, []);
 
+  const setTagBlockingEnabled = useCallback((enabled: boolean) => {
+    setPrefs((p) => ({ ...p, tagBlockingEnabled: enabled }));
+  }, []);
+
+  const addTagBlockRule = useCallback(
+    (
+      value: string,
+      description: string,
+      match: TagBlockMatch,
+      group: string,
+    ): string => {
+      const tag = value.trim();
+      if (!tag) return "";
+      const id = `custom_tag_block_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      setPrefs((p) => {
+        const duplicate = [
+          ...getBuiltinTagBlockRules(),
+          ...p.customTagBlockRules,
+        ].some(
+          (rule) =>
+            rule.match === match &&
+            rule.value.trim().toLowerCase() === tag.toLowerCase(),
+        );
+        if (duplicate) return p;
+        const rule: TagBlockRule = {
+          id,
+          value: tag,
+          description: description.trim(),
+          match,
+          group: group.trim() || "自定义",
+          enabledByDefault: true,
+        };
+        return {
+          ...p,
+          customTagBlockRules: [...p.customTagBlockRules, rule],
+        };
+      });
+      return id;
+    },
+    [],
+  );
+
+  const removeTagBlockRule = useCallback((id: string) => {
+    setPrefs((p) => {
+      if (!p.customTagBlockRules.some((rule) => rule.id === id)) return p;
+      const overrides = { ...p.tagBlockEnabledOverrides };
+      delete overrides[id];
+      return {
+        ...p,
+        customTagBlockRules: p.customTagBlockRules.filter(
+          (rule) => rule.id !== id,
+        ),
+        tagBlockEnabledOverrides: overrides,
+      };
+    });
+  }, []);
+
+  const setTagBlockRuleEnabled = useCallback(
+    (id: string, enabled: boolean) => {
+      setPrefs((p) => ({
+        ...p,
+        tagBlockEnabledOverrides: {
+          ...p.tagBlockEnabledOverrides,
+          [id]: enabled,
+        },
+      }));
+    },
+    [],
+  );
+
+  const setTagBlockGroupEnabled = useCallback(
+    (group: string, enabled: boolean) => {
+      const ids = tagBlockRules
+        .filter((rule) => rule.group === group)
+        .map((rule) => rule.id);
+      setPrefs((p) => {
+        const overrides = { ...p.tagBlockEnabledOverrides };
+        for (const id of ids) overrides[id] = enabled;
+        return { ...p, tagBlockEnabledOverrides: overrides };
+      });
+    },
+    [tagBlockRules],
+  );
+
   const replacePrefs = useCallback((p: Prefs) => {
     setPrefs(p);
   }, []);
@@ -378,6 +552,7 @@ export function usePrefs() {
 
   return {
     prefs,
+    tagBlockRules,
     addHistory,
     removeHistory,
     clearHistory,
@@ -389,6 +564,11 @@ export function usePrefs() {
     removeApp,
     setAppOrder,
     setBackdoorOverride,
+    setTagBlockingEnabled,
+    addTagBlockRule,
+    removeTagBlockRule,
+    setTagBlockRuleEnabled,
+    setTagBlockGroupEnabled,
     replacePrefs,
     setMergeStack,
     setTheme,

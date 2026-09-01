@@ -47,6 +47,10 @@ import {
   subscribeBuiltins,
 } from "./core/builtinRegistry";
 import { refreshRemoteConfig } from "./core/remoteConfig";
+import {
+  isTagBlocked,
+  type TagBlockMatch,
+} from "./core/tagBlockRules";
 import { IS_DEBUG } from "./core/debug";
 import { getVersion } from "@tauri-apps/api/app";
 import {
@@ -73,6 +77,14 @@ const DETAIL_MIN_HEIGHT = 80;
 const DETAIL_MAX_HEIGHT = 600;
 /** 普通日志 Tab 选择了未运行应用时，用一个不可能命中的 PID 保持空结果。 */
 const NO_RUNNING_APP_PID = "__testbench_no_running_app__";
+
+interface TagBlockDialogState {
+  value: string;
+  description: string;
+  match: TagBlockMatch;
+  group: string;
+  enableGlobal: boolean;
+}
 
 function parseAppPackages(value?: string): string[] {
   return [
@@ -175,12 +187,19 @@ export default function App() {
   const [showCases, setShowCases] = useState(logTabs.activeTab.showTestCases);
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showFilterSave, setShowFilterSave] = useState(false);
+  const [showBlockedTags, setShowBlockedTags] = useState(false);
+  const [tagBlockDialog, setTagBlockDialog] =
+    useState<TagBlockDialogState | null>(null);
   const [showTestTabCreate, setShowTestTabCreate] = useState(false);
   const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null);
   const [testTabPackage, setTestTabPackage] = useState("");
   const [testTabName, setTestTabName] = useState("");
   const [manageTab, setManageTab] = useState<ManageTab>("apps");
   const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setShowBlockedTags(false);
+  }, [logTabs.activeTabId, prefs.prefs.tagBlockingEnabled]);
 
   // Bugreport 属于设备级后台任务，状态必须跨页面保留；否则返回日志页后
   // 再进入工具页会丢失进度，看起来像任务已经停止。
@@ -368,7 +387,7 @@ export default function App() {
 
   // 先应用当前 Tab 的清空/暂停边界，再做展示合并。这样在用户清空日志或
   // 启动测试监控的边界上，新的堆栈续行不会被合并进已经隐藏的旧记录。
-  const tabEntries = useMemo(() => {
+  const tabProjection = useMemo(() => {
     const source = isTestTab ? testSessionEntries : entries;
     const display: LogEntry[] = [];
     for (const entry of source) {
@@ -380,7 +399,25 @@ export default function App() {
       }
       appendDisplayEntry(display, entry, prefs.prefs.mergeStack);
     }
-    return isTestTab ? display : filterLogEntries(display, filters);
+    if (isTestTab) return { entries: display, blockedCount: 0 };
+
+    const filtered = filterLogEntries(display, filters);
+    if (!prefs.prefs.tagBlockingEnabled) {
+      return { entries: filtered, blockedCount: 0 };
+    }
+    const blockedCount = filtered.reduce(
+      (count, entry) =>
+        count + (isTagBlocked(entry.tag, prefs.tagBlockRules) ? 1 : 0),
+      0,
+    );
+    return {
+      entries: showBlockedTags
+        ? filtered
+        : filtered.filter(
+            (entry) => !isTagBlocked(entry.tag, prefs.tagBlockRules),
+          ),
+      blockedCount,
+    };
   }, [
     entries,
     testSessionEntries,
@@ -388,8 +425,13 @@ export default function App() {
     activeTabClearedBeforeId,
     activeTabPausedAtId,
     prefs.prefs.mergeStack,
+    prefs.prefs.tagBlockingEnabled,
+    prefs.tagBlockRules,
+    showBlockedTags,
     filters,
   ]);
+  const tabEntries = tabProjection.entries;
+  const blockedTagCount = tabProjection.blockedCount;
 
   const tabAllEntries = useMemo(() => {
     if (isTestTab) return testSessionEntries;
@@ -407,6 +449,14 @@ export default function App() {
   ]);
 
   const selectedEntry = tabEntries.find((e) => e.id === selectedId) ?? null;
+  const duplicateTagBlockRule = tagBlockDialog
+    ? prefs.tagBlockRules.find(
+        (rule) =>
+          rule.match === tagBlockDialog.match &&
+          rule.value.trim().toLowerCase() ===
+            tagBlockDialog.value.trim().toLowerCase(),
+      )
+    : undefined;
   const [scrollCommand, setScrollCommand] = useState<ScrollCommand | null>(null);
   const prevFiltersRef = useRef(filters);
 
@@ -1310,6 +1360,12 @@ export default function App() {
           }
           onRemoveHistory={(kind, v) => prefs.removeHistory(kind, v)}
           onClearHistory={(kind) => prefs.clearHistory(kind)}
+          tagBlockRules={prefs.tagBlockRules}
+          onSetTagBlockingEnabled={prefs.setTagBlockingEnabled}
+          onAddTagBlockRule={prefs.addTagBlockRule}
+          onRemoveTagBlockRule={prefs.removeTagBlockRule}
+          onSetTagBlockRuleEnabled={prefs.setTagBlockRuleEnabled}
+          onSetTagBlockGroupEnabled={prefs.setTagBlockGroupEnabled}
           onSetAppOrder={(order) => prefs.setAppOrder(order)}
           onSetBackdoorOverride={(pkg, a) => prefs.setBackdoorOverride(pkg, a)}
           onMoveFavorite={(kind, from, to) =>
@@ -1671,6 +1727,23 @@ export default function App() {
               </div>
             </>
           )}
+          {!isTestTab &&
+            prefs.prefs.tagBlockingEnabled &&
+            blockedTagCount > 0 && (
+              <button
+                className={`toolbar-icon-action tag-block-visibility ${showBlockedTags ? "active" : ""}`}
+                onClick={() => setShowBlockedTags((visible) => !visible)}
+                title={
+                  showBlockedTags
+                    ? "恢复隐藏全局屏蔽规则命中的日志"
+                    : "临时显示本页面被全局屏蔽的日志"
+                }
+              >
+                {showBlockedTags
+                  ? `屏蔽日志已显示 ${blockedTagCount}`
+                  : `已隐藏 ${blockedTagCount}`}
+              </button>
+            )}
           <span className="count toolbar-log-count">共 {tabEntries.length} 条</span>
         </div>
 
@@ -1852,6 +1925,162 @@ export default function App() {
           document.body,
         )}
 
+      {tagBlockDialog &&
+        createPortal(
+          <div
+            className="save-description-backdrop"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setTagBlockDialog(null);
+            }}
+          >
+            <form
+              className="save-description-dialog tag-block-quick-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label="添加 Tag 全局屏蔽"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setTagBlockDialog(null);
+              }}
+              onSubmit={(event) => {
+                event.preventDefault();
+                const value = tagBlockDialog.value.trim();
+                if (!value) return;
+                if (duplicateTagBlockRule) {
+                  if (!duplicateTagBlockRule.enabled) {
+                    prefs.setTagBlockRuleEnabled(duplicateTagBlockRule.id, true);
+                  }
+                } else {
+                  prefs.addTagBlockRule(
+                    value,
+                    tagBlockDialog.description,
+                    tagBlockDialog.match,
+                    tagBlockDialog.group,
+                  );
+                }
+                if (tagBlockDialog.enableGlobal) {
+                  prefs.setTagBlockingEnabled(true);
+                }
+                setShowBlockedTags(false);
+                setSelectedId(null);
+                setTagBlockDialog(null);
+              }}
+            >
+              <h3>添加 Tag 全局屏蔽</h3>
+              <p>
+                保存后，该规则只会隐藏普通日志页面中的匹配日志，测试用例页面和规则检测不受影响。
+              </p>
+              <label>
+                Logcat Tag
+                <input
+                  value={tagBlockDialog.value}
+                  autoFocus
+                  placeholder="例如：chatty"
+                  onChange={(event) =>
+                    setTagBlockDialog((current) =>
+                      current
+                        ? { ...current, value: event.target.value }
+                        : current,
+                    )
+                  }
+                />
+              </label>
+              <label>
+                匹配方式
+                <Select
+                  className="tag-block-dialog-select"
+                  value={tagBlockDialog.match}
+                  menuClassName="select-menu-modal"
+                  options={[
+                    { value: "exact", label: "精确匹配" },
+                    { value: "prefix", label: "前缀匹配" },
+                  ]}
+                  onChange={(match) =>
+                    setTagBlockDialog((current) =>
+                      current
+                        ? { ...current, match: match as TagBlockMatch }
+                        : current,
+                    )
+                  }
+                />
+              </label>
+              <label>
+                分组
+                <input
+                  value={tagBlockDialog.group}
+                  placeholder="例如：系统噪音"
+                  onChange={(event) =>
+                    setTagBlockDialog((current) =>
+                      current
+                        ? { ...current, group: event.target.value }
+                        : current,
+                    )
+                  }
+                />
+              </label>
+              <label>
+                描述（可选）
+                <input
+                  value={tagBlockDialog.description}
+                  placeholder="说明这个 Tag 为什么需要屏蔽"
+                  onChange={(event) =>
+                    setTagBlockDialog((current) =>
+                      current
+                        ? { ...current, description: event.target.value }
+                        : current,
+                    )
+                  }
+                />
+              </label>
+              {!prefs.prefs.tagBlockingEnabled && (
+                <label className="checkbox tag-block-dialog-enable">
+                  <input
+                    type="checkbox"
+                    checked={tagBlockDialog.enableGlobal}
+                    onChange={(event) =>
+                      setTagBlockDialog((current) =>
+                        current
+                          ? { ...current, enableGlobal: event.target.checked }
+                          : current,
+                      )
+                    }
+                  />
+                  同时启用普通日志页的全局 Tag 屏蔽
+                </label>
+              )}
+              {duplicateTagBlockRule && (
+                <div className="settings-inline-status">
+                  {duplicateTagBlockRule.enabled
+                    ? "相同 Tag 和匹配方式的规则已经存在并启用。"
+                    : "相同规则已经存在，确认后将重新启用。"}
+                </div>
+              )}
+              <div className="save-description-actions">
+                <button type="button" onClick={() => setTagBlockDialog(null)}>
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="primary-action"
+                  disabled={
+                    !tagBlockDialog.value.trim() ||
+                    (duplicateTagBlockRule?.enabled &&
+                      (prefs.prefs.tagBlockingEnabled ||
+                        !tagBlockDialog.enableGlobal))
+                  }
+                >
+                  {duplicateTagBlockRule
+                    ? duplicateTagBlockRule.enabled
+                      ? "启用全局屏蔽"
+                      : "启用已有规则"
+                    : "添加并屏蔽"}
+                </button>
+              </div>
+            </form>
+          </div>,
+          document.body,
+        )}
+
       <div className="log-main">
         <div className="log-left" ref={logLeftRef}>
           <LogList
@@ -1869,7 +2098,7 @@ export default function App() {
             onFindStateChange={(find) =>
               logTabs.updateTab(logTabs.activeTabId, { find })
             }
-            layoutKey={`${logTabs.activeTabId}|${filters.search}|${filters.regex}|${filters.tags}|${filters.app}|${filters.minLevel}|${logTabs.activeTab.clearedBeforeId}|${logTabs.activeTab.pausedAtId ?? "live"}`}
+            layoutKey={`${logTabs.activeTabId}|${filters.search}|${filters.regex}|${filters.tags}|${filters.app}|${filters.minLevel}|${prefs.prefs.tagBlockingEnabled}|${showBlockedTags}|${prefs.tagBlockRules.filter((rule) => rule.enabled).map((rule) => rule.id).join(",")}|${logTabs.activeTab.clearedBeforeId}|${logTabs.activeTab.pausedAtId ?? "live"}`}
           />
           {selectedEntry && (
             <div className="log-detail" style={{ height: detailHeight }}>
@@ -1907,6 +2136,20 @@ export default function App() {
                       }
                     >
                       排除此 Tag
+                    </button>
+                    <button
+                      title={`将 Tag「${selectedEntry.tag}」添加到全局屏蔽`}
+                      onClick={() =>
+                        setTagBlockDialog({
+                          value: selectedEntry.tag,
+                          description: "",
+                          match: "exact",
+                          group: "自定义",
+                          enableGlobal: true,
+                        })
+                      }
+                    >
+                      全局屏蔽此 Tag
                     </button>
                   </>
                 )}

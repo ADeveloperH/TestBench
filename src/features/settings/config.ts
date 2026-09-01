@@ -4,6 +4,7 @@ import type { AppInfo } from "../../core/apps";
 import type { TestCase } from "../testcases/engine";
 import type { SavedFilter } from "../filters/useSavedFilters";
 import type { Favorite, Prefs } from "./usePrefs";
+import type { TagBlockRule } from "../../core/tagBlockRules";
 
 export interface ExportConfig {
   version: number;
@@ -13,7 +14,7 @@ export interface ExportConfig {
   savedFilters: SavedFilter[];
 }
 
-const CONFIG_VERSION = 1;
+const CONFIG_VERSION = 2;
 
 function defaultPrefs(): Prefs {
   return {
@@ -21,6 +22,9 @@ function defaultPrefs(): Prefs {
     searchHistory: [],
     tagFavorites: [],
     tagHistory: [],
+    tagBlockingEnabled: true,
+    customTagBlockRules: [],
+    tagBlockEnabledOverrides: {},
     addedApps: [],
     removedPackages: [],
     appOrder: [],
@@ -31,6 +35,39 @@ function defaultPrefs(): Prefs {
     removedBuiltinSearch: [],
     removedBuiltinTags: [],
   };
+}
+
+function normalizeTagBlockRules(value: unknown): TagBlockRule[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.filter((item): item is TagBlockRule => {
+    if (!item || typeof item !== "object") return false;
+    const rule = item as Partial<TagBlockRule>;
+    if (
+      typeof rule.id !== "string" ||
+      !rule.id ||
+      seen.has(rule.id) ||
+      typeof rule.value !== "string" ||
+      !rule.value.trim() ||
+      typeof rule.description !== "string" ||
+      (rule.match !== "exact" && rule.match !== "prefix") ||
+      typeof rule.group !== "string" ||
+      typeof rule.enabledByDefault !== "boolean"
+    ) {
+      return false;
+    }
+    seen.add(rule.id);
+    return true;
+  });
+}
+
+function normalizeBooleanRecord(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      ([id, enabled]) => id.length > 0 && typeof enabled === "boolean",
+    ),
+  );
 }
 
 /** 导出：把三处本地配置打包成可分享的结构。 */
@@ -56,6 +93,12 @@ function normalizePrefs(p: Partial<Prefs> | undefined): Prefs {
     searchHistory: Array.isArray(p.searchHistory) ? p.searchHistory : [],
     tagFavorites: Array.isArray(p.tagFavorites) ? p.tagFavorites : [],
     tagHistory: Array.isArray(p.tagHistory) ? p.tagHistory : [],
+    tagBlockingEnabled:
+      typeof p.tagBlockingEnabled === "boolean" ? p.tagBlockingEnabled : true,
+    customTagBlockRules: normalizeTagBlockRules(p.customTagBlockRules),
+    tagBlockEnabledOverrides: normalizeBooleanRecord(
+      p.tagBlockEnabledOverrides,
+    ),
     addedApps: Array.isArray(p.addedApps) ? p.addedApps : [],
     removedPackages: Array.isArray(p.removedPackages) ? p.removedPackages : [],
     appOrder: Array.isArray(p.appOrder) ? p.appOrder : [],
@@ -114,6 +157,17 @@ function mergeApps(local: AppInfo[], imported: AppInfo[]): AppInfo[] {
   return [...map.values()];
 }
 
+function mergeTagBlockRules(
+  local: TagBlockRule[],
+  imported: TagBlockRule[],
+): TagBlockRule[] {
+  const map = new Map(local.map((rule) => [rule.id, rule]));
+  for (const rule of imported) {
+    if (!map.has(rule.id)) map.set(rule.id, rule);
+  }
+  return [...map.values()];
+}
+
 function mergeOrder(localOrder: string[], importedOrder: string[]): string[] {
   const result = [...localOrder];
   const seen = new Set(localOrder);
@@ -132,6 +186,15 @@ function mergePrefs(local: Prefs, imported: Prefs): Prefs {
     searchHistory: mergeHistory(local.searchHistory, imported.searchHistory),
     tagFavorites: mergeFavorites(local.tagFavorites, imported.tagFavorites),
     tagHistory: mergeHistory(local.tagHistory, imported.tagHistory),
+    tagBlockingEnabled: local.tagBlockingEnabled,
+    customTagBlockRules: mergeTagBlockRules(
+      local.customTagBlockRules,
+      imported.customTagBlockRules,
+    ),
+    tagBlockEnabledOverrides: {
+      ...imported.tagBlockEnabledOverrides,
+      ...local.tagBlockEnabledOverrides,
+    },
     addedApps: mergeApps(local.addedApps, imported.addedApps),
     removedPackages: [
       ...new Set([...local.removedPackages, ...imported.removedPackages]),

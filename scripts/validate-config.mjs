@@ -39,6 +39,15 @@ function loadJson(rel) {
       ["apps", (x) => typeof x.name === "string" && x.name && typeof x.package === "string" && x.package],
       ["searchFavorites", (x) => typeof x.value === "string" && x.value],
       ["tagFavorites", (x) => typeof x.value === "string" && x.value],
+      ["tagBlockRules", (x) =>
+        typeof x.id === "string" &&
+        x.id &&
+        typeof x.value === "string" &&
+        x.value &&
+        typeof x.description === "string" &&
+        (x.match === "exact" || x.match === "prefix") &&
+        typeof x.group === "string" &&
+        typeof x.enabledByDefault === "boolean"],
       ["filters", (x) => typeof x.id === "string" && typeof x.name === "string" && !!x.filters && typeof x.filters === "object"],
       ["testCases", (x) => typeof x.id === "string" && typeof x.name === "string" && Array.isArray(x.rules)],
     ];
@@ -50,6 +59,22 @@ function loadJson(rel) {
         const bad = arr.findIndex((x) => !isItem(x));
         check(p, bad < 0, `「${name}」第 ${bad + 1} 项格式不正确`);
       }
+    }
+    if (Array.isArray(data.tagBlockRules)) {
+      const ids = data.tagBlockRules.map((rule) => rule.id);
+      const fingerprints = data.tagBlockRules.map(
+        (rule) => `${rule.match}:${rule.value.trim().toLowerCase()}`,
+      );
+      check(
+        p,
+        new Set(ids).size === ids.length,
+        "「tagBlockRules」id 不能重复",
+      );
+      check(
+        p,
+        new Set(fingerprints).size === fingerprints.length,
+        "「tagBlockRules」Tag 与匹配方式不能重复",
+      );
     }
   }
 }

@@ -10,6 +10,7 @@
 
 import type { Favorite } from "../features/settings/usePrefs";
 import type { SavedFilter } from "../features/filters/useSavedFilters";
+import type { TagBlockRule } from "./tagBlockRules";
 
 /**
  * 内置搜索常用（value 为唯一键）。
@@ -68,6 +69,30 @@ export const BUILTIN_TAG_FAVORITES: Favorite[] = [
   { value: "Android.Stats", description: "埋点统计日志" },
   { value: "Android.HttpAnalyzer", description: "网络诊断日志" },
   { value: "Android.TopActivityMana", description: "Activity 切换日志" },
+];
+
+/** 普通日志页默认屏蔽的低风险系统/媒体噪音。 */
+export const BUILTIN_TAG_BLOCK_RULES: TagBlockRule[] = [
+  { id: "noise_voice_scene_discern", value: "voice_scence_discern", description: "厂商音频场景识别噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_oplus_feedback_info", value: "OplusFeedbackInfo", description: "厂商 FPS/视频反馈噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_audio_manager", value: "AudioManager", description: "系统音量查询噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_acodec", value: "ACodec", description: "媒体解码器生命周期噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_oplus_acodec", value: "OplusACodec", description: "厂商媒体解码器噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_audio_track", value: "AudioTrack", description: "系统音频播放噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_surface_utils", value: "SurfaceUtils", description: "视频渲染 Surface 噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_parcel", value: "Parcel", description: "Android Parcel 系统噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_settings", value: "Settings", description: "系统设置访问日志", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_vapp_manager", value: "VAppManager", description: "系统/ROM 应用管理噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_aaudio", value: "AAudio", description: "Android 低延迟音频噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_aaudio_stream", value: "AAudioStream", description: "AAudio 流状态噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_audio_stream_builder", value: "AudioStreamBuilder", description: "音频流构建日志", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_audio_stream_legacy", value: "AudioStreamLegacy", description: "旧版音频流日志", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_audio_stream_track", value: "AudioStreamTrack", description: "音频轨道状态日志", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_media_codec", value: "MediaCodec", description: "系统媒体编解码噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_extended_acodec", value: "ExtendedACodec", description: "扩展媒体解码器噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_ref_base", value: "RefBase", description: "Android Native 引用计数噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_chromium_media_codec_bridge", value: "cr_MediaCodecBridge", description: "Chromium 媒体桥接噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
+  { id: "noise_session_manager", value: "SessionManager", description: "系统媒体会话噪音", match: "exact", group: "系统与媒体", enabledByDefault: true },
 ];
 
 /**

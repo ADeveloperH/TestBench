@@ -11,10 +11,12 @@ import type { AppInfo } from "./apps";
 import type { Favorite } from "../features/settings/usePrefs";
 import type { SavedFilter } from "../features/filters/useSavedFilters";
 import type { TestCase } from "../features/testcases/engine";
+import type { TagBlockRule } from "./tagBlockRules";
 import { BUILTIN_APPS } from "./apps";
 import {
   BUILTIN_FILTERS,
   BUILTIN_SEARCH_FAVORITES,
+  BUILTIN_TAG_BLOCK_RULES,
   BUILTIN_TAG_FAVORITES,
 } from "./builtins";
 import { BUILTIN_TEST_CASES } from "../features/testcases/engine";
@@ -24,6 +26,7 @@ export interface BuiltinSet {
   apps: AppInfo[];
   searchFavorites: Favorite[];
   tagFavorites: Favorite[];
+  tagBlockRules: TagBlockRule[];
   filters: SavedFilter[];
   testCases: TestCase[];
 }
@@ -37,6 +40,7 @@ export function getCodeBuiltins(): BuiltinSet {
     apps: BUILTIN_APPS,
     searchFavorites: BUILTIN_SEARCH_FAVORITES,
     tagFavorites: BUILTIN_TAG_FAVORITES,
+    tagBlockRules: BUILTIN_TAG_BLOCK_RULES,
     filters: BUILTIN_FILTERS,
     testCases: BUILTIN_TEST_CASES,
   };
@@ -78,6 +82,8 @@ export const getBuiltinApps = (): AppInfo[] => getBuiltins().apps;
 export const getBuiltinSearchFavorites = (): Favorite[] =>
   getBuiltins().searchFavorites;
 export const getBuiltinTagFavorites = (): Favorite[] => getBuiltins().tagFavorites;
+export const getBuiltinTagBlockRules = (): TagBlockRule[] =>
+  getBuiltins().tagBlockRules;
 export const getBuiltinFilters = (): SavedFilter[] => getBuiltins().filters;
 export const getBuiltinTestCases = (): TestCase[] => getBuiltins().testCases;
 
@@ -87,6 +93,8 @@ export const getBuiltinSearchValues = (): Set<string> =>
   new Set(getBuiltinSearchFavorites().map((f) => f.value));
 export const getBuiltinTagValues = (): Set<string> =>
   new Set(getBuiltinTagFavorites().map((f) => f.value));
+export const getBuiltinTagBlockRuleIds = (): Set<string> =>
+  new Set(getBuiltinTagBlockRules().map((rule) => rule.id));
 export const getBuiltinFilterIds = (): Set<string> =>
   new Set(getBuiltinFilters().map((f) => f.id));
 export const getBuiltinTestCaseIds = (): Set<string> =>

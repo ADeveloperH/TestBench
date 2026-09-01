@@ -9,6 +9,7 @@ import type { AppInfo } from "./apps";
 import type { Favorite } from "../features/settings/usePrefs";
 import type { SavedFilter } from "../features/filters/useSavedFilters";
 import type { TestCase } from "../features/testcases/engine";
+import type { TagBlockRule } from "./tagBlockRules";
 import localRemoteConfig from "../../config/remote-config.json";
 import {
   applyBuiltins,
@@ -24,6 +25,7 @@ export interface RemoteConfig {
   apps?: AppInfo[];
   searchFavorites?: Favorite[];
   tagFavorites?: Favorite[];
+  tagBlockRules?: TagBlockRule[];
   filters?: SavedFilter[];
   testCases?: TestCase[];
 }
@@ -82,6 +84,21 @@ function isFavorite(x: unknown): x is Favorite {
   );
 }
 
+function isTagBlockRule(x: unknown): x is TagBlockRule {
+  if (!x || typeof x !== "object") return false;
+  const rule = x as TagBlockRule;
+  return (
+    typeof rule.id === "string" &&
+    rule.id.length > 0 &&
+    typeof rule.value === "string" &&
+    rule.value.length > 0 &&
+    typeof rule.description === "string" &&
+    (rule.match === "exact" || rule.match === "prefix") &&
+    typeof rule.group === "string" &&
+    typeof rule.enabledByDefault === "boolean"
+  );
+}
+
 function isSavedFilter(x: unknown): x is SavedFilter {
   return (
     !!x &&
@@ -128,6 +145,27 @@ export function validateRemoteConfig(data: unknown): RemoteConfig {
   if (typeof d.schemaVersion !== "number") {
     throw new Error("缺少 schemaVersion 字段");
   }
+  const tagBlockRules = checkArray(
+    d.tagBlockRules,
+    "tagBlockRules",
+    isTagBlockRule,
+  ) as TagBlockRule[] | undefined;
+  if (tagBlockRules) {
+    const ids = new Set<string>();
+    const fingerprints = new Set<string>();
+    const duplicate = tagBlockRules.find((rule) => {
+      const fingerprint = `${rule.match}:${rule.value.trim().toLowerCase()}`;
+      if (ids.has(rule.id) || fingerprints.has(fingerprint)) return true;
+      ids.add(rule.id);
+      fingerprints.add(fingerprint);
+      return false;
+    });
+    if (duplicate) {
+      throw new Error(
+        `「tagBlockRules」存在重复 id 或匹配规则：${duplicate.id}`,
+      );
+    }
+  }
   return {
     schemaVersion: d.schemaVersion,
     updatedAt: typeof d.updatedAt === "string" ? d.updatedAt : undefined,
@@ -142,6 +180,7 @@ export function validateRemoteConfig(data: unknown): RemoteConfig {
       "tagFavorites",
       isFavorite,
     ) as Favorite[] | undefined,
+    tagBlockRules,
     filters: checkArray(d.filters, "filters", isSavedFilter) as
       | SavedFilter[]
       | undefined,
@@ -204,6 +243,7 @@ function mergeRemote(code: BuiltinSet, remote: RemoteConfig): BuiltinSet {
     apps: remote.apps ?? code.apps,
     searchFavorites: remote.searchFavorites ?? code.searchFavorites,
     tagFavorites: remote.tagFavorites ?? code.tagFavorites,
+    tagBlockRules: remote.tagBlockRules ?? code.tagBlockRules,
     filters: remote.filters ?? code.filters,
     testCases: remote.testCases ?? code.testCases,
   };
@@ -302,6 +342,7 @@ export function buildRemoteConfigFromState(opts: {
   apps: AppInfo[];
   searchFavorites: Favorite[];
   tagFavorites: Favorite[];
+  tagBlockRules: TagBlockRule[];
   filters: SavedFilter[];
   testCases: TestCase[];
 }): RemoteConfig {
@@ -311,6 +352,7 @@ export function buildRemoteConfigFromState(opts: {
     apps: opts.apps,
     searchFavorites: opts.searchFavorites,
     tagFavorites: opts.tagFavorites,
+    tagBlockRules: opts.tagBlockRules,
     filters: opts.filters,
     testCases: opts.testCases,
   };
