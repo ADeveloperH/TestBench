@@ -9,6 +9,14 @@ from typing import Any, TextIO
 SCHEMA_VERSION = 1
 
 
+def configure_utf8_stdio() -> None:
+    """Keep packaged sidecar pipes deterministic on every Windows locale."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 @dataclass
 class EventEmitter:
     stream: TextIO | None = None
@@ -26,6 +34,9 @@ class EventEmitter:
         }
         self.captured.append(message)
         assert self.stream is not None
-        self.stream.write(json.dumps(message, ensure_ascii=False) + "\n")
+        # Keep the wire protocol ASCII-only. json.loads restores non-ASCII
+        # values from \u escapes, while Windows code pages can no longer turn
+        # one localized path or error message into invalid UTF-8 bytes.
+        self.stream.write(json.dumps(message, ensure_ascii=True) + "\n")
         self.stream.flush()
         return message

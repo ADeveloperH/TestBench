@@ -15,6 +15,7 @@
 - `src-tauri/src/adb/audio_export.rs`：严格校验 Android 包名，解析 `adb shell pm path`，识别 base/split/Asset Pack，并拒绝缺少 `base.apk` 的不完整结果。
 - `src-tauri/src/audio_export/`：新增 `AudioExportController`，负责空间预检、`.part` 原子拉取、APK 资源安全解压、临时目录清理、sidecar 进程生命周期和取消状态。
 - Tauri 注册了 `audio_export_available`、`export_unity_audio`、`cancel_unity_audio_export` 命令及 `audio-export-progress` 事件；工具页已增加入口、进度、取消和结果展示。
+- Windows 首次真实测试暴露的控制台弹窗、系统代码页导致的非 UTF-8 输出，以及 stderr 管道阻塞风险已修复；通用要求记录于 `Docs/跨平台子进程与Sidecar集成规范.md`。
 - 设备工具的 Unity 音频选择器使用当前设备的 `app_runtime_status` 已安装包列表，数据来自设备实时扫描，不依赖 TestBench 应用清单；选择器支持按包名搜索。
 - 当前仓库未跟踪平台二进制；本机 macOS ARM64 已生成 sidecar，能力探测会在开发模式找到它。未打包 sidecar 的发布包仍会禁用入口并提示组件未安装。
 - Mahjong Blast 2.8.7 的历史内部基线仍为 391 个 WAV、0 个解析错误，但当前连接手机未安装该应用，因此本轮不重复实测。
@@ -549,6 +550,7 @@ Sidecar 构建约定：
 | 2026-09-02 | 将 sidecar 构建接入 `.github/workflows/build.yml` 的 Windows/macOS 构建矩阵；tag 发布前会自动安装固定依赖、构建并校验 sidecar |
 | 2026-09-02 | 按需求将 Unity 音频导出移至“设备工具”，应用选择改为设备实时 `pm list packages` 扫描结果，不再依赖 TestBench 应用清单；前端构建、Rust 测试和差异检查通过 |
 | 2026-09-02 | 评估设备应用名称解析后放弃该方案：不同设备上的名称获取成本和可靠性不足，设备工具恢复为直接显示包名并按包名搜索 |
+| 2026-09-02 | Windows `v0.0.22` 真实测试发现 sidecar 控制台弹窗和非 UTF-8 管道错误；Rust 增加隐藏启动、UTF-8/字节容错、stderr 并行排空与失败详情，并建立跨平台子进程集成规范 |
 
 ## 十七、长期任务推进方式
 

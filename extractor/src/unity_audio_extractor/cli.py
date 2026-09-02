@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .protocol import EventEmitter
+from .protocol import EventEmitter, configure_utf8_stdio
 from .scanner import AudioScanner
 
 
@@ -22,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    configure_utf8_stdio()
     args = build_parser().parse_args(argv)
     emitter = EventEmitter()
     if args.command != "scan":

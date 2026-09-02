@@ -20,7 +20,15 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(event["event"], "progress")
         self.assertEqual(event["completed"], 2)
 
+    def test_protocol_escapes_non_ascii_for_windows_pipes(self) -> None:
+        stream = io.StringIO()
+        emitter = EventEmitter(stream=stream)
+        emitter.emit("progress", current="正在扫描 C:\\音频")
+
+        wire = stream.getvalue()
+        self.assertTrue(wire.isascii())
+        self.assertEqual(json.loads(wire)["current"], "正在扫描 C:\\音频")
+
 
 if __name__ == "__main__":
     unittest.main()
-

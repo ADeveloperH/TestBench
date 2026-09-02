@@ -4,7 +4,7 @@
 //! the sidecar so the Tauri process never needs to understand Unity objects.
 
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,6 +22,7 @@ use crate::adb::{adb_command, discover_installed_package_source, InstalledPackag
 const MAX_ENTRY_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_EXTRACTED_BYTES: u64 = 3 * 1024 * 1024 * 1024;
 const SPACE_MULTIPLIER: u64 = 3;
+const STDERR_TAIL_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -407,41 +408,105 @@ fn run_extractor(
     mut on_event: impl FnMut(&Value),
 ) -> Result<AudioExportResult, String> {
     fs::create_dir_all(output_dir).map_err(|e| format!("创建输出目录失败：{e}"))?;
-    let mut child = Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .args(["scan", "--input"])
         .arg(input_dir)
         .args(["--output"])
         .arg(output_dir)
+        .env("PYTHONUTF8", "1")
+        .env("PYTHONIOENCODING", "utf-8")
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let mut child = command
         .spawn()
         .map_err(|e| format!("无法启动 Unity 音频解析器：{e}"))?;
 
     let stdout = child.stdout.take().ok_or("无法读取 Unity 解析器输出")?;
+    let stderr = child.stderr.take().ok_or("无法读取 Unity 解析器错误输出")?;
+    let stderr_task = thread::spawn(move || read_stream_tail(stderr, STDERR_TAIL_BYTES));
     let mut completed: Option<AudioExportResult> = None;
-    let reader = BufReader::new(stdout);
-    for line in reader.lines() {
+    let mut fatal_error: Option<String> = None;
+    let mut reader = BufReader::new(stdout);
+    let mut line = Vec::new();
+    loop {
         if cancel.load(Ordering::SeqCst) {
             let _ = child.kill();
             let _ = child.wait();
+            let _ = stderr_task.join();
             return Err("Unity 音频导出已取消".to_string());
         }
-        let line = line.map_err(|e| format!("读取 Unity 解析器输出失败：{e}"))?;
-        let Ok(event) = serde_json::from_str::<Value>(&line) else {
+        line.clear();
+        let count = match reader.read_until(b'\n', &mut line) {
+            Ok(count) => count,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stderr_task.join();
+                return Err(format!("读取 Unity 解析器输出失败：{error}"));
+            }
+        };
+        if count == 0 {
+            break;
+        }
+        while matches!(line.last(), Some(b'\n') | Some(b'\r')) {
+            line.pop();
+        }
+        let Some(event) = parse_sidecar_event(&line) else {
             continue;
         };
         if event.get("event").and_then(Value::as_str) == Some("completed") {
             completed = serde_json::from_value(event.clone()).ok();
+        } else if event.get("event").and_then(Value::as_str) == Some("fatal") {
+            fatal_error = event
+                .get("error")
+                .and_then(Value::as_str)
+                .map(str::to_string);
         }
         on_event(&event);
     }
-    let status = child
-        .wait()
-        .map_err(|e| format!("等待 Unity 解析器结束失败：{e}"))?;
+    let status_result = child.wait();
+    let stderr_tail = stderr_task.join().unwrap_or_default();
+    let stderr_text = String::from_utf8_lossy(&stderr_tail).trim().to_string();
+    let status = status_result.map_err(|e| format!("等待 Unity 解析器结束失败：{e}"))?;
     if !status.success() {
-        return Err("Unity 音频解析器执行失败".to_string());
+        let detail = fatal_error.filter(|value| !value.is_empty()).unwrap_or(stderr_text);
+        return Err(if detail.is_empty() {
+            "Unity 音频解析器执行失败".to_string()
+        } else {
+            format!("Unity 音频解析器执行失败：{detail}")
+        });
     }
     completed.ok_or_else(|| "Unity 音频解析器未返回完成结果".to_string())
+}
+
+fn parse_sidecar_event(line: &[u8]) -> Option<Value> {
+    serde_json::from_str(&String::from_utf8_lossy(line)).ok()
+}
+
+fn read_stream_tail(mut stream: impl Read, limit: usize) -> Vec<u8> {
+    if limit == 0 {
+        return Vec::new();
+    }
+    let mut tail = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    loop {
+        let count = match stream.read(&mut buffer) {
+            Ok(0) | Err(_) => break,
+            Ok(count) => count,
+        };
+        tail.extend_from_slice(&buffer[..count]);
+        if tail.len() > limit {
+            let remove = tail.len() - limit;
+            tail.drain(..remove);
+        }
+    }
+    tail
 }
 
 #[cfg(test)]
@@ -460,5 +525,20 @@ mod tests {
         assert!(is_resource_entry(Path::new("res/raw/sound.wav")));
         assert!(!is_resource_entry(Path::new("lib/arm64-v8a/libmain.so")));
         assert!(!is_resource_entry(Path::new("META-INF/MANIFEST.MF")));
+    }
+
+    #[test]
+    fn stderr_capture_keeps_only_the_configured_tail() {
+        let input = b"0123456789";
+        assert_eq!(read_stream_tail(&input[..], 4), b"6789");
+        assert!(read_stream_tail(&input[..], 0).is_empty());
+    }
+
+    #[test]
+    fn sidecar_event_reader_tolerates_non_utf8_bytes() {
+        let event = parse_sidecar_event(b"{\"event\":\"progress\",\"current\":\"\xff\"}")
+            .expect("lossy UTF-8 conversion should preserve valid JSON framing");
+        assert_eq!(event["event"], "progress");
+        assert_eq!(event["current"], "\u{fffd}");
     }
 }
