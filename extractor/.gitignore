@@ -1,7 +1,9 @@
 .venv/
+.build-venv/
+.sidecar-build/
 build/
 dist/
 *.spec
+sidecar_entry.spec
 __pycache__/
 *.py[cod]
-

@@ -1,0 +1,2 @@
+# Pinned builder dependency. Runtime dependencies remain in requirements.lock.
+PyInstaller==6.15.0

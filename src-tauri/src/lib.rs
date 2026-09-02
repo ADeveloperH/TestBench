@@ -1,4 +1,5 @@
 mod adb;
+mod audio_export;
 
 use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -23,6 +24,7 @@ use adb::{
     BugreportController, BugreportProgress, BugreportResult, InstalledPackageSource,
     LogcatProcess, PairingInfo, ScrcpyRecord,
 };
+use audio_export::{AudioExportController, AudioExportResult};
 
 /// 全局运行状态：当前 logcat 进程 + 代号（用于识别过期读取线程）。
 struct RunningLogcat {
@@ -43,6 +45,10 @@ struct RecordingState {
 /// 当前 Bugreport 任务；用于防止重复导出，并在退出/更新前停止 adb 子进程。
 struct BugreportState {
     controller: BugreportController,
+}
+
+struct AudioExportState {
+    controller: AudioExportController,
 }
 
 #[tauri::command]
@@ -256,6 +262,45 @@ async fn inspect_audio_export_source(
         adb_discover_installed_package_source(device.as_deref(), &package)
     })
     .await
+}
+
+#[tauri::command]
+async fn export_unity_audio(
+    app: AppHandle,
+    state: State<'_, AudioExportState>,
+    device: Option<String>,
+    package: String,
+) -> Result<Option<AudioExportResult>, String> {
+    log::info!(
+        "收到前端命令 export_unity_audio：device={:?} package={package}",
+        device
+    );
+    let Some(output_dir) = audio_export::pick_output_dir(&app)? else {
+        return Ok(None);
+    };
+    let controller = state.controller.clone();
+    run_blocking(move || {
+        controller
+            .export(&app, device.as_deref(), &package, &output_dir)
+            .map(Some)
+    })
+    .await
+}
+
+#[tauri::command]
+fn audio_export_available(app: AppHandle) -> bool {
+    audio_export::is_available(&app)
+}
+
+#[tauri::command]
+fn cancel_unity_audio_export(state: State<'_, AudioExportState>) -> Result<(), String> {
+    log::info!("收到前端命令 cancel_unity_audio_export");
+    if state.controller.is_running() {
+        state.controller.cancel();
+        Ok(())
+    } else {
+        Err("当前没有正在运行的 Unity 音频导出任务".to_string())
+    }
 }
 
 #[tauri::command]
@@ -967,6 +1012,9 @@ pub fn run() {
         .manage(BugreportState {
             controller: BugreportController::default(),
         })
+        .manage(AudioExportState {
+            controller: AudioExportController::default(),
+        })
         .setup(|app| {
             let resource_dir = app.path().resource_dir().ok();
             adb::init_binary_paths(resource_dir);
@@ -987,6 +1035,9 @@ pub fn run() {
             resolve_pids,
             app_runtime_status,
             inspect_audio_export_source,
+            audio_export_available,
+            export_unity_audio,
+            cancel_unity_audio_export,
             fetch_remote_apps,
             open_in_browser,
             publish_remote_config,

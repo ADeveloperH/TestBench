@@ -1,56 +1,58 @@
 # Unity 音频资源导出功能规划（长期工程）
 
-更新时间：2026-09-01
+更新时间：2026-09-02
 
-状态：**已暂停（2026-09-01）**。已完成一次真实应用提取验证、独立 extractor CLI `0.1.0` 首版和只读安装路径预检；split 拉取、完整控制器、sidecar 打包与界面尚未实现。
+状态：**恢复开发中（2026-09-02）**。已完成一次真实应用提取验证、独立 extractor CLI `0.1.0`、安装路径预检、设备导出控制器、工具页入口和 macOS ARM64 sidecar 本地构建；设备工具扫描当前设备第三方应用并显示包名；Windows/x64 sidecar、发布资源接入和真实设备回归尚未完成。
 
-## 当前暂停检查点
+## 当前检查点
 
-本功能因当前工作优先级调整暂停。暂停不是完成，也不应进入当前版本的用户功能入口。
+本功能曾于 2026-09-01 因工作优先级调整暂停，2026-09-02 恢复实现。当前仍按“小切片、可验收、持续回写”推进。
 
 已保留并验证的内容：
 
 - `extractor/` 独立源码：JSONL v1、标准音频识别、UnityPy 后端、split 合并、逐 clip 容错、唯一命名、CSV manifest 和 JSON summary。
 - extractor 18 项标准库测试通过，不需要安装 UnityPy 即可运行单元测试。
 - `src-tauri/src/adb/audio_export.rs`：严格校验 Android 包名，解析 `adb shell pm path`，识别 base/split/Asset Pack，并拒绝缺少 `base.apk` 的不完整结果。
-- Tauri 注册了只读 `inspect_audio_export_source` 预检命令，但当前前端没有调用入口；它不会在启动、日志、投屏、录屏或发布流程中自动运行。
+- `src-tauri/src/audio_export/`：新增 `AudioExportController`，负责空间预检、`.part` 原子拉取、APK 资源安全解压、临时目录清理、sidecar 进程生命周期和取消状态。
+- Tauri 注册了 `audio_export_available`、`export_unity_audio`、`cancel_unity_audio_export` 命令及 `audio-export-progress` 事件；工具页已增加入口、进度、取消和结果展示。
+- 设备工具的 Unity 音频选择器使用当前设备的 `app_runtime_status` 已安装包列表，数据来自设备实时扫描，不依赖 TestBench 应用清单；选择器支持按包名搜索。
+- 当前仓库未跟踪平台二进制；本机 macOS ARM64 已生成 sidecar，能力探测会在开发模式找到它。未打包 sidecar 的发布包仍会禁用入口并提示组件未安装。
 - Mahjong Blast 2.8.7 的历史内部基线仍为 391 个 WAV、0 个解析错误，但当前连接手机未安装该应用，因此本轮不重复实测。
 
-暂停前主动撤回的内容：
+暂停检查点曾主动撤回的内容（现已重新实现的控制器除外）：
 
-- 尚未完成的 ADB 拉取控制器、任务临时目录和取消状态接入。
 - 临时尝试生成的 Unity fixture、生成脚本和产物。
 
-因此恢复开发时不能把“安装路径预检已完成”误认为“设备导出 MVP 已完成”。当前版本不会展示“导出 Unity 音频”按钮，也不会打包 Python/UnityPy sidecar。
+因此当前仍不能把“控制器/UI/单个平台 sidecar 已接入”误认为“设备导出 MVP 已完成”。完成 MVP 还需要构建其余平台 sidecar、接入发布资源并进行真实设备回归。
 
 ### 当前版本发布隔离与验证记录
 
-音频导出功能在暂停检查点对当前 `0.0.17` 发布的影响如下：
+音频导出功能在当前 `0.0.21` 发布的影响如下：
 
-- 前端没有音频导出入口、状态、事件监听或新依赖，正常用户流程不变。
-- Tauri 的发布资源仍只有 `src-tauri/bin/`；`extractor/` 未加入 `tauri.conf.json` 的 resources，因此不会进入当前安装包，也不会要求用户安装 Python 或 UnityPy。
-- 新增 Rust 代码只有只读 `inspect_audio_export_source` 命令。前端未调用时不会执行 ADB、创建目录或启动后台任务。
-- 未完成的拉取控制器、临时目录、取消状态和 sidecar 启动代码已撤回，不存在半接入的后台生命周期。
+- 前端入口已接入，但在 sidecar 不存在时按钮保持禁用，正常用户流程不变。
+- `tauri.conf.json` 已包含 `src-tauri/bin/` 资源目录；平台二进制由各平台构建流程生成，不提交到 Git。`.github/workflows/build.yml` 会在 Tauri 构建前自动生成 sidecar。
+- 导出命令只有在运行时探测到 sidecar 后才会启用；未找到 sidecar 时不会执行 ADB、创建目录或启动后台任务。
 
-2026-09-01 已完成以下非发布写入验证：
+已完成以下非发布写入验证（历史发布检查与本轮恢复验证合并记录）：
 
 | 检查 | 结果 |
 |---|---|
 | `pnpm build` | 通过，TypeScript 和 Vite production build 成功 |
-| `cargo test --manifest-path src-tauri/Cargo.toml --lib` | 通过，11/11 |
+| `cargo test --manifest-path src-tauri/Cargo.toml --lib` | 通过，13/13（2026-09-02 复测） |
 | extractor 单元测试 | 通过，18/18 |
+| Rust 音频控制器测试 | 通过，13/13 |
 | release Rust 二进制 | 编译成功 |
 | `TestBench.app` | 生成成功，ad-hoc codesign 深度校验通过 |
 | DMG | 全 bundle 探测在 `bundle_dmg.sh` 阶段退出；未继续排查，也不据此声明 DMG 已验证 |
 
 项目正式 macOS 发布脚本 `scripts/release-macos.sh` 使用 `pnpm tauri build --bundles app`，并要求 updater 私钥和更新地址。后续发布、updater 产物与 DMG 由维护者按现有流程自行执行；本功能暂停期间不再修改发布脚本、签名、版本号或更新配置。
 
-恢复开发时从以下顺序继续：
+接下来从以下顺序继续：
 
-1. 实现并测试 base APK、全部 split/Asset Pack 的可取消拉取与 `.part` 原子写入。
-2. 建立任务工作目录、磁盘空间预检、失败/退出/更新时清理。
-3. 将 extractor 打成对应平台 sidecar，并接通 JSONL 进度、取消和结果类型。
-4. 再增加前端入口和结果页。
+1. 使用 `scripts/build-unity-audio-sidecar.sh` / `.ps1` 将 extractor 打成对应平台 sidecar，并接通 JSONL 进度、取消和结果类型。
+2. 在真实设备上验证 base APK、全部 split/Asset Pack 的拉取、解压和失败清理。
+3. 补充退出、更新、断连和空间不足时的后台任务处理。
+4. 完成发布资源接入后，再开放用户级入口。
 5. 找到安装目标应用的合适设备后恢复 391 文件内部基线；该实测不阻塞当前版本发布。
 
 ## 一、结论与产品定位
@@ -136,8 +138,8 @@ Mahjong Blast 应作为 MVP 的真实验收样本，但不得将其 APK、资源
 
 ### 5.1 首版工作流：从已安装应用导出
 
-1. 用户连接设备并进入“工具 > 应用工具”。
-2. 选择已经安装的目标应用。
+1. 用户连接设备并进入“工具 > 设备工具”。
+2. TestBench 扫描当前设备第三方应用包名，用户可按包名搜索并选择目标应用。
 3. 点击“导出 Unity 音频”。
 4. 选择输出目录。
 5. TestBench 检查设备连接、应用安装状态和本机磁盘空间。
@@ -332,12 +334,19 @@ unity-audio-extractor scan --input <dir> --output <dir> --manifest <path>
 - [x] 实现 sidecar 内的标准音频复制、Unity Data/AssetBundle 候选扫描、split 合并和 YooAsset 通用扫描。
 - [x] 实现输出唯一化、manifest 和 summary。
 - [x] Rust 实现 `pm path` 安装路径解析、包名校验、base/split/Asset Pack 分类和只读 Tauri 预检命令。
-- [ ] Rust 拉取 base APK 和全部 split/Asset Pack。
-- [ ] Rust 新增 `AudioExportController`，防止重复任务并支持取消。
-- [ ] 建立 Tauri progress event 和完成结果类型。
-- [ ] 工具页新增“导出 Unity 音频”入口、目录选择、进度和结果展示。
-- [ ] 实现磁盘空间预检和临时目录清理。
+- [ ] Rust 拉取 base APK 和全部 split/Asset Pack，使用 `.part` 原子写入并安全解压资源目录（代码已接入，待真实设备回归）。
+- [ ] Rust 新增 `AudioExportController`，防止重复任务并支持取消（代码已接入，待 sidecar/取消集成测试）。
+- [ ] 建立 Tauri progress event 和完成结果类型（代码已接入，待 sidecar 端到端验证）。
+- [ ] 工具页新增“导出 Unity 音频”入口、目录选择、进度和结果展示（代码已接入，sidecar 缺失时禁用）。
+- [ ] 实现磁盘空间预检和临时目录清理（代码已接入，待异常路径测试）。
 - [ ] 更新退出、隐藏、自动更新时的后台任务处理策略。
+
+Sidecar 构建约定：
+
+- macOS ARM64/x64 必须在对应架构机器上分别构建；Windows 使用 Windows x64 构建。
+- 构建器依赖固定在 `extractor/packaging-requirements.txt`，运行时依赖固定在 `extractor/requirements.lock`。
+- 构建脚本必须执行 `--version` 冒烟检查，并将二进制放入 `src-tauri/bin/<platform>/`；macOS CI 还会检查最终 `.app` 内嵌路径。
+- `extractor/.sidecar-build/` 及 PyInstaller 临时产物不得提交到仓库。
 
 验收标准：
 
@@ -514,7 +523,7 @@ unity-audio-extractor scan --input <dir> --output <dir> --manifest <path>
 | 决策 | 当前建议 |
 |---|---|
 | 功能名称 | 导出 Unity 音频 |
-| UI 位置 | 工具 > 应用工具 > 资源导出 |
+| UI 位置 | 工具 > 设备工具 > Unity 音频导出 |
 | MVP 来源 | 已安装应用 |
 | MVP 输出 | WAV + CSV manifest + JSON summary |
 | 解析实现 | Python + UnityPy 独立 sidecar |
@@ -535,6 +544,11 @@ unity-audio-extractor scan --input <dir> --output <dir> --manifest <path>
 | 2026-09-01 | Rust 新增安装路径预检：严格校验包名，解析 `pm path`，识别 base/split/Asset Pack，4 项新增测试通过；按实际验收选择，MVP 改为真实设备测试优先 |
 | 2026-09-01 | 按工作优先级暂停功能；撤回未完成的拉取控制器和临时 Unity fixture，仅保留已验证 extractor 与只读预检。当前版本不展示入口、不打包 sidecar |
 | 2026-09-01 | 暂停前完成发布隔离检查：前端构建、Rust 11 项测试、extractor 18 项测试通过，release 二进制与签名 `.app` 生成成功；DMG 探测未完成，后续发布由维护者自行处理 |
+| 2026-09-02 | 恢复阶段 1：新增 Rust `AudioExportController`（空间检查、ADB 拉取、原子写入、安全解压、取消和清理），接入 Tauri 命令/进度事件与应用工具页；前端构建通过，Rust 13 项测试、extractor 18 项测试通过；sidecar 尚未打包，入口默认禁用 |
+| 2026-09-02 | 增加 macOS/Windows sidecar 可重复打包脚本、PyInstaller 构建依赖锁定和 `--version` 冒烟校验；macOS ARM64 sidecar 已本地生成并通过临时 WAV 扫描冒烟测试，未提交平台二进制 |
+| 2026-09-02 | 将 sidecar 构建接入 `.github/workflows/build.yml` 的 Windows/macOS 构建矩阵；tag 发布前会自动安装固定依赖、构建并校验 sidecar |
+| 2026-09-02 | 按需求将 Unity 音频导出移至“设备工具”，应用选择改为设备实时 `pm list packages` 扫描结果，不再依赖 TestBench 应用清单；前端构建、Rust 测试和差异检查通过 |
+| 2026-09-02 | 评估设备应用名称解析后放弃该方案：不同设备上的名称获取成本和可靠性不足，设备工具恢复为直接显示包名并按包名搜索 |
 
 ## 十七、长期任务推进方式
 

@@ -23,8 +23,31 @@ export interface BugreportResult {
   warning: string | null;
 }
 
+export interface AudioExportProgress {
+  stage: string;
+  message: string;
+  completed: number | null;
+  total: number | null;
+  exported: number | null;
+  warnings: number;
+}
+
+export interface AudioExportResult {
+  status: "complete" | "partial" | "empty" | string;
+  candidatesScanned: number;
+  candidateFailures: number;
+  audioFound: number;
+  audioExported: number;
+  audioSkipped: number;
+  audioFailed: number;
+  exportedBytes: number;
+  warnings: unknown[];
+  manifestPath: string;
+}
+
 interface Props {
   apps: AppInfo[];
+  installedPackages: string[];
   hasDevice: boolean;
   /** 查询应用运行状态（与日志页同一套逻辑） */
   appState: (pkg: string) => AppRunState;
@@ -41,6 +64,11 @@ interface Props {
   bugreportProgress: BugreportProgress | null;
   bugreportStatus: string;
   onExportBugreport: () => Promise<void>;
+  audioExportProgress: AudioExportProgress | null;
+  audioExportAvailable: boolean;
+  audioExportStatus: string;
+  onExportUnityAudio: (pkg: string) => Promise<AudioExportResult | null>;
+  onCancelUnityAudio: () => Promise<void>;
   onStartRecording: (mbps: number) => Promise<string | null>;
   onStopRecording: () => Promise<string>;
   onMirror: (mbps: number) => Promise<string>;
@@ -49,7 +77,8 @@ interface Props {
 
 type Output =
   | { title: string; text: string }
-  | { title: string; info: DeviceInfo };
+  | { title: string; info: DeviceInfo }
+  | { title: string; audio: AudioExportResult };
 
 export function ToolsPage(props: Props) {
   const [pkg, setPkg] = useState("");
@@ -59,8 +88,10 @@ export function ToolsPage(props: Props) {
   const [recording, setRecording] = useState(false);
   const [bitrate, setBitrate] = useState("8");
   const [tab, setTab] = useState<"app" | "device">("device");
+  const [audioPackage, setAudioPackage] = useState("");
 
   const appReady = props.hasDevice && !!pkg;
+  const audioReady = props.hasDevice && !!audioPackage;
 
   const run = async (fn: () => Promise<string>) => {
     setBusy(true);
@@ -180,6 +211,33 @@ export function ToolsPage(props: Props) {
     }
   };
 
+  const doExportUnityAudio = async () => {
+    if (!audioPackage) return;
+    setBusy(true);
+    setStatus("");
+    try {
+      const result = await props.onExportUnityAudio(audioPackage);
+      if (!result) {
+        setStatus("已取消选择输出目录");
+        return;
+      }
+      setOutput({ title: "Unity 音频导出结果", audio: result });
+    } catch (e) {
+      setStatus("失败：" + String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doCancelUnityAudio = async () => {
+    try {
+      await props.onCancelUnityAudio();
+      setStatus("正在取消 Unity 音频导出…");
+    } catch (e) {
+      setStatus("失败：" + String(e));
+    }
+  };
+
   const switchTab = (t: "app" | "device") => {
     setTab(t);
     // 切换 tab 时清空上个 tab 的结果展示，避免串台
@@ -295,6 +353,63 @@ export function ToolsPage(props: Props) {
               </div>
               {!props.hasDevice && <div className="settings-inline-status warning">请先在日志页连接设备。</div>}
               <div className="tool-card-grid">
+                <article className="tool-card tool-card-wide">
+                  <div>
+                    <h3>Unity 音频导出</h3>
+                    <p>扫描当前设备已安装的应用，导出所选应用中可解析的 AudioClip。</p>
+                  </div>
+                  <Select
+                    className="tools-app-select"
+                    title="选择设备应用"
+                    value={audioPackage}
+                    searchable
+                    searchPlaceholder="搜索设备应用包名…"
+                    options={[
+                      { value: "", label: "选择设备应用", fullLabel: "选择设备应用" },
+                      ...props.installedPackages.map((packageName) => ({
+                        value: packageName,
+                        label: packageName,
+                        fullLabel: packageName,
+                      })),
+                    ]}
+                    onChange={setAudioPackage}
+                  />
+                  {props.hasDevice && props.installedPackages.length === 0 && (
+                    <div className="settings-inline-status warning">正在扫描设备已安装应用…</div>
+                  )}
+                  {props.audioExportProgress && (
+                    <div className="bugreport-progress" aria-live="polite">
+                      <div className="bugreport-progress-head">
+                        <span>{props.audioExportProgress.message}</span>
+                        {props.audioExportProgress.exported !== null && (
+                          <strong>已导出 {props.audioExportProgress.exported}</strong>
+                        )}
+                      </div>
+                      <div className="bugreport-progress-track">
+                        <div
+                          className={`bugreport-progress-fill ${
+                            props.audioExportProgress.completed === null ? "indeterminate" : ""
+                          }`}
+                          style={
+                            props.audioExportProgress.completed !== null && props.audioExportProgress.total
+                              ? { width: `${Math.min(100, (props.audioExportProgress.completed / props.audioExportProgress.total) * 100)}%` }
+                              : undefined
+                          }
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="tool-card-actions">
+                    {!props.audioExportAvailable && !props.audioExportProgress && (
+                      <span className="settings-inline-status warning">当前版本未安装 Unity 音频解析器</span>
+                    )}
+                    {props.audioExportProgress ? (
+                      <button onClick={doCancelUnityAudio}>取消导出</button>
+                    ) : (
+                      <button disabled={!props.audioExportAvailable || !audioReady || busy} onClick={doExportUnityAudio}>选择目录并导出</button>
+                    )}
+                  </div>
+                </article>
                 <article className="tool-card">
                   <div><h3>文件与截图</h3><p>获取当前屏幕或向设备安装 APK。</p></div>
                   <div className="tool-card-actions">
@@ -375,6 +490,9 @@ export function ToolsPage(props: Props) {
           {tab === "device" && props.bugreportStatus && (
             <div className="tools-status">{props.bugreportStatus}</div>
           )}
+          {tab === "device" && props.audioExportStatus && (
+            <div className="tools-status">{props.audioExportStatus}</div>
+          )}
 
           {output && (
             <section className="output-panel">
@@ -384,6 +502,15 @@ export function ToolsPage(props: Props) {
               </div>
               {"text" in output ? (
                 <pre className="tools-result">{output.text}</pre>
+              ) : "audio" in output ? (
+                <dl className="device-info">
+                  <dt>状态</dt><dd>{output.audio.status}</dd>
+                  <dt>发现音频</dt><dd>{output.audio.audioFound}</dd>
+                  <dt>成功导出</dt><dd>{output.audio.audioExported}</dd>
+                  <dt>失败</dt><dd>{output.audio.audioFailed}</dd>
+                  <dt>导出大小</dt><dd>{(output.audio.exportedBytes / 1024 / 1024).toFixed(1)} MB</dd>
+                  <dt>清单</dt><dd>{output.audio.manifestPath}</dd>
+                </dl>
               ) : (
                 <dl className="device-info">
                   <dt>型号</dt><dd>{output.info.brand} {output.info.model}</dd>

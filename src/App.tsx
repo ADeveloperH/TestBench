@@ -34,6 +34,8 @@ import { ManagePage, type ManageTab } from "./features/settings/ManagePage";
 import { TestCaseSidebar } from "./features/testcases/TestCaseSidebar";
 import {
   ToolsPage,
+  type AudioExportProgress,
+  type AudioExportResult,
   type BugreportProgress,
   type BugreportResult,
 } from "./features/tools/ToolsPage";
@@ -175,6 +177,9 @@ export default function App() {
   const [view, setView] = useState<"log" | "manage" | "tools">("log");
   const [bugreportProgress, setBugreportProgress] = useState<BugreportProgress | null>(null);
   const [bugreportStatus, setBugreportStatus] = useState("");
+  const [audioExportProgress, setAudioExportProgress] = useState<AudioExportProgress | null>(null);
+  const [audioExportStatus, setAudioExportStatus] = useState("");
+  const [audioExportAvailable, setAudioExportAvailable] = useState(false);
   const [showWifi, setShowWifi] = useState(false);
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [selectedPackage, setSelectedPackage] = useState(
@@ -208,6 +213,35 @@ export default function App() {
     let stopListening: (() => void) | undefined;
     listen<BugreportProgress>("bugreport-progress", (event) => {
       setBugreportProgress(event.payload);
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else stopListening = unlisten;
+    });
+    return () => {
+      disposed = true;
+      stopListening?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    invoke<boolean>("audio_export_available")
+      .then((available) => {
+        if (!disposed) setAudioExportAvailable(available);
+      })
+      .catch(() => {
+        if (!disposed) setAudioExportAvailable(false);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let stopListening: (() => void) | undefined;
+    listen<AudioExportProgress>("audio-export-progress", (event) => {
+      if (!disposed) setAudioExportProgress(event.payload);
     }).then((unlisten) => {
       if (disposed) unlisten();
       else stopListening = unlisten;
@@ -802,6 +836,42 @@ export default function App() {
     return await invoke<string>("current_activity", { device: selectedDevice });
   };
 
+  const handleExportUnityAudio = async (pkg: string) => {
+    setAudioExportStatus("");
+    setAudioExportProgress({
+      stage: "source",
+      message: "正在检查应用安装资源…",
+      completed: 0,
+      total: null,
+      exported: null,
+      warnings: 0,
+    });
+    try {
+      const result = await invoke<AudioExportResult | null>("export_unity_audio", {
+        device: selectedDevice,
+        package: pkg,
+      });
+      if (!result) {
+        setAudioExportStatus("已取消 Unity 音频导出");
+        return null;
+      }
+      const summary = `Unity 音频导出完成：${result.audioExported} 个文件，${(
+        result.exportedBytes / 1024 / 1024
+      ).toFixed(1)} MB。清单：${result.manifestPath}`;
+      setAudioExportStatus(summary);
+      return result;
+    } catch (error) {
+      setAudioExportStatus("失败：" + String(error));
+      throw error;
+    } finally {
+      setAudioExportProgress(null);
+    }
+  };
+
+  const handleCancelUnityAudio = async () => {
+    await invoke("cancel_unity_audio_export");
+  };
+
   const handleExportBugreport = async () => {
     setBugreportStatus("");
     setBugreportProgress({
@@ -1393,6 +1463,7 @@ export default function App() {
       <>
         <ToolsPage
           apps={logPageApps}
+          installedPackages={appRuntime?.installed ?? []}
           hasDevice={!!selectedDevice}
           appState={appRunState}
           onOpenBackdoor={handleOpenBackdoor}
@@ -1406,6 +1477,11 @@ export default function App() {
           bugreportProgress={bugreportProgress}
           bugreportStatus={bugreportStatus}
           onExportBugreport={handleExportBugreport}
+          audioExportProgress={audioExportProgress}
+          audioExportAvailable={audioExportAvailable}
+          audioExportStatus={audioExportStatus}
+          onExportUnityAudio={handleExportUnityAudio}
+          onCancelUnityAudio={handleCancelUnityAudio}
           onStartRecording={handleStartRecording}
           onStopRecording={handleStopRecording}
           onMirror={handleMirror}
