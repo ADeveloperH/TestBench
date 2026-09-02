@@ -669,6 +669,22 @@ const IE_CASES: TestCase[] = [
     ],
   ),
   ieCase(
+    "ie_ua_adjust_event",
+    "UA 埋点监控",
+    "必须观察到 AdjustCollector 的 UA 特殊事件日志；未出现时显示疑似",
+    [
+      {
+        effect: "pass",
+        description: "UA 特殊事件已发送到 Adjust",
+        expr: all(
+          cond("tag", "equals", "Android.AdjustCollector"),
+          has("onSpecialEvent()"),
+        ),
+      },
+    ],
+    { requirePass: true },
+  ),
+  ieCase(
     "plugin_analytics_fail",
     "Android 埋点桥接异常",
     "Unity/Android 埋点桥接使用了废弃初始化入口、初始化前调用或发生原生异常",
@@ -843,6 +859,7 @@ const IE_GROUPS: Record<string, string> = {
   ie_reward_fallback: "奖励",
   ie_cloud_config_fail: "云控",
   ie_analytics_fail: "埋点",
+  ie_ua_adjust_event: "埋点",
   plugin_analytics_fail: "埋点",
   plugin_promotion_fail: "归因",
   sdk_beyla_data_fail: "埋点",
