@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-01T13:43:36.751Z",
+  "updatedAt": "2026-09-02T03:51:45.000Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -1639,6 +1639,143 @@
                   "field": "message",
                   "op": "contains",
                   "value": "is not init"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "广告"
+    },
+    {
+      "id": "ie_ad_ecpm_fail",
+      "name": "广告 eCPM 获取异常",
+      "description": "监控广告 eCPM 是否正常；UpdateEcpm 的 price=-1，或接口请求参数中的 ecpm=0，任一出现即判定异常",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "error",
+          "description": "UpdateEcpm 获取到无效 eCPM（price=-1）",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.Stats"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "\\bUpdateEcpm\\b[\\s\\S]*?\\bprice\\s*=\\s*-1(?:\\.0+)?(?=\\s*[,}])"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "接口请求使用了无效 eCPM（ecpm=0）",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "NetWorkLog:Request"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "JsonParams\\s*:\\s*\\{[\\s\\S]*?\"ecpm\"\\s*:\\s*0(?:\\.0+)?(?=\\s*[,}])"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "广告"
+    },
+    {
+      "id": "ie_adjust_revenue_fail",
+      "name": "Adjust 收入回传监控",
+      "description": "MAX 和 TopOn 的收入回传都成功送达 Adjust 才判定通过；缺少任一成功日志时显示疑似",
+      "requirePass": true,
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "MAX 收入成功回传 Adjust",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.revenueToMMP"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "max to adjust suc"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "TopOn 收入成功回传 Adjust",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.revenueToMMP"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "topon To Adjust suc"
                 }
               }
             ]

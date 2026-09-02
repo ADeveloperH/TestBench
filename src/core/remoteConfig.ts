@@ -111,12 +111,15 @@ function isSavedFilter(x: unknown): x is SavedFilter {
 }
 
 function isTestCase(x: unknown): x is TestCase {
+  const testCase = x as Partial<TestCase>;
   return (
     !!x &&
     typeof x === "object" &&
-    typeof (x as TestCase).id === "string" &&
-    typeof (x as TestCase).name === "string" &&
-    Array.isArray((x as TestCase).rules)
+    typeof testCase.id === "string" &&
+    typeof testCase.name === "string" &&
+    Array.isArray(testCase.rules) &&
+    (testCase.requirePass === undefined ||
+      typeof testCase.requirePass === "boolean")
   );
 }
 

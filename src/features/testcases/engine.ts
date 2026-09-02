@@ -50,6 +50,8 @@ export interface TestCase {
   enabled?: boolean;
   /** 分组（管理页按组折叠显示，默认「自定义」） */
   group?: string;
+  /** 是否必须观察到全部 pass 规则；未齐全时显示「疑似」而不是「监控中」 */
+  requirePass?: boolean;
 }
 
 // —— 构造便捷函数 ——
@@ -85,8 +87,16 @@ function ieCase(
   name: string,
   description: string,
   rules: Rule[],
+  options: Pick<TestCase, "requirePass"> = {},
 ): TestCase {
-  return { id, name, description, scope: { global: true, apps: [] }, rules };
+  return {
+    id,
+    name,
+    description,
+    scope: { global: true, apps: [] },
+    rules,
+    ...options,
+  };
 }
 
 const IE_CASES: TestCase[] = [
@@ -368,6 +378,38 @@ const IE_CASES: TestCase[] = [
     ],
   ),
   ieCase(
+    "ie_ad_ecpm_fail",
+    "广告 eCPM 获取异常",
+    "监控广告 eCPM 是否正常；UpdateEcpm 的 price=-1，或接口请求参数中的 ecpm=0，任一出现即判定异常",
+    [
+      {
+        effect: "error",
+        description: "UpdateEcpm 获取到无效 eCPM（price=-1）",
+        expr: all(
+          cond("tag", "equals", "Android.Stats"),
+          cond(
+            "message",
+            "regex",
+            "\\bUpdateEcpm\\b[\\s\\S]*?\\bprice\\s*=\\s*-1(?:\\.0+)?(?=\\s*[,}])",
+          ),
+        ),
+      },
+      {
+        effect: "error",
+        description: "接口请求使用了无效 eCPM（ecpm=0）",
+        expr: all(
+          unityTag(),
+          has("NetWorkLog:Request"),
+          cond(
+            "message",
+            "regex",
+            "JsonParams\\s*:\\s*\\{[\\s\\S]*?\"ecpm\"\\s*:\\s*0(?:\\.0+)?(?=\\s*[,}])",
+          ),
+        ),
+      },
+    ],
+  ),
+  ieCase(
     "ie_localization_fail",
     "本地化资源加载失败",
     "I2 本地化附加数据加载失败",
@@ -378,6 +420,30 @@ const IE_CASES: TestCase[] = [
         expr: all(unityTag(), has("Unable to load additional Localization data")),
       },
     ],
+  ),
+  ieCase(
+    "ie_adjust_revenue_fail",
+    "Adjust 收入回传监控",
+    "MAX 和 TopOn 的收入回传都成功送达 Adjust 才判定通过；缺少任一成功日志时显示疑似",
+    [
+      {
+        effect: "pass",
+        description: "MAX 收入成功回传 Adjust",
+        expr: all(
+          cond("tag", "equals", "Android.revenueToMMP"),
+          has("max to adjust suc"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "TopOn 收入成功回传 Adjust",
+        expr: all(
+          cond("tag", "equals", "Android.revenueToMMP"),
+          has("topon To Adjust suc"),
+        ),
+      },
+    ],
+    { requirePass: true },
   ),
   ieCase(
     "ie_ui_fail",
@@ -763,8 +829,10 @@ const IE_GROUPS: Record<string, string> = {
   ie_withdraw_fail: "提现",
   ie_prop_fail: "道具",
   ie_ad_fail: "广告",
+  ie_ad_ecpm_fail: "广告",
   ie_anticheat_fail: "反作弊",
   ie_localization_fail: "本地化",
+  ie_adjust_revenue_fail: "广告",
   ie_ui_fail: "UI",
   ie_save_fail: "存档",
   ie_runtime_fail: "初始化",

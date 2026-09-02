@@ -60,8 +60,6 @@ function initCaseState(tc: TestCase): CaseState {
 
 function computeStatus(tc: TestCase, cs: CaseState): CaseStatus {
   if (tc.enabled === false) return "disabled";
-  // 还没测到任何日志 → 监控中（而不是「通过」，避免误读）
-  if (cs.seenLogs === 0) return "pending";
   let hasError = false;
   let hasWarn = false;
   let hasPassRule = false;
@@ -79,6 +77,10 @@ function computeStatus(tc: TestCase, cs: CaseState): CaseStatus {
   // 「通过」只留给带 pass 规则（正向验证）且全部命中的用例；
   // 纯监控类用例（只有 error/warn 规则）无异常时保持「监控中」。
   if (hasPassRule && allPass) return "pass";
+  // 需要成功信号闭环的用例，在信号未齐全时主动提醒关注。
+  if (tc.requirePass && hasPassRule) return "suspected";
+  // 还没测到任何日志 → 监控中（而不是「通过」，避免误读）
+  if (cs.seenLogs === 0) return "pending";
   return "pending";
 }
 
