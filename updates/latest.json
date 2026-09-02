@@ -1,27 +1,27 @@
 {
-  "version": "0.0.21",
-  "notes": "新增 Adjust 收入回传监控用例的必达成功信号状态：MAX 和 TopOn 两条成功日志未全部出现时显示“疑似”，全部出现后显示“通过”；补充测试用例维护文档和远程配置校验。",
-  "pub_date": "2026-09-02T04:21:48.414Z",
+  "version": "0.0.22",
+  "notes": "新增设备工具中的 Unity 音频导出：可从当前设备选择应用包名，自动处理 base APK、split APK 与 Asset Pack，显示导出进度并支持取消；解析器已接入 Windows、macOS ARM64 和 macOS x64 自动打包流程，同时修复工具卡片长文案越界问题。",
+  "pub_date": "2026-09-02T09:40:07.335Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkpURjBRMTc4QVJFWmZ6b0lmS3VJZEVtMkg5bGI2NFRGWC82ZG1ZVkR4OW1zK2Nvc2ZMZzEzQnlKTEFiOUQvWWZ6SkhmekprUDB2bnFvK0ZzNlJmSVFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4MzIyNDk4CWZpbGU6VGVzdEJlbmNoLmFwcC50YXIuZ3oKZ0h3Rmp1YVFsZzc4cGRGaGlCVU0wTTZXQW15YkF4cGF6OUhJb0xOY0xMNmZLSWc5ZWlRWWZVaG5LUEJHalNpQk92UFVIMHRObnJkR1U2WW84aFlOQ3c9PQo=",
-      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.21/TestBench_arm64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVk9IRXNQVU56MlZhZXI5Ky91TnM4WEw3WCtHYU1Wd1hDNERDVGNDT2JiWlkycWNUM3hzQmhWRWxJMmErbHBoaDJXVDNENy9BbGJOMVJ5MzZsdk51RkFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4MzQxNTY4CWZpbGU6VGVzdEJlbmNoLmFwcC50YXIuZ3oKYXBIemU1OWhHc2hYaytqODlWMm9lUmZvWEpVR0pnU1BSVjNJZ3piWnZPUDQwVGF4c3FGSnV6RDg1M3ZPQmZJOXlFZ0pPRjQxRUFHYmc2VXlWYkU5QVE9PQo=",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.22/TestBench_arm64.app.tar.gz"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkVWNlB1NEpEbEsxdHJzRE1RU0pSSHdpZHRXR1BJMTVaMXM0YlpJWU43S3Fod1A1Q2g5OEJlaGdoVWpLL1lzalI3UVJEd3liSUJTWWpHTllEdFpteHdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4MzIyNzgwCWZpbGU6VGVzdEJlbmNoLmFwcC50YXIuZ3oKT0IvUG81N0tFMEJ4M0I1YWdYVjdsZmdSbkY5M0xuSHo2WmNFWklwelE3VHBvWWlXRm5zVHJaMG8vT1lYWDdVZ1lWR2VUZ2dIb3YzaStpZlNxblhuQnc9PQo=",
-      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.21/TestBench_x64.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkdJbVd2THFHbTJEUytUTE5IMXNuWXJUK1ZoTWQ2RkhwZXh3bnpvRG5MRTZjajFXZ2p2NkNPallmM0lYMkF2bUs2MlVvd0ttUms3OUpSUjVmaW9PV1E4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4MzQxOTEwCWZpbGU6VGVzdEJlbmNoLmFwcC50YXIuZ3oKNXo2dWVLNFFtSXRHQk5iV3pQWUl3c04zc2FTbllJZEdRbnZtZDNlcUN3WUxYZzlyVU5ONzJqOEpDWTNXVFVrRkNCSkZwcGJNT1JQTmxhaGVBZklUQmc9PQo=",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.22/TestBench_x64.app.tar.gz"
     },
     "windows-x86_64-nsis": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkNaa3FzZWFhWU52VlZYT1dDNCtYNGxtSDRvdExpaGlIcjA1bEdCMkJDSDJqMkxzZ0hORlVJdjhwZFAzQ0VnNzByMFdmRXJBYUJOeHplcDhVbjh0aXdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4MzIyNjE2CWZpbGU6VGVzdEJlbmNoXzAuMC4yMV94NjQtc2V0dXAuZXhlCkJYSkVhbWxnNGg2eE1QekVxLzNyd1IvdVBNR0JENmdEOTZWcU9La25hOUM3ZDQxd0RCdWdMd0U5ZWpvK3A2UlNxc3o1dHlMYjl2Nkc5RHlTNFZWMUNBPT0K",
-      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.21/TestBench_0.0.21_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVlBRVDRaRVRPOXR2dHIzbG4zK3VDNEEydk5JZVNWRjV1c3lPYzZQeTB1aTZtMEJqU3VXNlIrcFpEUGV3dnlHdGprcVJTdGxtbk5OOW82MXRJVW1IaHc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4MzQxNzg3CWZpbGU6VGVzdEJlbmNoXzAuMC4yMl94NjQtc2V0dXAuZXhlCjBCM09pSWh2cWZybGFiT1RiZjBNdzhsUGZiQmw5NnlVUFJQNkVmY0dQZkR0L1c2MExUelI5dHBzMnhSMGNyNjc5M0VxeXVMVVMyRWxoZDI4d2F6eENRPT0K",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.22/TestBench_0.0.22_x64-setup.exe"
     },
     "windows-x86_64-msi": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVk1rc1ZlVHhPcW4xNmJpN2ZJdkFlNzdITzlEd0pYNWVOaHlOY3NZT0ZPM3M0VjZxR0h2TFZUYmZPZ3g1eGpPTXVWMTJ5Vm84a1VmYTZKaHZRd1N3TndzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4MzIyNjE2CWZpbGU6VGVzdEJlbmNoXzAuMC4yMV94NjRfZW4tVVMubXNpClFLM2s3UllOUjhoTE9JK1pIbklRaGxoUzBDeGd3MGwvOURYQk55UFEzRHN5dVdSZEJCdlBYMTJhU3p1dEV1MVZWd1pnd3ZzTE4xZ0JGT1A2RG54L0N3PT0K",
-      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.21/TestBench_0.0.21_x64_en-US.msi"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVk5hemhPL1g2NlZ4Q1liNkE2TU5DWEJJODZWS2VEdlk4V08vaVhLSVM1WnJaT1Job1BJY0RDSCtxci81dUI0R1diUjRCb0d4czcvVHVtemhPUFFLeWdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4MzQxNzg3CWZpbGU6VGVzdEJlbmNoXzAuMC4yMl94NjRfZW4tVVMubXNpCkp2T3ZrcDEycFpSMjlNa0dMdFJIWE0rT3R5TWRTS3o4Y0JNMHdWYjNNNG5vL2tpTWZvY2JHOVlLdk9rVGZYWEJvOEFlSGZWMDNlQTB1Q2E3YUpWZkFRPT0K",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.22/TestBench_0.0.22_x64_en-US.msi"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVkNaa3FzZWFhWU52VlZYT1dDNCtYNGxtSDRvdExpaGlIcjA1bEdCMkJDSDJqMkxzZ0hORlVJdjhwZFAzQ0VnNzByMFdmRXJBYUJOeHplcDhVbjh0aXdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4MzIyNjE2CWZpbGU6VGVzdEJlbmNoXzAuMC4yMV94NjQtc2V0dXAuZXhlCkJYSkVhbWxnNGg2eE1QekVxLzNyd1IvdVBNR0JENmdEOTZWcU9La25hOUM3ZDQxd0RCdWdMd0U5ZWpvK3A2UlNxc3o1dHlMYjl2Nkc5RHlTNFZWMUNBPT0K",
-      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.21/TestBench_0.0.21_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY3gzSWM4YmlDVlBRVDRaRVRPOXR2dHIzbG4zK3VDNEEydk5JZVNWRjV1c3lPYzZQeTB1aTZtMEJqU3VXNlIrcFpEUGV3dnlHdGprcVJTdGxtbk5OOW82MXRJVW1IaHc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4MzQxNzg3CWZpbGU6VGVzdEJlbmNoXzAuMC4yMl94NjQtc2V0dXAuZXhlCjBCM09pSWh2cWZybGFiT1RiZjBNdzhsUGZiQmw5NnlVUFJQNkVmY0dQZkR0L1c2MExUelI5dHBzMnhSMGNyNjc5M0VxeXVMVVMyRWxoZDI4d2F6eENRPT0K",
+      "url": "https://github.com/ADeveloperH/TestBench/releases/download/v0.0.22/TestBench_0.0.22_x64-setup.exe"
     }
   }
 }
