@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-02T03:51:45.000Z",
+  "updatedAt": "2026-09-02T06:37:04.826Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -297,6 +297,10 @@
     {
       "value": "Unity",
       "description": "游戏主日志"
+    },
+    {
+      "value": "Android.AdjustCollector",
+      "description": "Adjust 埋点日志"
     }
   ],
   "tagBlockRules": [
@@ -2681,6 +2685,45 @@
                     }
                   }
                 ]
+              }
+            ]
+          }
+        }
+      ],
+      "group": "埋点"
+    },
+    {
+      "id": "ie_ua_adjust_event",
+      "name": "UA 埋点监控",
+      "description": "必须观察到 AdjustCollector 的 UA 特殊事件日志；未出现时显示疑似",
+      "requirePass": true,
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "UA 特殊事件已发送到 Adjust",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.AdjustCollector"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "onSpecialEvent()"
+                }
               }
             ]
           }
