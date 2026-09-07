@@ -38,6 +38,8 @@ export interface Rule {
 export interface Scope {
   global: boolean;
   apps: string[];
+  /** 全局作用域下需要排除的应用；省略时保持原有行为。 */
+  excludedApps?: string[];
 }
 
 export interface TestCase {
@@ -868,10 +870,688 @@ const IE_GROUPS: Record<string, string> = {
   anticheat_init: "反作弊",
 };
 
-const IE_CASES_GROUPED: TestCase[] = IE_CASES.map((tc) => ({
-  ...tc,
-  group: IE_GROUPS[tc.id] ?? "自定义",
-}));
+// —— FruitSliceRush LevelPlay + TopOn 双聚合广告用例 ——
+// 规则同时参考 ADPlugin、IncentiveEngine 和 FruitSliceRush 当前接入配置。
+// 前提：测试包开启 ENABLE_LOG；广告日志文案变更时需同步维护这些规则。
+
+const FRUIT_SLICE_RUSH_PACKAGE = "com.fruit.slicerush";
+const LEVELPLAY_TOPON_AD_GROUP = "LevelPlay&TopOn 广告";
+
+const IE_CASES_GROUPED: TestCase[] = IE_CASES.map((tc) => {
+  const group = IE_GROUPS[tc.id] ?? "自定义";
+  return {
+    ...tc,
+    // FruitSliceRush 使用新的 LevelPlay + TopOn 专属用例，旧「广告」分组不再重复执行。
+    scope:
+      group === "广告"
+        ? {
+            ...tc.scope,
+            excludedApps: [FRUIT_SLICE_RUSH_PACKAGE],
+          }
+        : tc.scope,
+    group,
+  };
+});
+
+function fruitAdCase(
+  id: string,
+  name: string,
+  description: string,
+  rules: Rule[],
+  options: Pick<TestCase, "requirePass"> = {},
+): TestCase {
+  return {
+    id,
+    name,
+    description,
+    scope: { global: false, apps: [FRUIT_SLICE_RUSH_PACKAGE] },
+    group: LEVELPLAY_TOPON_AD_GROUP,
+    rules,
+    ...options,
+  };
+}
+
+const LEVELPLAY_TOPON_AD_CASES: TestCase[] = [
+  fruitAdCase(
+    "fruit_ad_dual_init",
+    "双平台初始化与实验分组",
+    "操作：开始监控后彻底关闭并冷启动应用。应确定 A/B 实验方向，确认两套配置完整，并依次收到 LevelPlay、TopOn 和全部初始化完成日志。",
+    [
+      {
+        effect: "pass",
+        description: "本次启动已确定唯一实验方向",
+        expr: all(
+          unityTag(),
+          has("【广告实验确定】"),
+          cond(
+            "message",
+            "regex",
+            "模式:(LevelPlayThenTopon|ToponThenLevelPlay)",
+          ),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "LevelPlay 与 TopOn 初始化参数均已配置",
+        expr: all(
+          unityTag(),
+          has("【广告接入配置】"),
+          has("LevelPlay Key已配置:True"),
+          has("TopOn AppId已配置:True"),
+          has("TopOn AppKey已配置:True"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "LevelPlay 初始化完成",
+        expr: all(unityTag(), has("【平台初始化完成】LevelPlay 初始化完成")),
+      },
+      {
+        effect: "pass",
+        description: "TopOn 初始化完成",
+        expr: all(unityTag(), has("【平台初始化完成】TopOn 初始化完成")),
+      },
+      {
+        effect: "pass",
+        description: "双平台全部初始化完成",
+        expr: all(
+          unityTag(),
+          has("【初始化全部完成】LevelPlay:true TopOn:true"),
+        ),
+      },
+      {
+        effect: "error",
+        description: "实验值无效并回退到 A 组",
+        expr: all(unityTag(), has("【广告实验值无效】")),
+      },
+    ],
+    { requirePass: true },
+  ),
+  fruitAdCase(
+    "fruit_ad_ecpm_fail",
+    "广告 eCPM 获取异常",
+    "监控 LevelPlay/TopOn 展示前的广告价格。兼容 Android.Stats 旧日志、IncentiveEngine 新价格日志和用户价值接口参数；任一出现无效价格即判定异常。",
+    [
+      {
+        effect: "error",
+        description: "Android.Stats 的 UpdateEcpm 获取到 price=-1",
+        expr: all(
+          cond("tag", "equals", "Android.Stats"),
+          cond(
+            "message",
+            "regex",
+            "\\bUpdateEcpm\\b[\\s\\S]*?\\bprice\\s*=\\s*-1(?:\\.0+)?(?=\\s*[,}])",
+          ),
+        ),
+      },
+      {
+        effect: "error",
+        description: "IncentiveEngine 展示前获取到 eCPM=-1",
+        expr: all(
+          unityTag(),
+          has("【激励价格更新】"),
+          cond(
+            "message",
+            "regex",
+            "\\beCPM\\s*:\\s*-1(?:\\.0+)?(?:\\s|$)",
+          ),
+        ),
+      },
+      {
+        effect: "error",
+        description: "用户价值接口请求使用了 ecpm=0",
+        expr: all(
+          unityTag(),
+          has("NetWorkLog:Request"),
+          cond(
+            "message",
+            "regex",
+            "JsonParams\\s*:\\s*\\{[\\s\\S]*?\"ecpm\"\\s*:\\s*0(?:\\.0+)?(?=\\s*[,}])",
+          ),
+        ),
+      },
+    ],
+  ),
+  fruitAdCase(
+    "fruit_ad_value_revenue",
+    "LevelPlay/TopOn 价值回传",
+    "必须分别展示 LevelPlay 和 TopOn 广告，并观察到两个平台向 Adjust、Firebase 回传成功的全部四条日志；缺少任意一条时显示疑似。",
+    [
+      {
+        effect: "pass",
+        description: "LevelPlay 价值成功回传 Adjust",
+        expr: all(
+          cond("tag", "equals", "Android.revenueToMMP"),
+          has("levelplay To Adjust suc"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "LevelPlay 价值成功回传 Firebase",
+        expr: all(
+          cond("tag", "equals", "Android.revenueToMMP"),
+          has("levelplay To Firebase suc"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "TopOn 价值成功回传 Adjust",
+        expr: all(
+          cond("tag", "equals", "Android.revenueToMMP"),
+          has("topon To Adjust suc"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "TopOn 价值成功回传 Firebase",
+        expr: all(
+          cond("tag", "equals", "Android.revenueToMMP"),
+          has("topon To Firebase suc"),
+        ),
+      },
+    ],
+    { requirePass: true },
+  ),
+  fruitAdCase(
+    "fruit_ad_slot_config",
+    "应用广告位配置",
+    "冷启动后检查 Splash、Reward、Inter 的双平台 PID、Reward 缓存池和共享混插屏配置。当前应用 Banner PID 为空，预期明确跳过。",
+    [
+      {
+        effect: "pass",
+        description: "Splash 主广告位及实际 SDK 类型映射正确",
+        expr: all(
+          unityTag(),
+          cond(
+            "message",
+            "regex",
+            "【广告策略配置】动作:(预加载|展示) 广告类型:Splash",
+          ),
+          has("LevelPlay PID:7v6c2yy8ywv3myp2"),
+          has("TopOn PID:n1hkfuho77gda4"),
+          has("混合LevelPlay PID:0v5kx7vn36fv4g7f"),
+          has("混合TopOn PID:n1hkfuho77gp26"),
+          has("启动场景主广告位实际类型:LevelPlay=Inter,TopOn=Splash"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Reward 主广告位、共享混插屏和缓存池配置正确",
+        expr: all(
+          unityTag(),
+          has("【广告策略配置】动作:预加载 广告类型:Reward"),
+          has("LevelPlay PID:lgw1jn7s2ov6w54y"),
+          has("TopOn PID:n1hkfuho77gtr7"),
+          has("混合LevelPlay PID:0v5kx7vn36fv4g7f"),
+          has("混合TopOn PID:n1hkfuho77gp26"),
+          has("LevelPlay缓存数:1 TopOn缓存数:1"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Inter 双平台广告位配置正确",
+        expr: all(
+          unityTag(),
+          has("【广告策略配置】动作:预加载 广告类型:Inter"),
+          has("LevelPlay PID:5bddi9vrukm8z69b"),
+          has("TopOn PID:n1hkfuho77gluj"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Banner 未配置并按当前产品配置跳过",
+        expr: all(
+          unityTag(),
+          has("【Banner预加载跳过】"),
+          has("LevelPlay PID已配置:False"),
+          has("TopOn PID已配置:False"),
+        ),
+      },
+      {
+        effect: "error",
+        description: "必测广告类型存在空 PID",
+        expr: all(
+          unityTag(),
+          cond(
+            "message",
+            "regex",
+            "【广告策略配置】动作:(预加载|展示) 广告类型:(Splash|Reward|Inter)[\\s\\S]*?(LevelPlay PID:空|TopOn PID:空)",
+          ),
+        ),
+      },
+    ],
+    { requirePass: true },
+  ),
+  fruitAdCase(
+    "fruit_ad_serial_success",
+    "串行预加载与动态底价",
+    "操作：冷启动并等待任一广告位两平台加载成功。A、B 两组要分别冷启动验证；同一条测试链路内应先请求首平台，再计算底价并请求第二平台。",
+    [
+      {
+        effect: "pass",
+        description: "实验方向与首、第二平台映射一致",
+        expr: all(
+          unityTag(),
+          has("【串行预加载开始】"),
+          cond(
+            "message",
+            "regex",
+            "(实验方向:LevelPlayThenTopon[\\s\\S]*首平台:LevelPlay[\\s\\S]*第二平台:Topon|实验方向:ToponThenLevelPlay[\\s\\S]*首平台:Topon[\\s\\S]*第二平台:LevelPlay)",
+          ),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "首平台请求不带动态底价",
+        expr: all(
+          unityTag(),
+          has("【开始SDK请求】"),
+          has("场景:串行预加载"),
+          has("角色:首平台"),
+          has("无动态底价"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "首平台成功后完成动态底价计算",
+        expr: all(
+          unityTag(),
+          has("【动态底价计算完成】"),
+          has("换算eCPM:"),
+          has("加价值:"),
+          has("第二平台底价:"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "第二平台请求携带原始 eCPM 和最终底价",
+        expr: all(
+          unityTag(),
+          has("【开始SDK请求】"),
+          has("场景:串行预加载"),
+          has("角色:第二平台"),
+          has("原始eCPM:"),
+          has("最终底价:"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "串行预加载以两个平台均可用结束",
+        expr: all(
+          unityTag(),
+          has("【串行预加载结束】结果:两个平台均可用"),
+        ),
+      },
+      {
+        effect: "error",
+        description: "实验方向与首平台映射相反",
+        expr: all(
+          unityTag(),
+          has("【串行预加载开始】"),
+          cond(
+            "message",
+            "regex",
+            "(实验方向:LevelPlayThenTopon[\\s\\S]*首平台:Topon|实验方向:ToponThenLevelPlay[\\s\\S]*首平台:LevelPlay)",
+          ),
+        ),
+      },
+    ],
+    { requirePass: true },
+  ),
+  fruitAdCase(
+    "fruit_ad_serial_failover",
+    "首平台失败后的串行兜底",
+    "操作：使用可控失败 PID 或 SDK 调试能力令首平台重试耗尽、第二平台成功。第二平台必须不带底价，且最终保留第二平台广告。",
+    [
+      {
+        effect: "pass",
+        description: "首平台出现失败重试",
+        expr: all(
+          unityTag(),
+          has("【等待重试】"),
+          has("平台:"),
+          has("后进行第"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "首平台重试耗尽并最终失败",
+        expr: all(
+          unityTag(),
+          has("【请求最终失败】"),
+          has("角色:首平台"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "切换第二平台且明确不带底价",
+        expr: all(
+          unityTag(),
+          has("【切换第二平台】"),
+          has("不带底价请求第二平台"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "兜底第二平台 SDK 请求不带动态底价",
+        expr: all(
+          unityTag(),
+          has("【开始SDK请求】"),
+          has("角色:第二平台(首平台失败后兜底)"),
+          has("无动态底价"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "首平台失败但第二平台可用",
+        expr: all(
+          unityTag(),
+          has("【串行预加载结束】结果:首平台失败、第二平台可用"),
+        ),
+      },
+    ],
+    { requirePass: true },
+  ),
+  fruitAdCase(
+    "fruit_ad_splash_flow",
+    "Splash 冷/热启动展示闭环",
+    "操作：分别验证冷启动 splash_startapp 和切后台后回前台 splash_backapp。LevelPlay 主位必须按 Inter 请求；展示需到达业务层开始与关闭回调。",
+    [
+      {
+        effect: "pass",
+        description: "Splash 展示策略包含正确的实际类型说明",
+        expr: all(
+          unityTag(),
+          has("【广告策略配置】动作:展示 广告类型:Splash"),
+          has("启动场景主广告位实际类型:LevelPlay=Inter,TopOn=Splash"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Splash 原生广告开始展示",
+        expr: all(
+          unityTag(),
+          has("【开始展示】"),
+          has("业务场景:splash_"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Splash 业务层收到开始展示回调",
+        expr: all(
+          unityTag(),
+          has("【业务回调】广告类型:Splash"),
+          has("结果:开始展示"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Splash 业务层收到关闭回调",
+        expr: all(
+          unityTag(),
+          has("【业务回调】广告类型:Splash"),
+          has("结果:关闭"),
+        ),
+      },
+      {
+        effect: "error",
+        description: "LevelPlay Splash 主位错误使用 Splash SDK 类型",
+        expr: all(
+          unityTag(),
+          has("【开始SDK请求】"),
+          has("业务场景:splash_"),
+          has("平台:LevelPlay"),
+          has("广告类型:Splash"),
+        ),
+      },
+    ],
+    { requirePass: true },
+  ),
+  fruitAdCase(
+    "fruit_ad_reward_flow",
+    "Reward 展示与奖励闭环",
+    "操作：从任务、提现、复活、气球或关卡宝箱入口完整看完一次激励广告。需完成竞选、价格更新、开始展示和 rewarded=true 关闭回调。",
+    [
+      {
+        effect: "pass",
+        description: "Reward 展示策略已下发到插件",
+        expr: all(
+          unityTag(),
+          has("【广告策略配置】动作:展示 广告类型:Reward"),
+          has("业务场景:rv_"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Reward 竞选出可展示广告",
+        expr: all(
+          unityTag(),
+          has("【展示竞选结束】结果:选中广告"),
+          has("业务场景:rv_"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Reward 业务层获得平台与 PID",
+        expr: all(
+          unityTag(),
+          has("【业务回调】广告类型:Reward"),
+          has("即将展示平台:"),
+          has("PID:"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Reward 业务层收到开始展示回调",
+        expr: all(
+          unityTag(),
+          has("【业务回调】广告类型:Reward"),
+          has("结果:开始展示"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Reward 完整观看后发放奖励",
+        expr: all(
+          unityTag(),
+          has("【业务回调】广告类型:Reward"),
+          has("结果:关闭 是否获得奖励:True"),
+        ),
+      },
+    ],
+    { requirePass: true },
+  ),
+  fruitAdCase(
+    "fruit_ad_inter_flow",
+    "Inter 展示闭环",
+    "操作：满足云控间隔后触发下一关、重玩、设置返回、提现返回或退出应用插屏。当前游戏按返回键会走 inter_exit_app（导流未拦截时）。",
+    [
+      {
+        effect: "pass",
+        description: "Inter 展示策略已下发到插件",
+        expr: all(
+          unityTag(),
+          has("【广告策略配置】动作:展示 广告类型:Inter"),
+          has("业务场景:inter_"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Inter 竞选出可展示广告",
+        expr: all(
+          unityTag(),
+          has("【展示竞选结束】结果:选中广告"),
+          has("业务场景:inter_"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Inter 业务层收到开始展示回调",
+        expr: all(
+          unityTag(),
+          has("【业务回调】广告类型:Inter"),
+          has("结果:开始展示"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "Inter 业务层收到关闭回调",
+        expr: all(
+          unityTag(),
+          has("【业务回调】广告类型:Inter"),
+          has("结果:关闭"),
+        ),
+      },
+    ],
+    { requirePass: true },
+  ),
+  fruitAdCase(
+    "fruit_ad_realtime_first_platform",
+    "无缓存时实时加载",
+    "操作：清空广告缓存后立即触发 Splash 或 Reward。实时加载只能请求当前实验首平台；混插屏可同时请求主位和混插屏，但都不能串行到第二平台。",
+    [
+      {
+        effect: "pass",
+        description: "所有候选未就绪并进入实时加载",
+        expr: all(
+          unityTag(),
+          has("【展示竞选结束】结果:没有可展示广告"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "启动普通或混合实时加载",
+        expr: all(
+          unityTag(),
+          hasAny("【实时加载开始】", "【混合实时加载开始】"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "SDK 请求明确使用实验首平台",
+        expr: all(
+          unityTag(),
+          has("【开始SDK请求】"),
+          has("实时加载"),
+          has("实验首平台"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "实时加载成功并进入选择或展示",
+        expr: all(
+          unityTag(),
+          hasAny(
+            "【实时加载成功】",
+            "【混合实时加载成功】",
+            "【混合实时加载选中】",
+          ),
+        ),
+      },
+      {
+        effect: "error",
+        description: "实时加载错误请求了串行第二平台",
+        expr: all(
+          unityTag(),
+          has("【开始SDK请求】"),
+          has("实时加载"),
+          has("角色:第二平台"),
+        ),
+      },
+    ],
+    { requirePass: true },
+  ),
+  fruitAdCase(
+    "fruit_ad_realtime_failure",
+    "实时加载失败与兜底",
+    "操作：断网或使用可控失败/延迟 PID，在无缓存时触发 Splash 或 Reward。失败或超时后只能进入一次 H5 兜底或业务失败回调，不能再请求第二聚合平台。",
+    [
+      {
+        effect: "pass",
+        description: "实时加载进入失败、超时或无网中断分支",
+        expr: all(
+          unityTag(),
+          hasAny(
+            "【实时加载失败】",
+            "【混合实时加载失败】",
+            "【实时加载超时】",
+            "【混合实时加载超时】",
+            "【实时加载中断】",
+            "【混合实时加载中断】",
+          ),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "失败后进入 H5 或通知业务层加载失败",
+        expr: all(
+          unityTag(),
+          hasAny(
+            "【展示H5兜底】",
+            "【H5兜底开始】",
+            "结果:加载失败",
+          ),
+        ),
+      },
+      {
+        effect: "error",
+        description: "实时失败后错误请求了串行第二平台",
+        expr: all(
+          unityTag(),
+          has("【开始SDK请求】"),
+          has("实时加载"),
+          has("角色:第二平台"),
+        ),
+      },
+    ],
+    { requirePass: true },
+  ),
+  fruitAdCase(
+    "fruit_ad_request_guard",
+    "请求去重、超时与回调保护监控",
+    "高级监控：相同“平台+实际类型+PID”并发、60 秒单次请求超时或 SDK 重复/迟到回调会在这里提示。保护日志说明插件已拦截风险；PID 跨类型和旧实时流程静默结束异常属于确定性错误。",
+    [
+      {
+        effect: "warn",
+        description: "发生单次 SDK 请求 60 秒超时，需核对后续重试和迟到回调",
+        expr: all(unityTag(), has("【单次SDK请求超时】")),
+      },
+      {
+        effect: "warn",
+        description: "SDK 出现重复或迟到回调，插件已忽略",
+        expr: all(unityTag(), has("【忽略SDK重复或迟到回调】")),
+      },
+      {
+        effect: "warn",
+        description: "实时加载接管预加载，需确认 Android 只有一个真实请求",
+        expr: all(unityTag(), has("【实时加载接管预加载】")),
+      },
+      {
+        effect: "warn",
+        description: "加载请求被去重或保护性忽略",
+        expr: all(
+          unityTag(),
+          hasAny("【实时加载期间忽略预加载】", "【忽略重复预加载】"),
+        ),
+      },
+      {
+        effect: "warn",
+        description: "旧实时流程已按设计静默结束",
+        expr: all(unityTag(), has("【旧实时流程静默结束】")),
+      },
+      {
+        effect: "error",
+        description: "同一平台 PID 被跨实际广告类型复用",
+        expr: all(unityTag(), has("【广告PID类型冲突，请求已拒绝】")),
+      },
+      {
+        effect: "error",
+        description: "旧实时流程静默结束时发生内部异常",
+        expr: all(unityTag(), has("【旧实时流程静默结束异常】")),
+      },
+    ],
+  ),
+];
 
 // 内置示例用例（阶段一/二占位，之后可远程更新）。
 export const BUILTIN_TEST_CASES: TestCase[] = [
@@ -923,6 +1603,7 @@ export const BUILTIN_TEST_CASES: TestCase[] = [
     ],
   },
   ...IE_CASES_GROUPED,
+  ...LEVELPLAY_TOPON_AD_CASES,
 ];
 
 /**
@@ -971,6 +1652,7 @@ export function ruleMatches(rule: Rule, entry: LogEntry): boolean {
 }
 
 export function caseAppliesTo(tc: TestCase, pkg: string): boolean {
+  if (tc.scope.excludedApps?.includes(pkg)) return false;
   if (tc.scope.global) return true;
   return tc.scope.apps.includes(pkg);
 }

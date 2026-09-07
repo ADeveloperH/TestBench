@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-07T06:27:41Z",
+  "updatedAt": "2026-09-07T07:22:20Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -256,6 +256,10 @@
     {
       "value": "GameLauncher",
       "description": "游戏启动流程日志"
+    },
+    {
+      "value": "广告日志:",
+      "description": "LevelPlay + TopOn 广告全流程日志"
     }
   ],
   "tagFavorites": [
@@ -1384,7 +1388,10 @@
       "description": "Unity 广告插件和 AndroidADLibrary 的确定性集成错误；初始化时序问题仅警告",
       "scope": {
         "global": true,
-        "apps": []
+        "apps": [],
+        "excludedApps": [
+          "com.fruit.slicerush"
+        ]
       },
       "rules": [
         {
@@ -1662,7 +1669,10 @@
       "description": "监控广告 eCPM 是否正常；UpdateEcpm 的 price=-1，或接口请求参数中的 ecpm=0，任一出现即判定异常",
       "scope": {
         "global": true,
-        "apps": []
+        "apps": [],
+        "excludedApps": [
+          "com.fruit.slicerush"
+        ]
       },
       "rules": [
         {
@@ -1735,7 +1745,10 @@
       "requirePass": true,
       "scope": {
         "global": true,
-        "apps": []
+        "apps": [],
+        "excludedApps": [
+          "com.fruit.slicerush"
+        ]
       },
       "rules": [
         {
@@ -3228,6 +3241,2298 @@
         }
       ],
       "group": "反作弊"
+    },
+    {
+      "id": "fruit_ad_dual_init",
+      "name": "双平台初始化与实验分组",
+      "description": "操作：开始监控后彻底关闭并冷启动应用。应确定 A/B 实验方向，确认两套配置完整，并依次收到 LevelPlay、TopOn 和全部初始化完成日志。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "本次启动已确定唯一实验方向",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【广告实验确定】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "模式:(LevelPlayThenTopon|ToponThenLevelPlay)"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "LevelPlay 与 TopOn 初始化参数均已配置",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【广告接入配置】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "LevelPlay Key已配置:True"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "TopOn AppId已配置:True"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "TopOn AppKey已配置:True"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "LevelPlay 初始化完成",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【平台初始化完成】LevelPlay 初始化完成"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "TopOn 初始化完成",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【平台初始化完成】TopOn 初始化完成"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "双平台全部初始化完成",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【初始化全部完成】LevelPlay:true TopOn:true"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "实验值无效并回退到 A 组",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【广告实验值无效】"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "requirePass": true
+    },
+    {
+      "id": "fruit_ad_ecpm_fail",
+      "name": "广告 eCPM 获取异常",
+      "description": "监控 LevelPlay/TopOn 展示前的广告价格。兼容 Android.Stats 旧日志、IncentiveEngine 新价格日志和用户价值接口参数；任一出现无效价格即判定异常。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "error",
+          "description": "Android.Stats 的 UpdateEcpm 获取到 price=-1",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.Stats"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "\\bUpdateEcpm\\b[\\s\\S]*?\\bprice\\s*=\\s*-1(?:\\.0+)?(?=\\s*[,}])"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "IncentiveEngine 展示前获取到 eCPM=-1",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【激励价格更新】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "\\beCPM\\s*:\\s*-1(?:\\.0+)?(?:\\s|$)"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "用户价值接口请求使用了 ecpm=0",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "NetWorkLog:Request"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "JsonParams\\s*:\\s*\\{[\\s\\S]*?\"ecpm\"\\s*:\\s*0(?:\\.0+)?(?=\\s*[,}])"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "fruit_ad_value_revenue",
+      "name": "LevelPlay/TopOn 价值回传",
+      "description": "必须分别展示 LevelPlay 和 TopOn 广告，并观察到两个平台向 Adjust、Firebase 回传成功的全部四条日志；缺少任意一条时显示疑似。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "LevelPlay 价值成功回传 Adjust",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.revenueToMMP"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "levelplay To Adjust suc"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "LevelPlay 价值成功回传 Firebase",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.revenueToMMP"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "levelplay To Firebase suc"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "TopOn 价值成功回传 Adjust",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.revenueToMMP"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "topon To Adjust suc"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "TopOn 价值成功回传 Firebase",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.revenueToMMP"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "topon To Firebase suc"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "requirePass": true
+    },
+    {
+      "id": "fruit_ad_slot_config",
+      "name": "应用广告位配置",
+      "description": "冷启动后检查 Splash、Reward、Inter 的双平台 PID、Reward 缓存池和共享混插屏配置。当前应用 Banner PID 为空，预期明确跳过。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "Splash 主广告位及实际 SDK 类型映射正确",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "【广告策略配置】动作:(预加载|展示) 广告类型:Splash"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "LevelPlay PID:7v6c2yy8ywv3myp2"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "TopOn PID:n1hkfuho77gda4"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "混合LevelPlay PID:0v5kx7vn36fv4g7f"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "混合TopOn PID:n1hkfuho77gp26"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "启动场景主广告位实际类型:LevelPlay=Inter,TopOn=Splash"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Reward 主广告位、共享混插屏和缓存池配置正确",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【广告策略配置】动作:预加载 广告类型:Reward"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "LevelPlay PID:lgw1jn7s2ov6w54y"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "TopOn PID:n1hkfuho77gtr7"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "混合LevelPlay PID:0v5kx7vn36fv4g7f"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "混合TopOn PID:n1hkfuho77gp26"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "LevelPlay缓存数:1 TopOn缓存数:1"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Inter 双平台广告位配置正确",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【广告策略配置】动作:预加载 广告类型:Inter"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "LevelPlay PID:5bddi9vrukm8z69b"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "TopOn PID:n1hkfuho77gluj"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Banner 未配置并按当前产品配置跳过",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【Banner预加载跳过】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "LevelPlay PID已配置:False"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "TopOn PID已配置:False"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "必测广告类型存在空 PID",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "【广告策略配置】动作:(预加载|展示) 广告类型:(Splash|Reward|Inter)[\\s\\S]*?(LevelPlay PID:空|TopOn PID:空)"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "requirePass": true
+    },
+    {
+      "id": "fruit_ad_serial_success",
+      "name": "串行预加载与动态底价",
+      "description": "操作：冷启动并等待任一广告位两平台加载成功。A、B 两组要分别冷启动验证；同一条测试链路内应先请求首平台，再计算底价并请求第二平台。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "实验方向与首、第二平台映射一致",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【串行预加载开始】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "(实验方向:LevelPlayThenTopon[\\s\\S]*首平台:LevelPlay[\\s\\S]*第二平台:Topon|实验方向:ToponThenLevelPlay[\\s\\S]*首平台:Topon[\\s\\S]*第二平台:LevelPlay)"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "首平台请求不带动态底价",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【开始SDK请求】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "场景:串行预加载"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "角色:首平台"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "无动态底价"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "首平台成功后完成动态底价计算",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【动态底价计算完成】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "换算eCPM:"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "加价值:"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "第二平台底价:"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "第二平台请求携带原始 eCPM 和最终底价",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【开始SDK请求】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "场景:串行预加载"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "角色:第二平台"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "原始eCPM:"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "最终底价:"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "串行预加载以两个平台均可用结束",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【串行预加载结束】结果:两个平台均可用"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "实验方向与首平台映射相反",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【串行预加载开始】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "(实验方向:LevelPlayThenTopon[\\s\\S]*首平台:Topon|实验方向:ToponThenLevelPlay[\\s\\S]*首平台:LevelPlay)"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "requirePass": true
+    },
+    {
+      "id": "fruit_ad_serial_failover",
+      "name": "首平台失败后的串行兜底",
+      "description": "操作：使用可控失败 PID 或 SDK 调试能力令首平台重试耗尽、第二平台成功。第二平台必须不带底价，且最终保留第二平台广告。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "首平台出现失败重试",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【等待重试】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "平台:"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "后进行第"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "首平台重试耗尽并最终失败",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【请求最终失败】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "角色:首平台"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "切换第二平台且明确不带底价",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【切换第二平台】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "不带底价请求第二平台"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "兜底第二平台 SDK 请求不带动态底价",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【开始SDK请求】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "角色:第二平台(首平台失败后兜底)"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "无动态底价"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "首平台失败但第二平台可用",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【串行预加载结束】结果:首平台失败、第二平台可用"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "requirePass": true
+    },
+    {
+      "id": "fruit_ad_splash_flow",
+      "name": "Splash 冷/热启动展示闭环",
+      "description": "操作：分别验证冷启动 splash_startapp 和切后台后回前台 splash_backapp。LevelPlay 主位必须按 Inter 请求；展示需到达业务层开始与关闭回调。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "Splash 展示策略包含正确的实际类型说明",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【广告策略配置】动作:展示 广告类型:Splash"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "启动场景主广告位实际类型:LevelPlay=Inter,TopOn=Splash"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Splash 原生广告开始展示",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【开始展示】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "业务场景:splash_"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Splash 业务层收到开始展示回调",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【业务回调】广告类型:Splash"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "结果:开始展示"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Splash 业务层收到关闭回调",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【业务回调】广告类型:Splash"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "结果:关闭"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "LevelPlay Splash 主位错误使用 Splash SDK 类型",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【开始SDK请求】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "业务场景:splash_"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "平台:LevelPlay"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "广告类型:Splash"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "requirePass": true
+    },
+    {
+      "id": "fruit_ad_reward_flow",
+      "name": "Reward 展示与奖励闭环",
+      "description": "操作：从任务、提现、复活、气球或关卡宝箱入口完整看完一次激励广告。需完成竞选、价格更新、开始展示和 rewarded=true 关闭回调。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "Reward 展示策略已下发到插件",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【广告策略配置】动作:展示 广告类型:Reward"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "业务场景:rv_"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Reward 竞选出可展示广告",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【展示竞选结束】结果:选中广告"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "业务场景:rv_"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Reward 业务层获得平台与 PID",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【业务回调】广告类型:Reward"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "即将展示平台:"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "PID:"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Reward 业务层收到开始展示回调",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【业务回调】广告类型:Reward"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "结果:开始展示"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Reward 完整观看后发放奖励",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【业务回调】广告类型:Reward"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "结果:关闭 是否获得奖励:True"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "requirePass": true
+    },
+    {
+      "id": "fruit_ad_inter_flow",
+      "name": "Inter 展示闭环",
+      "description": "操作：满足云控间隔后触发下一关、重玩、设置返回、提现返回或退出应用插屏。当前游戏按返回键会走 inter_exit_app（导流未拦截时）。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "Inter 展示策略已下发到插件",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【广告策略配置】动作:展示 广告类型:Inter"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "业务场景:inter_"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Inter 竞选出可展示广告",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【展示竞选结束】结果:选中广告"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "业务场景:inter_"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Inter 业务层收到开始展示回调",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【业务回调】广告类型:Inter"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "结果:开始展示"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "Inter 业务层收到关闭回调",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【业务回调】广告类型:Inter"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "结果:关闭"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "requirePass": true
+    },
+    {
+      "id": "fruit_ad_realtime_first_platform",
+      "name": "无缓存时实时加载",
+      "description": "操作：清空广告缓存后立即触发 Splash 或 Reward。实时加载只能请求当前实验首平台；混插屏可同时请求主位和混插屏，但都不能串行到第二平台。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "所有候选未就绪并进入实时加载",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【展示竞选结束】结果:没有可展示广告"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "启动普通或混合实时加载",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【实时加载开始】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【混合实时加载开始】"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "SDK 请求明确使用实验首平台",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【开始SDK请求】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "实时加载"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "实验首平台"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "实时加载成功并进入选择或展示",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【实时加载成功】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【混合实时加载成功】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【混合实时加载选中】"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "实时加载错误请求了串行第二平台",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【开始SDK请求】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "实时加载"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "角色:第二平台"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "requirePass": true
+    },
+    {
+      "id": "fruit_ad_realtime_failure",
+      "name": "实时加载失败与兜底",
+      "description": "操作：断网或使用可控失败/延迟 PID，在无缓存时触发 Splash 或 Reward。失败或超时后只能进入一次 H5 兜底或业务失败回调，不能再请求第二聚合平台。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "实时加载进入失败、超时或无网中断分支",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【实时加载失败】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【混合实时加载失败】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【实时加载超时】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【混合实时加载超时】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【实时加载中断】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【混合实时加载中断】"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "失败后进入 H5 或通知业务层加载失败",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【展示H5兜底】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【H5兜底开始】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "结果:加载失败"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "实时失败后错误请求了串行第二平台",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【开始SDK请求】"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "实时加载"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "角色:第二平台"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "requirePass": true
+    },
+    {
+      "id": "fruit_ad_request_guard",
+      "name": "请求去重、超时与回调保护监控",
+      "description": "高级监控：相同“平台+实际类型+PID”并发、60 秒单次请求超时或 SDK 重复/迟到回调会在这里提示。保护日志说明插件已拦截风险；PID 跨类型和旧实时流程静默结束异常属于确定性错误。",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "warn",
+          "description": "发生单次 SDK 请求 60 秒超时，需核对后续重试和迟到回调",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【单次SDK请求超时】"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "SDK 出现重复或迟到回调，插件已忽略",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【忽略SDK重复或迟到回调】"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "实时加载接管预加载，需确认 Android 只有一个真实请求",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【实时加载接管预加载】"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "加载请求被去重或保护性忽略",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【实时加载期间忽略预加载】"
+                    }
+                  },
+                  {
+                    "kind": "cond",
+                    "cond": {
+                      "field": "message",
+                      "op": "contains",
+                      "value": "【忽略重复预加载】"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "effect": "warn",
+          "description": "旧实时流程已按设计静默结束",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【旧实时流程静默结束】"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "同一平台 PID 被跨实际广告类型复用",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【广告PID类型冲突，请求已拒绝】"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "error",
+          "description": "旧实时流程静默结束时发生内部异常",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "【旧实时流程静默结束异常】"
+                }
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

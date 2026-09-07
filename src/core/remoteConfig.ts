@@ -115,11 +115,22 @@ function isSavedFilter(x: unknown): x is SavedFilter {
 
 function isTestCase(x: unknown): x is TestCase {
   const testCase = x as Partial<TestCase>;
+  const scope = testCase.scope;
   return (
     !!x &&
     typeof x === "object" &&
     typeof testCase.id === "string" &&
     typeof testCase.name === "string" &&
+    !!scope &&
+    typeof scope === "object" &&
+    typeof scope.global === "boolean" &&
+    Array.isArray(scope.apps) &&
+    scope.apps.every((pkg) => typeof pkg === "string" && pkg.length > 0) &&
+    (scope.excludedApps === undefined ||
+      (Array.isArray(scope.excludedApps) &&
+        scope.excludedApps.every(
+          (pkg) => typeof pkg === "string" && pkg.length > 0,
+        ))) &&
     Array.isArray(testCase.rules) &&
     (testCase.requirePass === undefined ||
       typeof testCase.requirePass === "boolean")

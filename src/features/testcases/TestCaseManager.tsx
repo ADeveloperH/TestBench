@@ -24,7 +24,10 @@ interface Props {
 }
 
 function scopeSummary(scope: Scope): string {
-  if (scope.global) return "全局";
+  if (scope.global) {
+    const excludedCount = scope.excludedApps?.length ?? 0;
+    return excludedCount > 0 ? `全局（排除 ${excludedCount} 个）` : "全局";
+  }
   return `${scope.apps.length} 个应用`;
 }
 
@@ -220,12 +223,16 @@ function TestCaseEditor({ tc, apps, onSave, onCancel }: EditorProps) {
     JSON.parse(JSON.stringify(tc)),
   );
   const [addPkg, setAddPkg] = useState("");
+  const [addExcludedPkg, setAddExcludedPkg] = useState("");
 
   const update = (patch: Partial<TestCase>) =>
     setDraft((d) => ({ ...d, ...patch }));
 
   const availableApps = apps.filter(
     (a) => !draft.scope.apps.includes(a.package),
+  );
+  const availableExcludedApps = apps.filter(
+    (a) => !(draft.scope.excludedApps ?? []).includes(a.package),
   );
 
   const addApp = () => {
@@ -237,6 +244,31 @@ function TestCaseEditor({ tc, apps, onSave, onCancel }: EditorProps) {
   const removeApp = (pkg: string) => {
     update({
       scope: { ...draft.scope, apps: draft.scope.apps.filter((p) => p !== pkg) },
+    });
+  };
+
+  const addExcludedApp = () => {
+    if (!addExcludedPkg) return;
+    update({
+      scope: {
+        ...draft.scope,
+        excludedApps: [
+          ...(draft.scope.excludedApps ?? []),
+          addExcludedPkg,
+        ],
+      },
+    });
+    setAddExcludedPkg("");
+  };
+
+  const removeExcludedApp = (pkg: string) => {
+    update({
+      scope: {
+        ...draft.scope,
+        excludedApps: (draft.scope.excludedApps ?? []).filter(
+          (p) => p !== pkg,
+        ),
+      },
     });
   };
 
@@ -291,6 +323,49 @@ function TestCaseEditor({ tc, apps, onSave, onCancel }: EditorProps) {
           全局（所有应用生效）
         </label>
       </div>
+
+      {draft.scope.global && (
+        <div className="scope-apps">
+          <div className="manage-add">
+            <Select
+              className="tc-scope-select"
+              title="选择要排除的应用"
+              value={addExcludedPkg}
+              options={[
+                { value: "", label: "选择排除应用", fullLabel: "选择排除应用" },
+                ...availableExcludedApps.map((a) => ({
+                  value: a.package,
+                  label: a.name,
+                  fullLabel: `${a.name}（${a.package}）`,
+                })),
+              ]}
+              onChange={(v) => setAddExcludedPkg(v)}
+            />
+            <button onClick={addExcludedApp} disabled={!addExcludedPkg}>
+              排除
+            </button>
+          </div>
+          {(draft.scope.excludedApps?.length ?? 0) > 0 && (
+            <div className="scope-chips">
+              {draft.scope.excludedApps?.map((pkg) => {
+                const name = apps.find((a) => a.package === pkg)?.name ?? pkg;
+                return (
+                  <span key={pkg} className="scope-chip">
+                    排除：{name}
+                    <button
+                      className="scope-chip-x"
+                      onClick={() => removeExcludedApp(pkg)}
+                      title="取消排除"
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {!draft.scope.global && (
         <div className="scope-apps">
