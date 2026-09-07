@@ -65,13 +65,16 @@ export function getRemoteConfigStatus(): RemoteStatus {
 // —— 校验 ——
 
 function isAppInfo(x: unknown): x is AppInfo {
+  const app = x as AppInfo;
   return (
     !!x &&
     typeof x === "object" &&
-    typeof (x as AppInfo).name === "string" &&
-    (x as AppInfo).name.length > 0 &&
-    typeof (x as AppInfo).package === "string" &&
-    (x as AppInfo).package.length > 0
+    typeof app.name === "string" &&
+    app.name.length > 0 &&
+    typeof app.package === "string" &&
+    app.package.length > 0 &&
+    (app.backdoor === undefined ||
+      (typeof app.backdoor === "string" && app.backdoor.length > 0))
   );
 }
 

@@ -36,7 +36,13 @@ function loadJson(rel) {
     check(p, typeof data.schemaVersion === "number", "缺少数字类型的 schemaVersion");
     check(p, data.updatedAt === undefined || typeof data.updatedAt === "string", "updatedAt 必须是字符串");
     const sections = [
-      ["apps", (x) => typeof x.name === "string" && x.name && typeof x.package === "string" && x.package],
+      ["apps", (x) =>
+        typeof x.name === "string" &&
+        x.name &&
+        typeof x.package === "string" &&
+        x.package &&
+        (x.backdoor === undefined ||
+          (typeof x.backdoor === "string" && x.backdoor))],
       ["searchFavorites", (x) => typeof x.value === "string" && x.value],
       ["tagFavorites", (x) => typeof x.value === "string" && x.value],
       ["tagBlockRules", (x) =>

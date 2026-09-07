@@ -770,7 +770,9 @@ export default function App() {
   };
 
   const getBackdoor = (pkg: string) =>
-    prefs.prefs.backdoorOverrides[pkg] ?? DEFAULT_BACKDOOR;
+    prefs.prefs.backdoorOverrides[pkg] ??
+    effectiveApps.find((app) => app.package === pkg)?.backdoor ??
+    DEFAULT_BACKDOOR;
 
   const handleOpenBackdoor = async (pkg: string) => {
     const out = await invoke<string>("open_backdoor", {

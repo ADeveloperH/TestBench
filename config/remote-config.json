@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-02T06:37:04.826Z",
+  "updatedAt": "2026-09-07T06:27:41Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -37,6 +37,11 @@
     {
       "name": "Fruit Quest Master",
       "package": "com.lucky.fruit.quest"
+    },
+    {
+      "name": "FruitSliceRush",
+      "package": "com.fruit.slicerush",
+      "backdoor": "com.mnnjventures.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Lucky Candy Tiles",

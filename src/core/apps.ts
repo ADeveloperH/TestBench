@@ -5,6 +5,8 @@ import { getBuiltinAppPackages, getBuiltinApps } from "./builtinRegistry";
 export interface AppInfo {
   name: string;
   package: string;
+  /** 应用专用的调试后门 Activity；未配置时使用全局默认值。 */
+  backdoor?: string;
 }
 
 /** 默认的应用后门 Activity（可在设置页按应用覆盖）。 */
@@ -33,6 +35,12 @@ export const BUILTIN_APPS: AppInfo[] = [
   { name: "Lucky Candy Tiles", package: "com.lucky.candytiles" },
   { name: "Dog Arrow Out", package: "com.lucky.dogarrowout" },
   { name: "Fruit Quest Master", package: "com.lucky.fruit.quest" },
+  {
+    name: "FruitSliceRush",
+    package: "com.fruit.slicerush",
+    backdoor:
+      "com.mnnjventures.unity.productdebugger.ProductSettingsActivity",
+  },
   { name: "Lucky Mahjong Blast！", package: "com.lucky.mahjong2" },
   { name: "Lucky Mahjong Match", package: "com.lucky.mahjong.casual" },
   { name: "Pets Blast", package: "com.lucky.petsblast" },

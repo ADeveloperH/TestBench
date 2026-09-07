@@ -128,7 +128,10 @@ export function ManagePage(props: Props) {
 
   const doGenerateRemoteJson = () => {
     const cfg = buildRemoteConfigFromState({
-      apps: props.effectiveApps,
+      apps: props.effectiveApps.map((app) => {
+        const override = props.prefs.backdoorOverrides[app.package];
+        return override ? { ...app, backdoor: override } : app;
+      }),
       searchFavorites: props.prefs.searchFavorites,
       tagFavorites: props.prefs.tagFavorites,
       tagBlockRules: props.tagBlockRules.map(
@@ -233,7 +236,9 @@ export function ManagePage(props: Props) {
     props.prefs.addedApps.some((a) => a.package === pkg);
 
   const backdoorOf = (pkg: string) =>
-    props.prefs.backdoorOverrides[pkg] ?? DEFAULT_BACKDOOR;
+    props.prefs.backdoorOverrides[pkg] ??
+    props.effectiveApps.find((app) => app.package === pkg)?.backdoor ??
+    DEFAULT_BACKDOOR;
 
   const moveAppTo = (index: number, toIndex: number) => {
     const ordered = props.effectiveApps.map((a) => a.package);
