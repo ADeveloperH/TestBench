@@ -368,6 +368,22 @@ const IE_CASES: TestCase[] = [
     ],
   ),
   ieCase(
+    "ie_ad_config_mismatch",
+    "广告配置异常",
+    "广告加载失败日志表明广告位与广告格式不匹配",
+    [
+      {
+        effect: "error",
+        description: "广告位与广告格式不匹配",
+        expr: all(
+          cond("tag", "equals", "Android.Stats"),
+          has("ad_load_fail"),
+          has("Mismatched ad placement and ad format"),
+        ),
+      },
+    ],
+  ),
+  ieCase(
     "ie_anticheat_fail",
     "反作弊初始化参数非法",
     "反作弊 SDK 初始化时 partner/appKey 为空",
@@ -425,8 +441,8 @@ const IE_CASES: TestCase[] = [
   ),
   ieCase(
     "ie_adjust_revenue_fail",
-    "Adjust 收入回传监控",
-    "MAX 和 TopOn 的收入回传都成功送达 Adjust 才判定通过；缺少任一成功日志时显示疑似",
+    "max/topon 价值回传",
+    "MAX 和 TopOn 的价值都成功回传 Adjust 与 Firebase 才判定通过；缺少任一成功日志时显示疑似",
     [
       {
         effect: "pass",
@@ -444,8 +460,52 @@ const IE_CASES: TestCase[] = [
           has("topon To Adjust suc"),
         ),
       },
+      {
+        effect: "pass",
+        description: "MAX 收入成功回传 Firebase",
+        expr: all(
+          cond("tag", "equals", "Android.revenueToMMP"),
+          has("max to firebase suc"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "TopOn 收入成功回传 Firebase",
+        expr: all(
+          cond("tag", "equals", "Android.revenueToMMP"),
+          has("topon To Firebase suc"),
+        ),
+      },
     ],
     { requirePass: true },
+  ),
+  ieCase(
+    "ie_max_topon_validation",
+    "MAX包TopOn验证",
+    "Android.Stats 出现 DirectSDK ad_show，且 Android.revenueToMMP 出现 TopOn revenue 日志；两条日志全部出现后才通过",
+    [
+      {
+        effect: "pass",
+        description: "出现 DirectSDK ad_show 日志",
+        expr: all(
+          cond("tag", "equals", "Android.Stats"),
+          has("ad_show"),
+          has("source=DirectSDK"),
+        ),
+      },
+      {
+        effect: "pass",
+        description: "出现 TopOn revenue 日志",
+        expr: all(
+          cond("tag", "equals", "Android.revenueToMMP"),
+          cond(
+            "message",
+            "regex",
+            "##不打点\\s+tpn\\s+revenue\\s*[:：]",
+          ),
+        ),
+      },
+    ],
   ),
   ieCase(
     "ie_ui_fail",
@@ -847,10 +907,12 @@ const IE_GROUPS: Record<string, string> = {
   ie_withdraw_fail: "提现",
   ie_prop_fail: "道具",
   ie_ad_fail: "广告",
+  ie_ad_config_mismatch: "广告",
   ie_ad_ecpm_fail: "广告",
   ie_anticheat_fail: "反作弊",
   ie_localization_fail: "本地化",
   ie_adjust_revenue_fail: "广告",
+  ie_max_topon_validation: "广告",
   ie_ui_fail: "UI",
   ie_save_fail: "存档",
   ie_runtime_fail: "初始化",
@@ -1008,6 +1070,22 @@ const LEVELPLAY_TOPON_AD_CASES: TestCase[] = [
             "regex",
             "JsonParams\\s*:\\s*\\{[\\s\\S]*?\"ecpm\"\\s*:\\s*0(?:\\.0+)?(?=\\s*[,}])",
           ),
+        ),
+      },
+    ],
+  ),
+  fruitAdCase(
+    "fruit_ad_config_mismatch",
+    "广告配置异常",
+    "广告加载失败日志表明广告位与广告格式不匹配",
+    [
+      {
+        effect: "error",
+        description: "广告位与广告格式不匹配",
+        expr: all(
+          cond("tag", "equals", "Android.Stats"),
+          has("ad_load_fail"),
+          has("Mismatched ad placement and ad format"),
         ),
       },
     ],
