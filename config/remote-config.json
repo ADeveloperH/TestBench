@@ -1,18 +1,21 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-07T07:22:20Z",
+  "updatedAt": "2026-09-09T12:55:13.253Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
-      "package": "com.lucky.tilematch"
+      "package": "com.lucky.tilematch",
+      "backdoor": "com.foundation.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Cut Fruit",
-      "package": "com.fortuna.cutfruit"
+      "package": "com.fortuna.cutfruit",
+      "backdoor": "com.foundation.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Dog Arrow Out",
-      "package": "com.lucky.dogarrowout"
+      "package": "com.lucky.dogarrowout",
+      "backdoor": "com.foundation.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Fortuna Block Blast",
@@ -37,11 +40,6 @@
     {
       "name": "Fruit Quest Master",
       "package": "com.lucky.fruit.quest"
-    },
-    {
-      "name": "FruitSliceRush",
-      "package": "com.fruit.slicerush",
-      "backdoor": "com.mnnjventures.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Lucky Candy Tiles",
@@ -86,6 +84,11 @@
     {
       "name": "Fortuna Knit Out",
       "package": "com.fortuna.knit"
+    },
+    {
+      "name": "FruitSliceRush",
+      "package": "com.fruit.slicerush",
+      "backdoor": "com.mnnjventures.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Joy Kitchen Tile Match",
@@ -1664,6 +1667,55 @@
       "group": "广告"
     },
     {
+      "id": "ie_ad_config_mismatch",
+      "name": "广告配置异常",
+      "description": "广告加载失败日志表明广告位与广告格式不匹配",
+      "scope": {
+        "global": true,
+        "apps": [],
+        "excludedApps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "rules": [
+        {
+          "effect": "error",
+          "description": "广告位与广告格式不匹配",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.Stats"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "ad_load_fail"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "Mismatched ad placement and ad format"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "广告"
+    },
+    {
       "id": "ie_ad_ecpm_fail",
       "name": "广告 eCPM 获取异常",
       "description": "监控广告 eCPM 是否正常；UpdateEcpm 的 price=-1，或接口请求参数中的 ecpm=0，任一出现即判定异常",
@@ -1740,8 +1792,8 @@
     },
     {
       "id": "ie_adjust_revenue_fail",
-      "name": "Adjust 收入回传监控",
-      "description": "MAX 和 TopOn 的收入回传都成功送达 Adjust 才判定通过；缺少任一成功日志时显示疑似",
+      "name": "max/topon 价值回传",
+      "description": "MAX 和 TopOn 的价值都成功回传 Adjust 与 Firebase 才判定通过；缺少任一成功日志时显示疑似",
       "requirePass": true,
       "scope": {
         "global": true,
@@ -1798,6 +1850,133 @@
                   "field": "message",
                   "op": "contains",
                   "value": "topon To Adjust suc"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "MAX 收入成功回传 Firebase",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.revenueToMMP"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "max to firebase suc"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "TopOn 收入成功回传 Firebase",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.revenueToMMP"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "topon To Firebase suc"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "group": "广告"
+    },
+    {
+      "id": "ie_max_topon_validation",
+      "name": "MAX包TopOn验证",
+      "description": "Android.Stats 出现 DirectSDK ad_show，且 Android.revenueToMMP 出现 TopOn revenue 日志；两条日志全部出现后才通过",
+      "scope": {
+        "global": true,
+        "apps": [],
+        "excludedApps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "rules": [
+        {
+          "effect": "pass",
+          "description": "出现 DirectSDK ad_show 日志",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.Stats"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "ad_show"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "source=DirectSDK"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "effect": "pass",
+          "description": "出现 TopOn revenue 日志",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.revenueToMMP"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "regex",
+                  "value": "##不打点\\s+tpn\\s+revenue\\s*[:：]"
                 }
               }
             ]
@@ -3546,6 +3725,54 @@
                   "field": "message",
                   "op": "regex",
                   "value": "JsonParams\\s*:\\s*\\{[\\s\\S]*?\"ecpm\"\\s*:\\s*0(?:\\.0+)?(?=\\s*[,}])"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "fruit_ad_config_mismatch",
+      "name": "广告配置异常",
+      "description": "广告加载失败日志表明广告位与广告格式不匹配",
+      "scope": {
+        "global": false,
+        "apps": [
+          "com.fruit.slicerush"
+        ]
+      },
+      "group": "LevelPlay&TopOn 广告",
+      "rules": [
+        {
+          "effect": "error",
+          "description": "广告位与广告格式不匹配",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Android.Stats"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "ad_load_fail"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "Mismatched ad placement and ad format"
                 }
               }
             ]
