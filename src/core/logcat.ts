@@ -216,6 +216,13 @@ export function filterLogEntries(
   entries: LogEntry[],
   filters: FilterState,
 ): LogEntry[] {
+  return entries.filter(createLogEntryPredicate(filters));
+}
+
+/** 编译一次过滤条件，供日志增量投影复用，避免逐条重复解析 Tag 和正则。 */
+export function createLogEntryPredicate(
+  filters: FilterState,
+): (entry: LogEntry) => boolean {
   const minSeverity = LEVEL_SEVERITY[filters.minLevel];
   const tags = filters.tags
     .split(",")
@@ -242,7 +249,7 @@ export function filterLogEntries(
     }
   }
 
-  return entries.filter((entry) => {
+  return (entry) => {
     if (LEVEL_SEVERITY[entry.level] < minSeverity) return false;
     if (pids.length > 0 && !pids.includes(entry.pid)) return false;
     const normalizedTag = entry.tag.toLowerCase();
@@ -258,7 +265,7 @@ export function filterLogEntries(
       return false;
     }
     return !search || search.test(entry.message) || search.test(entry.tag);
-  });
+  };
 }
 
 function escapeRegExp(value: string): string {

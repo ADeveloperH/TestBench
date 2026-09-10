@@ -22,7 +22,11 @@ const log = {
   },
 };
 
-const MAX_ENTRIES = 200_000;
+const MAX_ENTRIES = 100_000;
+const TRIM_CHUNK = 5_000;
+const MAX_PENDING_LINES = 50_000;
+const MAX_LINES_PER_TICK = 5_000;
+const UI_FLUSH_MS = 150;
 
 export type { FilterState };
 
@@ -41,6 +45,10 @@ export interface UseLogcatResult {
   stop: () => Promise<void>;
   clear: () => Promise<void>;
   exportLogs: (entries?: LogEntry[]) => Promise<void>;
+  /** 导出 Rust 侧保存的完整会话，不受前端内存窗口限制。 */
+  exportSessionLogs: () => Promise<void>;
+  /** 前端展示队列因超载丢弃的原始行数。 */
+  droppedLines: number;
   entries: LogEntry[];
   /** 原始缓冲（未经过滤），供测试用例引擎使用 */
   allEntries: LogEntry[];
@@ -52,13 +60,17 @@ export interface UseLogcatResult {
   waiting: boolean;
 }
 
-export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
+export function useLogcat(
+  initialFilters?: FilterState,
+  preserveLogsForTests = false,
+): UseLogcatResult {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [buffer, setBuffer] = useState("main");
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
   const [entries, setEntries] = useState<LogEntry[]>([]);
+  const [droppedLines, setDroppedLines] = useState(0);
   const [filters, setFilters] = useState<FilterState>(() =>
     initialFilters
       ? { ...initialFilters, pid: "" }
@@ -77,6 +89,7 @@ export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
   /** 未经过展示合并的原始 Logcat 记录。 */
   const bufferRef = useRef<LogEntry[]>([]);
   const pendingRef = useRef<string[]>([]);
+  const pendingHeadRef = useRef(0);
   const parserRef = useRef(new LongLogParser());
   const idRef = useRef(0);
   const pausedRef = useRef(false);
@@ -85,6 +98,8 @@ export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
   const selectedDeviceRef = useRef<string | null>(null);
   const bufferForResumeRef = useRef(buffer);
   const refreshDevicesInFlightRef = useRef(false);
+  const preserveLogsForTestsRef = useRef(preserveLogsForTests);
+  preserveLogsForTestsRef.current = preserveLogsForTests;
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -139,13 +154,16 @@ export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
     setError(null);
     bufferRef.current = [];
     pendingRef.current = [];
+    pendingHeadRef.current = 0;
     parserRef.current.reset();
     idRef.current = 0;
     setEntries([]);
+    setDroppedLines(0);
     try {
       await invoke("start_logcat", {
         device: selectedDevice,
         buffer: buffer === "all" ? null : buffer,
+        newSession: true,
       });
       log.info("start_logcat 调用成功");
       setRunning(true);
@@ -171,9 +189,11 @@ export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
     log.info("清空日志");
     bufferRef.current = [];
     pendingRef.current = [];
+    pendingHeadRef.current = 0;
     parserRef.current.reset();
     idRef.current = 0;
     setEntries([]);
+    setDroppedLines(0);
     if (selectedDevice) {
       try {
         await invoke("clear_log", { device: selectedDevice });
@@ -191,6 +211,22 @@ export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
 
     listen<string[]>("logcat-lines", (e) => {
       pendingRef.current.push(...e.payload);
+      // 前端消费不过来时不能让事件队列无限增长。丢弃展示窗口中的旧行，
+      // 避免高频日志把主线程和内存同时拖垮。
+      const queued = pendingRef.current.length - pendingHeadRef.current;
+      if (queued > MAX_PENDING_LINES && !preserveLogsForTestsRef.current) {
+        const nextHead = pendingRef.current.length - MAX_PENDING_LINES;
+        setDroppedLines((count) => count + nextHead - pendingHeadRef.current);
+        pendingHeadRef.current = nextHead;
+        parserRef.current.reset();
+      }
+      if (
+        pendingHeadRef.current > 10_000 &&
+        pendingHeadRef.current * 2 > pendingRef.current.length
+      ) {
+        pendingRef.current = pendingRef.current.slice(pendingHeadRef.current);
+        pendingHeadRef.current = 0;
+      }
       setWaiting(false);
     }).then((fn) => {
       if (disposed) fn();
@@ -219,6 +255,7 @@ export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
         invoke("start_logcat", {
           device,
           buffer: buf === "all" ? null : buf,
+          newSession: false,
         })
           .then(() => setRunning(true))
           .catch((e) => log.error(`自动重连失败：${String(e)}`));
@@ -246,23 +283,31 @@ export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
   useEffect(() => {
     const timer = setInterval(() => {
       if (pausedRef.current) return;
-      const batch = pendingRef.current;
-      if (batch.length === 0) return;
-      pendingRef.current = [];
-      for (const line of batch) {
+      const start = pendingHeadRef.current;
+      const end = Math.min(start + MAX_LINES_PER_TICK, pendingRef.current.length);
+      if (start >= end) return;
+      let changed = false;
+      for (let i = start; i < end; i += 1) {
+        const line = pendingRef.current[i];
         const parsed = parserRef.current.pushLine(stripAnsi(line));
         for (const item of parsed) {
           const entry: LogEntry = { ...item, id: idRef.current++ };
           bufferRef.current.push(entry);
+          changed = true;
         }
       }
-      if (bufferRef.current.length > MAX_ENTRIES) {
+      pendingHeadRef.current = end;
+      if (pendingHeadRef.current === pendingRef.current.length) {
+        pendingRef.current = [];
+        pendingHeadRef.current = 0;
+      }
+      if (bufferRef.current.length > MAX_ENTRIES + TRIM_CHUNK) {
         bufferRef.current = bufferRef.current.slice(
           bufferRef.current.length - MAX_ENTRIES,
         );
       }
-      setEntries(bufferRef.current.slice());
-    }, 80);
+      if (changed) setEntries(bufferRef.current.slice());
+    }, UI_FLUSH_MS);
     return () => clearInterval(timer);
   }, []);
 
@@ -313,6 +358,16 @@ export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
     }
   }, [entries]);
 
+  const exportSessionLogs = useCallback(async () => {
+    try {
+      const saved = await invoke<string | null>("export_session_logs");
+      if (saved) setError(null);
+    } catch (e) {
+      log.error(`完整会话导出失败：${String(e)}`);
+      setError(String(e));
+    }
+  }, []);
+
   return {
     devices,
     selectedDevice,
@@ -327,6 +382,8 @@ export function useLogcat(initialFilters?: FilterState): UseLogcatResult {
     stop,
     clear,
     exportLogs,
+    exportSessionLogs,
+    droppedLines,
     entries,
     allEntries: entries,
     filters,

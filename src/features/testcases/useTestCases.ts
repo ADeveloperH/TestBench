@@ -33,6 +33,14 @@ interface CaseState {
   rules: RuleState[];
 }
 
+interface TestSessionRuntime {
+  key: string;
+  context: string;
+  lastProcessedId: number;
+  hits: Record<string, CaseState>;
+  fingerprints: Record<string, string>;
+}
+
 export interface TestCaseResult {
   testCase: TestCase;
   status: CaseStatus;
@@ -41,6 +49,41 @@ export interface TestCaseResult {
 
 /** 每条规则只保留最近的日志引用，命中总数仍完整累计。 */
 const MAX_RULE_HIT_ENTRIES = 50;
+const MAX_CACHED_SESSIONS = 24;
+const sessionRuntimes = new Map<string, TestSessionRuntime>();
+
+function createRuntime(key: string): TestSessionRuntime {
+  return {
+    key,
+    context: "",
+    lastProcessedId: -1,
+    hits: {},
+    fingerprints: {},
+  };
+}
+
+function runtimeFor(key: string): TestSessionRuntime {
+  const cached = sessionRuntimes.get(key);
+  if (cached) return cached;
+  const runtime = createRuntime(key);
+  sessionRuntimes.set(key, runtime);
+  if (sessionRuntimes.size > MAX_CACHED_SESSIONS) {
+    const oldest = sessionRuntimes.keys().next().value;
+    if (typeof oldest === "string") sessionRuntimes.delete(oldest);
+  }
+  return runtime;
+}
+
+function firstEntryAfter(entries: LogEntry[], id: number): number {
+  let low = 0;
+  let high = entries.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (entries[middle].id <= id) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
 
 function initStates(tc: TestCase): RuleState[] {
   return tc.rules.map(() => ({
@@ -92,10 +135,11 @@ export function useTestCases(
   sessionKey = "",
 ) {
   const [version, setVersion] = useState(0);
-  const hitsRef = useRef<Record<string, CaseState>>({});
-  const fingerprintRef = useRef<Record<string, string>>({});
-  const processedRef = useRef(0);
-  const contextRef = useRef("");
+  const runtimeKey = sessionKey || `default:${scopePkg}`;
+  const runtimeRef = useRef(runtimeFor(runtimeKey));
+  if (runtimeRef.current.key !== runtimeKey) {
+    runtimeRef.current = runtimeFor(runtimeKey);
+  }
 
   const visibleCases = useMemo(
     () => cases.filter((tc) => caseAppliesTo(tc, scopePkg)),
@@ -106,16 +150,17 @@ export function useTestCases(
 
   // 开始新测试：清空状态，从当前时刻重新计（不回放历史）。
   const resetAll = useCallback(() => {
-    hitsRef.current = {};
-    fingerprintRef.current = {};
-    processedRef.current = allEntries.length;
+    const runtime = runtimeRef.current;
+    runtime.hits = {};
+    runtime.fingerprints = {};
+    runtime.lastProcessedId = allEntries[allEntries.length - 1]?.id ?? -1;
     recompute();
-  }, [allEntries.length, recompute]);
+  }, [allEntries, recompute]);
 
   const resetCase = useCallback(
     (id: string) => {
-      delete hitsRef.current[id];
-      delete fingerprintRef.current[id];
+      delete runtimeRef.current.hits[id];
+      delete runtimeRef.current.fingerprints[id];
       recompute();
     },
     [recompute],
@@ -127,7 +172,7 @@ export function useTestCases(
       let changed = false;
       const now = Date.now();
       for (const tc of visibleCases) {
-        const cs = hitsRef.current[tc.id];
+        const cs = runtimeRef.current.hits[tc.id];
         if (!cs) continue;
         for (let r = 0; r < tc.rules.length; r++) {
           const rule = tc.rules[r];
@@ -152,6 +197,7 @@ export function useTestCases(
 
   // 增量评估：只处理新到的日志条目。
   useEffect(() => {
+    const runtime = runtimeRef.current;
     const pidSet = new Set(
       pidFilter
         .split(",")
@@ -159,28 +205,50 @@ export function useTestCases(
         .filter(Boolean),
     );
     const context = `${scopePkg}|${pidFilter}|${sessionKey}`;
-    if (contextRef.current !== context) {
+    let changed = false;
+    if (runtime.context !== context) {
       // 切换应用：重置并按新应用重新评估整个缓冲
-      contextRef.current = context;
-      hitsRef.current = {};
-      fingerprintRef.current = {};
-      processedRef.current = 0;
+      runtime.context = context;
+      runtime.hits = {};
+      runtime.fingerprints = {};
+      runtime.lastProcessedId = -1;
+      changed = true;
     }
 
-    for (let i = processedRef.current; i < allEntries.length; i++) {
+    // 规则指纹只计算一次，不能放在“日志 × 用例”内层循环中。
+    const preparedCases = visibleCases.map((tc) => ({
+      tc,
+      fingerprint: JSON.stringify(tc.rules),
+    }));
+    for (const { tc, fingerprint } of preparedCases) {
+      if (runtime.fingerprints[tc.id] !== fingerprint) {
+        runtime.fingerprints[tc.id] = fingerprint;
+        runtime.hits[tc.id] = initCaseState(tc);
+        changed = true;
+      }
+    }
+
+    const latestId = allEntries[allEntries.length - 1]?.id ?? -1;
+    if (runtime.lastProcessedId > latestId) {
+      // 新的 logcat 会话从 0 重新编号，旧会话状态不能复用。
+      runtime.hits = {};
+      runtime.fingerprints = Object.fromEntries(
+        preparedCases.map(({ tc, fingerprint }) => [tc.id, fingerprint]),
+      );
+      for (const { tc } of preparedCases) runtime.hits[tc.id] = initCaseState(tc);
+      runtime.lastProcessedId = -1;
+      changed = true;
+    }
+
+    const start = firstEntryAfter(allEntries, runtime.lastProcessedId);
+    for (let i = start; i < allEntries.length; i++) {
       const entry = allEntries[i];
       if (pidSet.size > 0 && !pidSet.has(entry.pid)) continue;
-      for (const tc of visibleCases) {
-        // 规则内容变化时重置该用例的状态（避免计数/状态机错位）
-        const fp = JSON.stringify(tc.rules);
-        if (fingerprintRef.current[tc.id] !== fp) {
-          fingerprintRef.current[tc.id] = fp;
-          hitsRef.current[tc.id] = initCaseState(tc);
-        }
-        let cs = hitsRef.current[tc.id];
+      for (const { tc } of preparedCases) {
+        let cs = runtime.hits[tc.id];
         if (!cs) {
           cs = initCaseState(tc);
-          hitsRef.current[tc.id] = cs;
+          runtime.hits[tc.id] = cs;
         }
         cs.seenLogs += 1;
         for (let r = 0; r < tc.rules.length; r++) {
@@ -209,15 +277,16 @@ export function useTestCases(
           }
         }
       }
+      changed = true;
     }
-    processedRef.current = allEntries.length;
-    recompute();
+    runtime.lastProcessedId = latestId;
+    if (changed) recompute();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allEntries, scopePkg, pidFilter, visibleCases, sessionKey]);
 
   const results = useMemo(() => {
     return visibleCases.map((tc) => {
-      const cs = hitsRef.current[tc.id] ?? initCaseState(tc);
+      const cs = runtimeRef.current.hits[tc.id] ?? initCaseState(tc);
       return {
         testCase: tc,
         status: computeStatus(tc, cs),
@@ -230,8 +299,7 @@ export function useTestCases(
         })),
       };
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleCases, version]);
+  }, [visibleCases, version, runtimeKey]);
 
   return { results, resetAll, resetCase };
 }

@@ -2674,11 +2674,16 @@ body.light .tc-rule-editor {
 }
 
 .toolbar-filter-row > .toolbar-log-count {
-  width: 88px;
+  width: auto;
   min-width: 88px;
-  flex: 0 0 88px;
+  flex: 0 1 auto;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.log-drop-warning {
+  color: var(--warning, #d88900);
+  margin-left: 4px;
 }
 
 .toolbar-search-with-regex .history-input {

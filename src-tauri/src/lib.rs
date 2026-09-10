@@ -1,5 +1,6 @@
 mod adb;
 mod audio_export;
+mod log_store;
 
 use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -25,11 +26,14 @@ use adb::{
     LogcatProcess, PairingInfo, ScrcpyRecord,
 };
 use audio_export::{AudioExportController, AudioExportResult};
+use log_store::LogSessionWriter;
 
 /// 全局运行状态：当前 logcat 进程 + 代号（用于识别过期读取线程）。
 struct RunningLogcat {
     child: Mutex<Option<LogcatProcess>>,
     generation: Arc<AtomicU64>,
+    /// 当前会话的原始日志落盘器。前端只消费展示窗口，完整日志留在这里。
+    session: Arc<Mutex<Option<LogSessionWriter>>>,
 }
 
 /// 当前录屏会话（scrcpy 子进程 + 输出路径）。
@@ -76,6 +80,7 @@ fn start_logcat(
     state: State<'_, RunningLogcat>,
     device: Option<String>,
     buffer: Option<String>,
+    new_session: Option<bool>,
 ) -> Result<(), String> {
     log::info!("收到前端命令 start_logcat：device={:?} buffer={:?}", device, buffer);
 
@@ -89,6 +94,25 @@ fn start_logcat(
         proc.stop();
     }
 
+    if new_session.unwrap_or(false) || state.session.lock().unwrap().is_none() {
+        let writer = app
+            .path()
+            .app_data_dir()
+            .ok()
+            .and_then(|app_data_dir| match LogSessionWriter::start(&app_data_dir) {
+                Ok(writer) => {
+                    log::info!("日志会话落盘目录：{}", writer.dir().display());
+                    Some(writer)
+                }
+                Err(error) => {
+                    log::warn!("日志会话落盘不可用，将继续使用内存展示：{error}");
+                    None
+                }
+            });
+        let mut session = state.session.lock().unwrap();
+        *session = writer;
+    }
+
     let mut proc = LogcatProcess::start(device.as_deref(), buffer.as_deref())?;
     let stdout = proc.take_stdout().ok_or("无法读取 logcat 输出")?;
     let stderr = proc.take_stderr();
@@ -99,6 +123,7 @@ fn start_logcat(
     // 把其他 invoke（更新检查/导出/轮询）卡死；这里按 200 行或 50ms 批量推送。
     let app_for_thread = app.clone();
     let generation_ref = state.generation.clone();
+    let session_for_thread = state.session.clone();
     std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
         let mut buf: Vec<u8> = Vec::new();
@@ -129,6 +154,16 @@ fn start_logcat(
                     if batch.len() >= 200
                         || last_flush.elapsed() >= std::time::Duration::from_millis(50)
                     {
+                        {
+                            let mut session = session_for_thread.lock().unwrap();
+                            if generation_ref.load(Ordering::SeqCst) == generation {
+                                if let Some(writer) = session.as_mut() {
+                                    if let Err(error) = writer.append_lines(&batch) {
+                                        log::error!("日志落盘失败：{error}");
+                                    }
+                                }
+                            }
+                        }
                         let _ = app_for_thread.emit("logcat-lines", std::mem::take(&mut batch));
                         last_flush = std::time::Instant::now();
                     }
@@ -136,7 +171,15 @@ fn start_logcat(
                 Err(_) => break,
             }
         }
-        if !batch.is_empty() {
+        if !batch.is_empty() && generation_ref.load(Ordering::SeqCst) == generation {
+            let mut session = session_for_thread.lock().unwrap();
+            if generation_ref.load(Ordering::SeqCst) == generation {
+                if let Some(writer) = session.as_mut() {
+                    if let Err(error) = writer.append_lines(&batch) {
+                        log::error!("日志落盘失败：{error}");
+                    }
+                }
+            }
             let _ = app_for_thread.emit("logcat-lines", std::mem::take(&mut batch));
         }
         log::debug!("logcat 读取线程结束，共读取 {count} 行，generation={generation}");
@@ -188,6 +231,9 @@ fn stop_logcat(state: State<'_, RunningLogcat>) -> Result<(), String> {
     state.generation.fetch_add(1, Ordering::SeqCst);
     if let Some(mut proc) = state.child.lock().unwrap().take() {
         proc.stop();
+    }
+    if let Some(writer) = state.session.lock().unwrap().as_mut() {
+        writer.flush();
     }
     Ok(())
 }
@@ -712,6 +758,56 @@ async fn export_logs(app: AppHandle, text: String) -> Result<Option<String>, Str
     }
 }
 
+/// 直接导出当前会话的完整原始日志，避免把历史日志重新拼到前端内存中。
+#[tauri::command]
+fn export_session_logs(
+    app: AppHandle,
+    state: State<'_, RunningLogcat>,
+) -> Result<Option<String>, String> {
+    if state.session.lock().unwrap().is_none() {
+        return Ok(None);
+    }
+    let picked = save_file_dialog(
+        &app,
+        "logcat-session.txt",
+        "完整日志文件",
+        &["txt", "log"],
+    )?;
+    let Some(destination) = picked else {
+        return Ok(None);
+    };
+
+    let mut session = state.session.lock().unwrap();
+    let Some(writer) = session.as_mut() else {
+        return Ok(None);
+    };
+    writer.flush();
+    let dir = writer.dir().to_path_buf();
+
+    let mut segments = std::fs::read_dir(&dir)
+        .map_err(|e| format!("读取日志会话目录失败：{e}"))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("logs-") && name.ends_with(".log"))
+        })
+        .collect::<Vec<_>>();
+    segments.sort();
+
+    let mut output = std::fs::File::create(&destination)
+        .map_err(|e| format!("创建导出文件失败：{e}"))?;
+    for segment in segments {
+        let mut input = std::fs::File::open(&segment)
+            .map_err(|e| format!("读取日志分段失败：{e}"))?;
+        std::io::copy(&mut input, &mut output)
+            .map_err(|e| format!("导出日志失败：{e}"))?;
+    }
+    log::info!("完整日志已导出到：{}", destination.display());
+    Ok(Some(destination.display().to_string()))
+}
+
 #[tauri::command]
 async fn export_config(app: AppHandle, text: String) -> Result<Option<String>, String> {
     log::info!("收到前端命令 export_config，配置长度 {} 字节", text.len());
@@ -1005,6 +1101,7 @@ pub fn run() {
         .manage(RunningLogcat {
             child: Mutex::new(None),
             generation: Arc::new(AtomicU64::new(0)),
+            session: Arc::new(Mutex::new(None)),
         })
         .manage(RecordingState {
             session: Mutex::new(None),
@@ -1059,6 +1156,7 @@ pub fn run() {
             app_alarm,
             app_performance,
             export_logs,
+            export_session_logs,
             export_config,
             import_config,
             export_debug_log

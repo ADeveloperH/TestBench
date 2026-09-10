@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useDeferredValue,
   useMemo,
   useRef,
   useState,
@@ -15,7 +16,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { message } from "@tauri-apps/plugin-dialog";
 import { notify } from "./core/notify";
-import { appendDisplayEntry, filterLogEntries } from "./core/logcat";
+import { createLogEntryPredicate } from "./core/logcat";
 import { useLogcat } from "./features/logcat/useLogcat";
 import { usePrefs } from "./features/settings/usePrefs";
 import { useSavedFilters } from "./features/filters/useSavedFilters";
@@ -30,6 +31,12 @@ import { Select } from "./components/Select";
 import { LogList } from "./features/logcat/LogList";
 import { LogTabs } from "./features/logcat/LogTabs";
 import { useLogTabs } from "./features/logcat/useLogTabs";
+import {
+  updateIncrementalFilter,
+  updateProjection,
+  type IncrementalFilterCache,
+  type ProjectionCache,
+} from "./features/logcat/projectionCache";
 import { ManagePage, type ManageTab } from "./features/settings/ManagePage";
 import { TestCaseSidebar } from "./features/testcases/TestCaseSidebar";
 import {
@@ -67,7 +74,6 @@ const NO_PROTECTED_VALUES = new Set<string>();
 import { LEVELS, LEVEL_LABELS } from "./core/types";
 import type {
   DeviceInfo,
-  LogEntry,
   LogLevel,
   ScrollCommand,
 } from "./core/types";
@@ -165,6 +171,8 @@ export default function App() {
     start,
     stop,
     exportLogs,
+    exportSessionLogs,
+    droppedLines,
     entries,
     allEntries,
     filters,
@@ -172,7 +180,13 @@ export default function App() {
     error,
     setError,
     waiting,
-  } = useLogcat(logTabs.activeTab.filters);
+  } = useLogcat(
+    logTabs.activeTab.filters,
+    logTabs.activeTab.kind === "test",
+  );
+  // 普通日志列表允许低优先级跟随采集，避免高频日志阻塞 Tab/筛选等交互；
+  // 测试监控仍使用 allEntries 的实时数据，不延迟判定。
+  const displayEntries = useDeferredValue(entries);
 
   const [view, setView] = useState<"log" | "manage" | "tools">("log");
   const [bugreportProgress, setBugreportProgress] = useState<BugreportProgress | null>(null);
@@ -402,18 +416,37 @@ export default function App() {
   const activeTestStartedAtId = logTabs.activeTab.testStartedAtId;
   const activeTestPidHistory = logTabs.activeTab.pidHistory;
   const isTestTab = logTabs.activeTab.kind === "test";
+  const testFilterCachesRef = useRef(new Map<string, IncrementalFilterCache>());
+  const projectionCachesRef = useRef(new Map<string, ProjectionCache>());
+
+  useEffect(() => {
+    const validIds = new Set(logTabs.tabs.map((tab) => tab.id));
+    for (const id of testFilterCachesRef.current.keys()) {
+      if (!validIds.has(id)) testFilterCachesRef.current.delete(id);
+    }
+    for (const id of projectionCachesRef.current.keys()) {
+      if (!validIds.has(id)) projectionCachesRef.current.delete(id);
+    }
+  }, [logTabs.tabs]);
 
   const testSessionEntries = useMemo(() => {
     if (!isTestTab) return [];
     const pidSet = new Set(activeTestPidHistory);
     const floor = Math.max(activeTabClearedBeforeId, activeTestStartedAtId);
     if (pidSet.size === 0) return [];
-    return allEntries.filter(
+    const cacheKey = `${floor}|${[...pidSet].sort().join(",")}`;
+    const cache = updateIncrementalFilter(
+      testFilterCachesRef.current.get(logTabs.activeTabId),
+      allEntries,
+      cacheKey,
       (entry) => entry.id > floor && pidSet.has(entry.pid),
     );
+    testFilterCachesRef.current.set(logTabs.activeTabId, cache);
+    return cache.entries;
   }, [
     allEntries,
     isTestTab,
+    logTabs.activeTabId,
     activeTestPidHistory,
     activeTabClearedBeforeId,
     activeTestStartedAtId,
@@ -422,40 +455,53 @@ export default function App() {
   // 先应用当前 Tab 的清空/暂停边界，再做展示合并。这样在用户清空日志或
   // 启动测试监控的边界上，新的堆栈续行不会被合并进已经隐藏的旧记录。
   const tabProjection = useMemo(() => {
-    const source = isTestTab ? testSessionEntries : entries;
-    const display: LogEntry[] = [];
-    for (const entry of source) {
-      if (
-        entry.id <= activeTabClearedBeforeId ||
-        (activeTabPausedAtId != null && entry.id > activeTabPausedAtId)
-      ) {
-        continue;
-      }
-      appendDisplayEntry(display, entry, prefs.prefs.mergeStack);
-    }
-    if (isTestTab) return { entries: display, blockedCount: 0 };
-
-    const filtered = filterLogEntries(display, filters);
-    if (!prefs.prefs.tagBlockingEnabled) {
-      return { entries: filtered, blockedCount: 0 };
-    }
-    const blockedCount = filtered.reduce(
-      (count, entry) =>
-        count + (isTagBlocked(entry.tag, prefs.tagBlockRules) ? 1 : 0),
-      0,
+    const source = isTestTab ? testSessionEntries : displayEntries;
+    const filterPredicate = isTestTab
+      ? () => true
+      : createLogEntryPredicate(filters);
+    const enabledBlockRules = prefs.tagBlockRules.filter((rule) => rule.enabled);
+    const cacheKey = JSON.stringify({
+      kind: isTestTab ? "test" : "log",
+      clearedBeforeId: activeTabClearedBeforeId,
+      pausedAtId: activeTabPausedAtId,
+      mergeStack: prefs.prefs.mergeStack,
+      filters: isTestTab ? null : filters,
+      testSource: isTestTab
+        ? {
+            startedAtId: activeTestStartedAtId,
+            pids: [...activeTestPidHistory].sort(),
+          }
+        : null,
+      tagBlockingEnabled: !isTestTab && prefs.prefs.tagBlockingEnabled,
+      showBlockedTags,
+      blockRules: enabledBlockRules.map((rule) => [rule.id, rule.value, rule.match]),
+    });
+    const cache = updateProjection(
+      projectionCachesRef.current.get(logTabs.activeTabId),
+      source,
+      cacheKey,
+      {
+        mergeStack: prefs.prefs.mergeStack,
+        acceptSource: (entry) =>
+          entry.id > activeTabClearedBeforeId &&
+          (activeTabPausedAtId == null || entry.id <= activeTabPausedAtId),
+        include: filterPredicate,
+        blocked: (entry) =>
+          !isTestTab &&
+          prefs.prefs.tagBlockingEnabled &&
+          isTagBlocked(entry.tag, enabledBlockRules),
+        showBlocked: isTestTab || showBlockedTags,
+      },
     );
-    return {
-      entries: showBlockedTags
-        ? filtered
-        : filtered.filter(
-            (entry) => !isTagBlocked(entry.tag, prefs.tagBlockRules),
-          ),
-      blockedCount,
-    };
+    projectionCachesRef.current.set(logTabs.activeTabId, cache);
+    return { entries: cache.entries, blockedCount: cache.blockedCount };
   }, [
-    entries,
+    displayEntries,
     testSessionEntries,
     isTestTab,
+    logTabs.activeTabId,
+    activeTestPidHistory,
+    activeTestStartedAtId,
     activeTabClearedBeforeId,
     activeTabPausedAtId,
     prefs.prefs.mergeStack,
@@ -469,13 +515,13 @@ export default function App() {
 
   const tabAllEntries = useMemo(() => {
     if (isTestTab) return testSessionEntries;
-    return allEntries.filter(
+    return displayEntries.filter(
       (entry) =>
         entry.id > activeTabClearedBeforeId &&
         (activeTabPausedAtId == null || entry.id <= activeTabPausedAtId),
     );
   }, [
-    allEntries,
+    displayEntries,
     testSessionEntries,
     isTestTab,
     activeTabClearedBeforeId,
@@ -496,7 +542,8 @@ export default function App() {
 
   // 持续把当前日志处理条件和界面状态写回当前 Tab。
   useEffect(() => {
-    logTabs.updateActiveTab({ filters: { ...filters, pid: "" } });
+    // PID 仅作为本次运行时缓存；useLogTabs 持久化时会自动移除。
+    logTabs.updateActiveTab({ filters: { ...filters } });
   }, [filters, logTabs.updateActiveTab]);
 
   useEffect(() => {
@@ -987,7 +1034,9 @@ export default function App() {
         const sel = window.getSelection();
         if (selectedEntry && sel && sel.isCollapsed) {
           e.preventDefault();
-          writeText(selectedEntry.raw).catch((err) => setError(String(err)));
+          writeText(selectedEntry.raw)
+            .then(() => showToast("复制成功"))
+            .catch((err) => setError(`复制失败：${String(err)}`));
         }
       }
     };
@@ -1064,6 +1113,10 @@ export default function App() {
   };
 
   const exportCurrentTab = () => exportLogs(tabEntries);
+  const exportCompleteSession = async () => {
+    await exportSessionLogs();
+    setShowMoreActions(false);
+  };
 
   // 快捷键：空格暂停当前 Tab，Cmd/Ctrl+L 清空当前 Tab，Cmd/Ctrl+E 导出当前 Tab。
   useEffect(() => {
@@ -1185,7 +1238,7 @@ export default function App() {
     activeTabIdRef.current = tab.id;
     clearAppNotRunningError();
     logTabs.selectTab(tab.id);
-    setFilters({ ...tab.filters, pid: "" });
+    setFilters({ ...tab.filters });
     setSelectedPackage(
       tab.kind === "test" ? tab.testPackage : (tab.filters.app ?? ""),
     );
@@ -1588,6 +1641,15 @@ export default function App() {
                     <ToolbarIcon name="settings" />
                     设置与配置
                   </button>
+                  <button
+                    className="toolbar-more-item"
+                    onClick={exportCompleteSession}
+                    disabled={!running && entries.length === 0}
+                    title="导出当前会话的完整日志，不受前端显示窗口限制"
+                  >
+                    <ToolbarIcon name="export" />
+                    导出完整会话
+                  </button>
                   <div className="toolbar-more-item toolbar-more-font">
                     <ToolbarIcon name="font" />
                     <span>日志字号</span>
@@ -1822,7 +1884,17 @@ export default function App() {
                   : `已隐藏 ${blockedTagCount}`}
               </button>
             )}
-          <span className="count toolbar-log-count">共 {tabEntries.length} 条</span>
+          <span className="count toolbar-log-count">
+            共 {tabEntries.length} 条
+            {droppedLines > 0 && (
+              <span
+                className="log-drop-warning"
+                title="完整会话文件不受影响；前端展示和当前测试缓存已丢弃这些行"
+              >
+                （展示已丢弃 {droppedLines} 行）
+              </span>
+            )}
+          </span>
         </div>
 
         {showWifi && <WifiPanel onChanged={refreshDevices} />}
@@ -2233,9 +2305,9 @@ export default function App() {
                 )}
                 <button
                   onClick={() =>
-                    writeText(selectedEntry.raw).catch((e) =>
-                      setError(`复制失败：${String(e)}`),
-                    )
+                    writeText(selectedEntry.raw)
+                      .then(() => showToast("复制成功"))
+                      .catch((e) => setError(`复制失败：${String(e)}`))
                   }
                 >
                   复制
