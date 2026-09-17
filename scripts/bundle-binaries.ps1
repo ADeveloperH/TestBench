@@ -16,16 +16,14 @@ New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 #    - v4.0 migrated SDL2 -> SDL3 and fixed several position/rotation/size bugs;
 #    - v4.1 is proven to work with the app's args (ANDROID_SERIAL, --video-bit-rate,
 #      --stay-awake, --record, --no-playback) on the macOS side.
-Write-Host "Querying scrcpy-win64 v4.1 ..."
-$releases = Invoke-RestMethod -Uri "https://api.github.com/repos/Genymobile/scrcpy/releases"
-$release = $releases | Where-Object { $_.tag_name -eq "v4.1" } | Select-Object -First 1
-if (-not $release) { throw "scrcpy v4.1 release not found" }
-$asset = $release.assets | Where-Object { $_.name -match "scrcpy-win64.*\.zip$" } | Select-Object -First 1
-if (-not $asset) { throw "scrcpy-win64 zip asset not found for v4.1" }
-
+$scrcpyVersion = "4.1"
+$assetName = "scrcpy-win64-v$scrcpyVersion.zip"
+$assetUrl = "https://github.com/Genymobile/scrcpy/releases/download/v$scrcpyVersion/$assetName"
 $tmpZip = Join-Path $env:TEMP "scrcpy-win64.zip"
-Write-Host "Downloading v4.1 / $($asset.name) ..."
-Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip
+Write-Host "Downloading v$scrcpyVersion / $assetName ..."
+# The version and asset name are pinned, so downloading the release asset directly
+# avoids GitHub REST API rate limits on shared Actions runner IP addresses.
+Invoke-WebRequest -Uri $assetUrl -OutFile $tmpZip
 
 $extract = Join-Path $env:TEMP "scrcpy-win64"
 if (Test-Path $extract) { Remove-Item -Recurse -Force $extract }

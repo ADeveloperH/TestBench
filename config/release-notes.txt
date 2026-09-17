@@ -1,1 +1,1 @@
-支持重组 NetworkLogger 在 Android 上输出的分段长日志，完整保留正文与调用栈，并修复 Ctrl/Cmd+F 在合并长日志中的定位偏差，可准确滚动到每一个具体匹配位置。
+支持重组 NetworkLogger 在 Android 上输出的分段长日志，完整保留正文与调用栈，并修复 Ctrl/Cmd+F 在合并长日志中的定位偏差；同时修复 Windows 打包下载 scrcpy 时可能触发 GitHub API 限流的问题。
