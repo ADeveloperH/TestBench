@@ -40,6 +40,18 @@ export type ManageTab =
 
 /** 发布凭据（fine-grained PAT）的本地存储 key。 */
 const PUBLISH_TOKEN_KEY = "remote-config-publish-token";
+const HELP_DOCUMENTS = [
+  {
+    title: "用户使用手册",
+    description: "查看安装、设备连接、日志操作、自动更新和常见问题。",
+    url: "https://github.com/ADeveloperH/TestBench/blob/main/Docs/%E7%94%A8%E6%88%B7%E4%BD%BF%E7%94%A8%E6%89%8B%E5%86%8C.md",
+  },
+  {
+    title: "使用 AI 生成测试用例",
+    description: "查看格式规范、提示词模板、可导入示例和验证清单。",
+    url: "https://github.com/ADeveloperH/TestBench/blob/main/Docs/%E4%BD%BF%E7%94%A8AI%E7%94%9F%E6%88%90%E6%B5%8B%E8%AF%95%E7%94%A8%E4%BE%8B.md",
+  },
+] as const;
 
 interface Props {
   prefs: Prefs;
@@ -97,6 +109,7 @@ export function ManagePage(props: Props) {
   const [tagFav, setTagFav] = useState("");
   const [tagDesc, setTagDesc] = useState("");
   const [configMsg, setConfigMsg] = useState("");
+  const [helpMsg, setHelpMsg] = useState("");
   // 发布配置页（仅调试模式）
   const [remoteJson, setRemoteJson] = useState("");
   const [publishMsg, setPublishMsg] = useState("");
@@ -124,6 +137,15 @@ export function ManagePage(props: Props) {
     setConfigMsg("正在刷新远程配置…");
     const status = await refreshRemoteConfig(true);
     setConfigMsg(`内置配置：${status.detail}`);
+  };
+
+  const doOpenHelpDocument = async (title: string, url: string) => {
+    setHelpMsg("");
+    try {
+      await invoke("open_in_browser", { url });
+    } catch (e) {
+      setHelpMsg(`打开「${title}」失败：${String(e)}`);
+    }
   };
 
   const doGenerateRemoteJson = () => {
@@ -601,6 +623,25 @@ export function ManagePage(props: Props) {
 
       {tab === "help" && (
         <section className="manage-section">
+          <h2>相关文档</h2>
+          <ul className="manage-list">
+            {HELP_DOCUMENTS.map((doc) => (
+              <li className="manage-item" key={doc.url}>
+                <div className="manage-name">
+                  <strong>{doc.title}</strong>
+                  <div className="manage-desc">{doc.description}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => doOpenHelpDocument(doc.title, doc.url)}
+                >
+                  打开文档
+                </button>
+              </li>
+            ))}
+          </ul>
+          {helpMsg && <div className="settings-inline-status">{helpMsg}</div>}
+
           <h2>快捷键</h2>
           <ul className="manage-list">
             <li className="manage-item">
