@@ -9,6 +9,7 @@ import {
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { error as logError, info } from "@tauri-apps/plugin-log";
+import { ChunkedLogAssembler } from "../../core/chunkedLog";
 import { LongLogParser, stripAnsi } from "../../core/logcat";
 import type { Device, FilterState, LogEntry } from "../../core/types";
 
@@ -91,6 +92,7 @@ export function useLogcat(
   const pendingRef = useRef<string[]>([]);
   const pendingHeadRef = useRef(0);
   const parserRef = useRef(new LongLogParser());
+  const chunkAssemblerRef = useRef(new ChunkedLogAssembler());
   const idRef = useRef(0);
   const pausedRef = useRef(false);
   const runningRef = useRef(false);
@@ -156,6 +158,7 @@ export function useLogcat(
     pendingRef.current = [];
     pendingHeadRef.current = 0;
     parserRef.current.reset();
+    chunkAssemblerRef.current.reset();
     idRef.current = 0;
     setEntries([]);
     setDroppedLines(0);
@@ -191,6 +194,7 @@ export function useLogcat(
     pendingRef.current = [];
     pendingHeadRef.current = 0;
     parserRef.current.reset();
+    chunkAssemblerRef.current.reset();
     idRef.current = 0;
     setEntries([]);
     setDroppedLines(0);
@@ -219,6 +223,7 @@ export function useLogcat(
         setDroppedLines((count) => count + nextHead - pendingHeadRef.current);
         pendingHeadRef.current = nextHead;
         parserRef.current.reset();
+        chunkAssemblerRef.current.reset();
       }
       if (
         pendingHeadRef.current > 10_000 &&
@@ -285,16 +290,30 @@ export function useLogcat(
       if (pausedRef.current) return;
       const start = pendingHeadRef.current;
       const end = Math.min(start + MAX_LINES_PER_TICK, pendingRef.current.length);
-      if (start >= end) return;
       let changed = false;
+      const appendEntry = (item: Omit<LogEntry, "id">) => {
+        const entry: LogEntry = { ...item, id: idRef.current++ };
+        bufferRef.current.push(entry);
+        changed = true;
+      };
+      if (start >= end) {
+        for (const item of chunkAssemblerRef.current.flushExpired()) {
+          appendEntry(item);
+        }
+        if (changed) setEntries(bufferRef.current.slice());
+        return;
+      }
       for (let i = start; i < end; i += 1) {
         const line = pendingRef.current[i];
         const parsed = parserRef.current.pushLine(stripAnsi(line));
         for (const item of parsed) {
-          const entry: LogEntry = { ...item, id: idRef.current++ };
-          bufferRef.current.push(entry);
-          changed = true;
+          for (const logical of chunkAssemblerRef.current.push(item)) {
+            appendEntry(logical);
+          }
         }
+      }
+      for (const item of chunkAssemblerRef.current.flushExpired()) {
+        appendEntry(item);
       }
       pendingHeadRef.current = end;
       if (pendingHeadRef.current === pendingRef.current.length) {

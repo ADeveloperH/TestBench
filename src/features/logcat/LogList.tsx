@@ -219,6 +219,7 @@ function highlightText(
       <mark
         key={key++}
         className={occ === currentOccurrence ? "find-hit current" : "find-hit"}
+        data-find-occurrence={occ}
       >
         {matched}
       </mark>,
@@ -350,8 +351,18 @@ export function LogList({
   };
   const [findSnapshot, setFindSnapshot] = useState<LogEntry[]>([]);
   const findInputRef = useRef<HTMLInputElement>(null);
+  const findScrollFrameRef = useRef<number | null>(null);
   const entriesRef = useRef(entries);
   entriesRef.current = entries;
+
+  useEffect(
+    () => () => {
+      if (findScrollFrameRef.current != null) {
+        cancelAnimationFrame(findScrollFrameRef.current);
+      }
+    },
+    [],
+  );
 
   // —— 表头列宽（拖拽调整） ——
   const [colWidths, setColWidths] = useState(loadColWidths);
@@ -590,6 +601,43 @@ export function LogList({
       liveIdx >= 0 ? liveIdx : Math.min(row.rowIndex, entries.length - 1);
     updateFollowLatest(false);
     virtualizer.scrollToIndex(target, { align: "center" });
+
+    // 虚拟列表首次只能按估算行高定位。合并日志可能包含很长的正文和调用栈，
+    // 因此目标行渲染并完成测量后，再把这一行内的具体命中滚到视口中央。
+    if (findScrollFrameRef.current != null) {
+      cancelAnimationFrame(findScrollFrameRef.current);
+    }
+    let attempts = 0;
+    const locateExactHit = () => {
+      findScrollFrameRef.current = requestAnimationFrame(() => {
+        const hit = parentRef.current?.querySelector<HTMLElement>(
+          `[data-find-occurrence="${occ}"]`,
+        );
+        if (hit) {
+          hit.scrollIntoView({ block: "center", inline: "nearest" });
+          const el = parentRef.current;
+          if (el) {
+            lastScrollTopRef.current = el.scrollTop;
+            tabScrollOffsetsRef.current.set(
+              displayedTabIdRef.current,
+              el.scrollTop,
+            );
+          }
+          findScrollFrameRef.current = null;
+          return;
+        }
+
+        // 动态行高修正后目标行可能暂时移出渲染窗口，重新按实测高度定位。
+        attempts += 1;
+        if (attempts < 4) {
+          virtualizer.scrollToIndex(target, { align: "center" });
+          locateExactHit();
+        } else {
+          findScrollFrameRef.current = null;
+        }
+      });
+    };
+    locateExactHit();
   };
 
   const goNext = () => {
