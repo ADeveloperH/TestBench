@@ -1626,6 +1626,67 @@ button.danger:hover {
   flex-shrink: 0;
 }
 
+.tc-batch-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tc-batch-toolbar .select-wrap {
+  min-width: 140px;
+}
+
+.tc-selection,
+.tc-item-head > .checkbox {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.tc-batch-toolbar .tc-selection input {
+  width: 16px;
+  min-width: 16px;
+  max-width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 0;
+}
+
+.tc-manager > .manage-desc {
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.tc-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.tc-storage-error {
+  color: var(--danger);
+}
+
+.tc-confirm-dialog p {
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .tc-item-head {
+    flex-wrap: wrap;
+  }
+
+  .tc-item-head .tc-name {
+    min-width: 140px;
+    overflow-wrap: anywhere;
+  }
+}
+
 .tc-group {
   margin-top: 10px;
 }

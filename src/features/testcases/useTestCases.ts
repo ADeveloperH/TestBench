@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LogEntry } from "../../core/types";
+import { caseRuntimeFingerprint } from "./caseConfig";
 import {
   caseAppliesTo,
   evalExpr,
@@ -51,6 +52,30 @@ export interface TestCaseResult {
 const MAX_RULE_HIT_ENTRIES = 50;
 const MAX_CACHED_SESSIONS = 24;
 const sessionRuntimes = new Map<string, TestSessionRuntime>();
+
+export function invalidateCaseRuntimes(ids?: ReadonlySet<string>): void {
+  for (const runtime of sessionRuntimes.values()) {
+    for (const id of Object.keys(runtime.hits)) {
+      if (!ids || ids.has(id)) {
+        delete runtime.hits[id];
+        delete runtime.fingerprints[id];
+      }
+    }
+  }
+}
+
+/** 清理所有缓存会话，不仅是当前显示的测试 Tab。 */
+export function syncCaseRuntimes(cases: TestCase[]): void {
+  const fingerprints = new Map(cases.map((tc) => [tc.id, caseRuntimeFingerprint(tc)]));
+  for (const runtime of sessionRuntimes.values()) {
+    for (const id of Object.keys(runtime.hits)) {
+      if (runtime.fingerprints[id] !== fingerprints.get(id)) {
+        delete runtime.hits[id];
+        delete runtime.fingerprints[id];
+      }
+    }
+  }
+}
 
 function createRuntime(key: string): TestSessionRuntime {
   return {
@@ -218,7 +243,7 @@ export function useTestCases(
     // 规则指纹只计算一次，不能放在“日志 × 用例”内层循环中。
     const preparedCases = visibleCases.map((tc) => ({
       tc,
-      fingerprint: JSON.stringify(tc.rules),
+      fingerprint: caseRuntimeFingerprint(tc),
     }));
     for (const { tc, fingerprint } of preparedCases) {
       if (runtime.fingerprints[tc.id] !== fingerprint) {
@@ -286,7 +311,10 @@ export function useTestCases(
 
   const results = useMemo(() => {
     return visibleCases.map((tc) => {
-      const cs = runtimeRef.current.hits[tc.id] ?? initCaseState(tc);
+      const runtime = runtimeRef.current;
+      const cs = runtime.fingerprints[tc.id] === caseRuntimeFingerprint(tc)
+        ? runtime.hits[tc.id] ?? initCaseState(tc)
+        : initCaseState(tc);
       return {
         testCase: tc,
         status: computeStatus(tc, cs),
