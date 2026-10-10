@@ -5,6 +5,7 @@ import type { TestCase } from "../testcases/engine";
 import type { SavedFilter } from "../filters/useSavedFilters";
 import type { Favorite, Prefs } from "./usePrefs";
 import type { TagBlockRule } from "../../core/tagBlockRules";
+import { getBuiltinTestCaseIds } from "../../core/builtinRegistry";
 
 export interface ExportConfig {
   version: number;
@@ -222,13 +223,17 @@ function testCaseFingerprint(tc: TestCase): string {
   return JSON.stringify({ scope: tc.scope, rules: tc.rules });
 }
 
-function mergeTestCases(local: TestCase[], imported: TestCase[]): TestCase[] {
+export function mergeTestCases(local: TestCase[], imported: TestCase[]): TestCase[] {
   const result = [...local];
   const seen = new Set(local.map(testCaseFingerprint));
+  const usedIds = new Set([...getBuiltinTestCaseIds(), ...local.map((tc) => tc.id)]);
   for (const tc of imported) {
     const fp = testCaseFingerprint(tc);
     if (!seen.has(fp)) {
-      result.push(tc);
+      let id = tc.id;
+      while (usedIds.has(id)) id = `case_${crypto.randomUUID()}`;
+      result.push(id === tc.id ? tc : { ...tc, id });
+      usedIds.add(id);
       seen.add(fp);
     }
   }

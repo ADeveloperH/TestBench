@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { getBuiltinTestCases } from "../../core/builtinRegistry";
 import type { AppInfo } from "../../core/apps";
 import { Select } from "../../components/Select";
 import { IS_DEBUG } from "../../core/debug";
@@ -40,6 +42,45 @@ export function TestCaseManager({ store, apps }: Props) {
     {},
   );
   const [newGroup, setNewGroup] = useState("自定义");
+  const [source, setSource] = useState("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmation, setConfirmation] = useState<{ kind: "delete"; ids: string[] } | { kind: "restore" } | null>(null);
+  const [notice, setNotice] = useState("");
+  const builtinCount = store.cases.filter((tc) => isBuiltinTestCase(tc.id)).length;
+  const customCount = store.cases.length - builtinCount;
+  const visibleCases = store.cases.filter((tc) => source === "all" ||
+    (source === "builtin" ? isBuiltinTestCase(tc.id) : !isBuiltinTestCase(tc.id)));
+  const selectedCases = visibleCases.filter((tc) => selectedIds.has(tc.id));
+  const deleteIds = confirmation?.kind === "delete"
+    ? confirmation.ids.filter((id) => store.cases.some((tc) => tc.id === id) && (IS_DEBUG || !isBuiltinTestCase(id)))
+    : [];
+  const skippedCount = confirmation?.kind === "delete"
+    ? confirmation.ids.filter((id) => store.cases.some((tc) => tc.id === id) && !IS_DEBUG && isBuiltinTestCase(id)).length
+    : 0;
+
+  useEffect(() => {
+    const alive = new Set(store.cases.map((tc) => tc.id));
+    setSelectedIds((prev) => [...prev].every((id) => alive.has(id)) ? prev : new Set([...prev].filter((id) => alive.has(id))));
+    setEditingId((id) => id && !alive.has(id) ? null : id);
+    setExpandedId((id) => id && !alive.has(id) ? null : id);
+  }, [store.cases]);
+
+  const selectCases = (cases: TestCase[], selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const tc of cases) {
+        if (selected) next.add(tc.id);
+        else next.delete(tc.id);
+      }
+      return next;
+    });
+  };
+
+  const setSelectedEnabled = (enabled: boolean) => {
+    store.setCasesEnabled(selectedCases.map((tc) => tc.id), enabled);
+    setEditingId(null);
+    setNotice(`已${enabled ? "启用" : "停用"} ${selectedCases.length} 条用例`);
+  };
 
   const groupOf = (tc: TestCase) => tc.group?.trim() || "自定义";
 
@@ -59,7 +100,7 @@ export function TestCaseManager({ store, apps }: Props) {
 
   const newCase = () => {
     const tc: TestCase = {
-      id: `case_${Date.now()}`,
+      id: `case_${crypto.randomUUID()}`,
       name: "新用例",
       description: "",
       scope: { global: true, apps: [] },
@@ -68,6 +109,10 @@ export function TestCaseManager({ store, apps }: Props) {
       group: newGroup.trim() || "自定义",
     };
     store.addCase(tc);
+    setSource("all");
+    setSelectedIds(new Set());
+    setCollapsedGroups((prev) => ({ ...prev, [tc.group!]: false }));
+    setExpandedId(tc.id);
     setEditingId(tc.id);
   };
 
@@ -83,17 +128,57 @@ export function TestCaseManager({ store, apps }: Props) {
           onChange={(v) => setNewGroup(v)}
         />
       </div>
-      {groups.map((g) => {
-        const groupCases = store.cases.filter((tc) => groupOf(tc) === g);
+      <div className="manage-add tc-batch-toolbar">
+        <Select
+          title="用例来源"
+          value={source}
+          options={[
+            { value: "all", label: `全部 (${store.cases.length})` },
+            { value: "builtin", label: `内置 (${builtinCount})` },
+            { value: "custom", label: `非内置 (${customCount})` },
+          ]}
+          onChange={(value) => {
+            setSource(value);
+            setSelectedIds(new Set());
+            setEditingId(null);
+            setNotice("");
+          }}
+        />
+        <CaseSelection
+          label="全选当前筛选结果"
+          cases={visibleCases}
+          selectedIds={selectedIds}
+          onChange={(selected) => selectCases(visibleCases, selected)}
+          showLabel
+        />
+        <button disabled={!selectedCases.length} onClick={() => setSelectedIds(new Set())}>取消选择</button>
+        <span className="count" aria-live="polite">已选 {selectedCases.length} 条</span>
+        <button disabled={!selectedCases.length} onClick={() => setSelectedEnabled(true)}>启用选中</button>
+        <button disabled={!selectedCases.length} onClick={() => setSelectedEnabled(false)}>停用选中</button>
+        <button className="danger" disabled={!selectedCases.length}
+          onClick={() => setConfirmation({ kind: "delete", ids: selectedCases.map((tc) => tc.id) })}>删除选中</button>
+        <button className="danger" onClick={() => setConfirmation({ kind: "restore" })}>恢复为仅内置用例</button>
+      </div>
+      <p className="manage-desc">选择框用于批量操作，“启用”开关控制监测；全选包含折叠分组中的用例。</p>
+      {store.storageError && <p className="tc-storage-error" role="alert">{store.storageError}</p>}
+      {notice && <p className="manage-desc" role="status">{notice}</p>}
+      {!visibleCases.length && <p className="manage-desc">当前来源没有用例。</p>}
+      {groups.filter((g) => visibleCases.some((tc) => groupOf(tc) === g)).map((g) => {
+        const groupCases = visibleCases.filter((tc) => groupOf(tc) === g);
         const collapsed = !!collapsedGroups[g];
         return (
           <div key={g} className="tc-group">
             <div className="tc-group-head" onClick={() => toggleGroup(g)}>
+              <CaseSelection label={`选择分组 ${g}`} cases={groupCases} selectedIds={selectedIds}
+                onChange={(selected) => selectCases(groupCases, selected)} />
+              <button className="tc-group-toggle" aria-expanded={!collapsed} aria-label={`${collapsed ? "展开" : "收起"}分组 ${g}`}
+                onClick={(e) => { e.stopPropagation(); toggleGroup(g); }}>
               <span
                 className={`tc-group-arrow ${collapsed ? "collapsed" : ""}`}
                 aria-hidden="true"
               />
               <span className="tc-group-name">{g}</span>
+              </button>
               <span className="count">{groupCases.length} 个用例</span>
             </div>
             {!collapsed && (
@@ -107,6 +192,8 @@ export function TestCaseManager({ store, apps }: Props) {
               onClick={() => setExpandedId(expanded ? null : tc.id)}
               title={expanded ? "点击收起" : "点击展开查看"}
             >
+              <CaseSelection label={`选择用例 ${tc.name}`} cases={[tc]} selectedIds={selectedIds}
+                onChange={(selected) => selectCases([tc], selected)} />
               <button
                 className={`manage-move tc-item-toggle ${expanded ? "expanded" : ""}`}
                 title={expanded ? "收起" : "展开查看"}
@@ -123,11 +210,13 @@ export function TestCaseManager({ store, apps }: Props) {
               >
                 <input
                   type="checkbox"
+                  aria-label={`启用用例 ${tc.name}`}
                   checked={tc.enabled !== false}
                   onChange={() =>
                     store.updateCase({ ...tc, enabled: tc.enabled === false })
                   }
                 />
+                启用
               </label>
               <span className="tc-name">{tc.name}</span>
               {isBuiltinTestCase(tc.id) && (
@@ -161,7 +250,7 @@ export function TestCaseManager({ store, apps }: Props) {
                 }
                 onClick={(e) => {
                   e.stopPropagation();
-                  store.removeCase(tc.id);
+                  setConfirmation({ kind: "delete", ids: [tc.id] });
                 }}
               >
                 删除
@@ -190,6 +279,7 @@ export function TestCaseManager({ store, apps }: Props) {
             )}
             {editingId === tc.id && (
               <TestCaseEditor
+                key={JSON.stringify(tc)}
                 tc={tc}
                 apps={apps}
                 onSave={(updated) => {
@@ -207,7 +297,88 @@ export function TestCaseManager({ store, apps }: Props) {
           </div>
         );
       })}
+      {confirmation && <CaseConfirmation
+        title={confirmation.kind === "restore" ? "恢复为仅内置用例" : "删除选中用例"}
+        description={confirmation.kind === "restore"
+          ? `将删除全部 ${customCount} 条非内置用例，恢复 ${getBuiltinTestCases().length} 条当前内置用例及其默认启用状态，并清空本地启停覆盖与调试删除名单。建议先导出需要保留的配置。`
+          : `将删除 ${deleteIds.length} 条用例，跳过 ${skippedCount} 条受保护的内置用例。删除后无法撤销。`}
+        confirmLabel={confirmation.kind === "restore" ? "确认恢复" : "确认删除"}
+        disabled={confirmation.kind === "delete" && !deleteIds.length}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => {
+          if (confirmation.kind === "restore") {
+            store.restoreBuiltins();
+            setSource("all");
+            setCollapsedGroups({});
+            setNotice("已恢复当前内置用例及默认启用状态，全部非内置用例已移除。");
+          } else {
+            store.removeCases(deleteIds);
+            setNotice(`已删除 ${deleteIds.length} 条用例，跳过 ${skippedCount} 条内置用例。`);
+          }
+          setSelectedIds(new Set());
+          setEditingId(null);
+          setExpandedId(null);
+          setConfirmation(null);
+        }}
+      />}
     </div>
+  );
+}
+
+function CaseSelection({ label, cases, selectedIds, onChange, showLabel = false }: {
+  label: string;
+  cases: TestCase[];
+  selectedIds: ReadonlySet<string>;
+  onChange: (selected: boolean) => void;
+  showLabel?: boolean;
+}) {
+  const count = cases.filter((tc) => selectedIds.has(tc.id)).length;
+  return <label className="checkbox tc-selection" onClick={(e) => e.stopPropagation()}>
+    <input type="checkbox" aria-label={label} disabled={!cases.length}
+      checked={cases.length > 0 && count === cases.length}
+      ref={(input) => { if (input) input.indeterminate = count > 0 && count < cases.length; }}
+      onChange={(e) => onChange(e.target.checked)} />
+    {showLabel && label}
+  </label>;
+}
+
+function CaseConfirmation({ title, description, confirmLabel, disabled, onCancel, onConfirm }: {
+  title: string; description: string; confirmLabel: string; disabled: boolean;
+  onCancel: () => void; onConfirm: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    dialog?.querySelector<HTMLButtonElement>("button")?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); onCancel(); }
+      if (event.key === "Tab") {
+        const buttons = dialog?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)");
+        if (!buttons?.length) return;
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => { document.removeEventListener("keydown", handleKey); previousFocus?.focus(); };
+    // 回调使用本次挂载的取消动作；不要因父组件重新渲染抢夺焦点。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return createPortal(
+    <div className="save-description-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div ref={dialogRef} className="save-description-dialog tc-confirm-dialog" role="dialog" aria-modal="true"
+        aria-labelledby="tc-confirm-title" aria-describedby="tc-confirm-description">
+        <h3 id="tc-confirm-title">{title}</h3>
+        <p id="tc-confirm-description">{description}</p>
+        <div className="save-description-actions">
+          <button onClick={onCancel}>取消</button>
+          <button className="danger" disabled={disabled} onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>, document.body,
   );
 }
 
