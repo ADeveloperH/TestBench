@@ -143,9 +143,10 @@ export function TagBlockManager(props: Props) {
         {props.rules.map((rule) => {
           return (
             <li key={rule.id} className="manage-item tag-block-item">
-              <label className="tag-block-rule-toggle" title="启用或关闭该规则">
+              <label className="checkbox tag-block-rule-toggle" title="启用或关闭该规则">
                 <input
                   type="checkbox"
+                  aria-label={`启用 Tag 屏蔽规则 ${rule.value}`}
                   checked={rule.enabled}
                   onChange={(event) =>
                     props.onSetRuleEnabled(rule.id, event.target.checked)
