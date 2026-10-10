@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Icon } from "../../components/Icon";
 import { invoke } from "@tauri-apps/api/core";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { DEFAULT_BACKDOOR, isBuiltinApp } from "../../core/apps";
@@ -489,7 +490,7 @@ export function ManagePage(props: Props) {
                           title="编辑后门 Activity"
                           onClick={() => startEditBackdoor(a.package, backdoor)}
                         >
-                          ✎
+                          <Icon name="edit" />
                         </button>
                       </>
                     )}
@@ -501,7 +502,7 @@ export function ManagePage(props: Props) {
                       title="置顶"
                       onClick={() => moveAppTo(i, 0)}
                     >
-                      ⏫
+                      <Icon name="move-top" />
                     </button>
                     <button
                       className="manage-move"
@@ -509,7 +510,7 @@ export function ManagePage(props: Props) {
                       title="上移"
                       onClick={() => moveAppTo(i, i - 1)}
                     >
-                      ↑
+                      <Icon name="move-up" />
                     </button>
                     <button
                       className="manage-move"
@@ -517,7 +518,7 @@ export function ManagePage(props: Props) {
                       title="下移"
                       onClick={() => moveAppTo(i, i + 1)}
                     >
-                      ↓
+                      <Icon name="move-down" />
                     </button>
                     <button
                       className="manage-move"
@@ -525,7 +526,7 @@ export function ManagePage(props: Props) {
                       title="置底"
                       onClick={() => moveAppTo(i, last)}
                     >
-                      ⏬
+                      <Icon name="move-bottom" />
                     </button>
                     <button
                       className="manage-del"
@@ -890,7 +891,7 @@ function ListSection(p: ListSectionProps) {
                     title={locked ? "内置常用不可编辑" : builtin ? "调试模式：内置常用可编辑" : "编辑描述"}
                     onClick={() => startEdit(f)}
                   >
-                    ✎
+                    <Icon name="edit" />
                   </button>
                 </div>
               )}
@@ -901,7 +902,7 @@ function ListSection(p: ListSectionProps) {
                   title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "置顶"}
                   onClick={() => p.onMoveFavorite(i, 0)}
                 >
-                  ⏫
+                  <Icon name="move-top" />
                 </button>
                 <button
                   className="manage-move"
@@ -909,7 +910,7 @@ function ListSection(p: ListSectionProps) {
                   title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "上移"}
                   onClick={() => p.onMoveFavorite(i, i - 1)}
                 >
-                  ↑
+                  <Icon name="move-up" />
                 </button>
                 <button
                   className="manage-move"
@@ -917,7 +918,7 @@ function ListSection(p: ListSectionProps) {
                   title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "下移"}
                   onClick={() => p.onMoveFavorite(i, i + 1)}
                 >
-                  ↓
+                  <Icon name="move-down" />
                 </button>
                 <button
                   className="manage-move"
@@ -925,7 +926,7 @@ function ListSection(p: ListSectionProps) {
                   title={locked ? "内置常用不可移动" : builtin ? "调试模式：内置常用可移动" : "置底"}
                   onClick={() => p.onMoveFavorite(i, last)}
                 >
-                  ⏬
+                  <Icon name="move-bottom" />
                 </button>
                 <button
                   className="manage-del"

@@ -515,9 +515,69 @@ button.primary-action {
   user-select: none;
 }
 
-.checkbox input {
-  min-width: 0;
-  height: auto;
+input[type="checkbox"],
+.select-menu-multiple .select-check {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  min-width: 16px;
+  max-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  max-height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--text-dim);
+  border-radius: 4px;
+  background: var(--bg-input);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+input[type="checkbox"]:checked,
+input[type="checkbox"]:indeterminate,
+.select-menu-multiple .select-option.selected .select-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+input[type="checkbox"]:checked::after,
+.select-menu-multiple .select-option.selected .select-check::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+input[type="checkbox"]:indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 6px;
+  width: 8px;
+  height: 2px;
+  border: 0;
+  background: #fff;
+  transform: none;
+}
+
+input[type="checkbox"]:focus-visible,
+.manage-move:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .count {
@@ -692,24 +752,6 @@ body.light .select-option:hover {
 
 .select-option.selected .select-option-label {
   color: var(--accent);
-}
-
-.select-menu-multiple .select-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  font-size: 11px;
-  line-height: 1;
-}
-
-.select-menu-multiple .select-option.selected .select-check {
-  color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
 }
 
 /* 菜单顶部搜索框（searchable 模式） */
@@ -1408,12 +1450,17 @@ body.col-resizing {
 }
 
 .manage-move {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   background: transparent;
   border: none;
   color: var(--text-dim);
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 0;
   font-size: 12px;
 }
 
@@ -2090,10 +2137,6 @@ body.light .toolbar .history-input input {
   min-height: 32px;
   padding: 0 3px;
   color: var(--text-2);
-}
-
-.checkbox input {
-  accent-color: var(--accent);
 }
 
 .toolbar-sep {
@@ -2792,9 +2835,10 @@ body.light .tc-rule-editor {
   font-size: 12px;
 }
 
-.toolbar-icon {
-  width: 15px;
-  height: 15px;
+.toolbar-icon,
+.ui-icon {
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
 }
 

@@ -227,7 +227,7 @@ export function Select({
             aria-pressed={selected}
             onClick={() => selectOption(o)}
           >
-            <span className="select-check">{selected ? "✓" : ""}</span>
+            <span className="select-check" aria-hidden="true">{!multiple && selected ? "✓" : ""}</span>
             <span className="select-option-label">{o.label}</span>
           </button>
         );

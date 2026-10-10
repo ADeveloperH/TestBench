@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Icon } from "../../components/Icon";
 import type { AppInfo } from "../../core/apps";
 import type { SavedFilter } from "./useSavedFilters";
 import type { FilterState, LogLevel } from "../../core/types";
@@ -200,7 +201,7 @@ export function FilterManager(props: Props) {
                     title={locked ? "内置过滤器不可编辑" : builtin ? "调试模式：内置过滤器可编辑" : "编辑"}
                     onClick={() => startEdit(f)}
                   >
-                    ✎
+                    <Icon name="edit" />
                   </button>
                   <button
                     className="manage-move"
@@ -208,7 +209,7 @@ export function FilterManager(props: Props) {
                     title={locked ? "内置过滤器不可移动" : builtin ? "调试模式：内置过滤器可移动" : "置顶"}
                     onClick={() => props.onMove(i, 0)}
                   >
-                    ⏫
+                    <Icon name="move-top" />
                   </button>
                   <button
                     className="manage-move"
@@ -216,7 +217,7 @@ export function FilterManager(props: Props) {
                     title={locked ? "内置过滤器不可移动" : builtin ? "调试模式：内置过滤器可移动" : "上移"}
                     onClick={() => props.onMove(i, i - 1)}
                   >
-                    ↑
+                    <Icon name="move-up" />
                   </button>
                   <button
                     className="manage-move"
@@ -224,7 +225,7 @@ export function FilterManager(props: Props) {
                     title={locked ? "内置过滤器不可移动" : builtin ? "调试模式：内置过滤器可移动" : "下移"}
                     onClick={() => props.onMove(i, i + 1)}
                   >
-                    ↓
+                    <Icon name="move-down" />
                   </button>
                   <button
                     className="manage-move"
@@ -232,7 +233,7 @@ export function FilterManager(props: Props) {
                     title={locked ? "内置过滤器不可移动" : builtin ? "调试模式：内置过滤器可移动" : "置底"}
                     onClick={() => props.onMove(i, last)}
                   >
-                    ⏬
+                    <Icon name="move-bottom" />
                   </button>
                   <button
                     className="manage-del"
