@@ -234,6 +234,7 @@ pnpm release:mac
 - 远程地址：`https://raw.githubusercontent.com/ADeveloperH/TestBench/main/config/remote-config.json`（备选镜像 `cdn.jsdelivr.net`，失败自动切换）
 - 每个 section（`apps` / `searchFavorites` / `tagFavorites` / `filters` / `testCases`）可选：**远程配置写了哪个 section 就整体覆盖哪个**，没写的继续用代码内置
 - 用户本地数据（自己添加的应用/常用/过滤器/用例）与远程内置合并时**本地优先、只增不改**，永远不会被远程覆盖
+- `apps[].backdoor` 使用 `com.<脱敏品牌>.unity.productdebugger.ProductSettingsActivity`：Lucky/Fortuna=`foundation`、Pop=`sinoauto`、Sweet=`funtech`、Joy=`uinjoy`、MNJJ=`mnnjventures`；仅 `foundation` 系列可省略并使用全局默认值，映射表未覆盖的品牌须确认后再配置
 - 修改该文件 push 后，用户下次启动（或设置页点「刷新配置」）自动更新，无需重新打包/安装
 - push 时 CI 会自动校验 JSON 格式（`.github/workflows/validate-config.yml`），格式错误不允许合并
 

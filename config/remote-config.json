@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-09T12:55:13.253Z",
+  "updatedAt": "2026-10-16T08:38:22.000Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -79,7 +79,8 @@
     },
     {
       "name": "Block Pop!",
-      "package": "com.block.blast.pop"
+      "package": "com.block.blast.pop",
+      "backdoor": "com.sinoauto.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Fortuna Knit Out",
@@ -92,7 +93,8 @@
     },
     {
       "name": "Joy Kitchen Tile Match",
-      "package": "com.injoy.tilematch.kitchen"
+      "package": "com.injoy.tilematch.kitchen",
+      "backdoor": "com.uinjoy.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Lucky Watermelon",
@@ -100,19 +102,53 @@
     },
     {
       "name": "Mahjong Pop!",
-      "package": "com.sinoauto.mahjong.match"
+      "package": "com.sinoauto.mahjong.match",
+      "backdoor": "com.sinoauto.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Sheep Arrow PoP!",
-      "package": "com.sinoauto.sheeparrow"
+      "package": "com.sinoauto.sheeparrow",
+      "backdoor": "com.sinoauto.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Sweet Fruit Slice",
-      "package": "com.sweet.fruitslice"
+      "package": "com.sweet.fruitslice",
+      "backdoor": "com.funtech.unity.productdebugger.ProductSettingsActivity"
     },
     {
       "name": "Yarn Pop!",
-      "package": "com.sinoauto.yarn.knitout"
+      "package": "com.sinoauto.yarn.knitout",
+      "backdoor": "com.sinoauto.unity.productdebugger.ProductSettingsActivity"
+    },
+    {
+      "name": "Sweet Mahjong Blast",
+      "package": "com.sweet.mahjongblast",
+      "backdoor": "com.funtech.unity.productdebugger.ProductSettingsActivity"
+    },
+    {
+      "name": "Sweet Toy Match",
+      "package": "com.sweet.toymatch",
+      "backdoor": "com.funtech.unity.productdebugger.ProductSettingsActivity"
+    },
+    {
+      "name": "Juicy Blade: Fruit Slash",
+      "package": "com.lucky.juicyBlasde",
+      "backdoor": "com.foundation.unity.productdebugger.ProductSettingsActivity"
+    },
+    {
+      "name": "Crazy Car Jam",
+      "package": "com.lucky.crazycarjam",
+      "backdoor": "com.foundation.unity.productdebugger.ProductSettingsActivity"
+    },
+    {
+      "name": "Lucky Ace Sinuca Master",
+      "package": "com.lucky.acesinuca",
+      "backdoor": "com.foundation.unity.productdebugger.ProductSettingsActivity"
+    },
+    {
+      "name": "Sweet Woodland Match",
+      "package": "com.sweet.woodlandmatch",
+      "backdoor": "com.funtech.unity.productdebugger.ProductSettingsActivity"
     }
   ],
   "searchFavorites": [
