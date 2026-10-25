@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-10-16T08:38:22.000Z",
+  "updatedAt": "2026-10-25T14:35:15.323Z",
   "apps": [
     {
       "name": "Lucky Tile Match",
@@ -585,6 +585,45 @@
                   "field": "message",
                   "op": "regex",
                   "value": "\\bFatal signal\\s+\\d+"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "unity_main_thread_violation",
+      "name": "Unity 主线程调用违规",
+      "description": "Unity API 在非 Unity 主线程调用；即使异常被 catch 且界面正常，也应判定有问题",
+      "scope": {
+        "global": true,
+        "apps": []
+      },
+      "group": "广告",
+      "enabled": true,
+      "rules": [
+        {
+          "effect": "error",
+          "description": "出现 Unity API 只能在主线程调用的异常",
+          "expr": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "tag",
+                  "op": "equals",
+                  "value": "Unity"
+                }
+              },
+              {
+                "kind": "cond",
+                "cond": {
+                  "field": "message",
+                  "op": "contains",
+                  "value": "can only be called from the main thread"
                 }
               }
             ]

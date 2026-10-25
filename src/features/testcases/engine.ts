@@ -1659,6 +1659,21 @@ export const BUILTIN_TEST_CASES: TestCase[] = [
     ],
   },
   {
+    id: "unity_main_thread_violation",
+    name: "Unity 主线程调用违规",
+    description: "Unity API 在非 Unity 主线程调用；即使异常被 catch 且界面正常，也应判定有问题",
+    scope: { global: true, apps: [] },
+    group: "广告",
+    enabled: true,
+    rules: [
+      {
+        effect: "error",
+        description: "出现 Unity API 只能在主线程调用的异常",
+        expr: all(unityTag(), has("can only be called from the main thread")),
+      },
+    ],
+  },
+  {
     id: "network_error",
     name: "网络响应异常",
     description: "任一接口返回 result_code 不为 200 即视为异常",
