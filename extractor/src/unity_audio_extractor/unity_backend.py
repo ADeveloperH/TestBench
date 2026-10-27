@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -27,6 +28,17 @@ class UnityBackend(Protocol):
     def iter_audio_items(self, source: Path) -> Iterable[UnitySample | UnityIssue]: ...
 
 
+def _resource_filesystem(resources: ExitStack):
+    from fsspec.implementations.local import LocalFileSystem
+
+    class ScopedLocalFileSystem(LocalFileSystem):
+        def open(self, *args, **kwargs):
+            return resources.enter_context(super().open(*args, **kwargs))
+
+    # fsspec normally caches filesystem instances; each candidate owns its handles.
+    return ScopedLocalFileSystem(skip_instance_cache=True)
+
+
 class UnityPyBackend:
     def __init__(self, fallback_version: str | None = None) -> None:
         try:
@@ -43,11 +55,13 @@ class UnityPyBackend:
         previous_version = self._unitypy.config.FALLBACK_UNITY_VERSION
         self._unitypy.config.FALLBACK_UNITY_VERSION = self.fallback_version
         try:
-            yield from self._read_audio_items(source)
+            with ExitStack() as resources:
+                filesystem = _resource_filesystem(resources)
+                yield from self._read_audio_items(source, filesystem)
         finally:
             self._unitypy.config.FALLBACK_UNITY_VERSION = previous_version
 
-    def _read_audio_items(self, source: Path) -> Iterator[UnitySample | UnityIssue]:
+    def _read_audio_items(self, source: Path, filesystem) -> Iterator[UnitySample | UnityIssue]:
         header = inspect_unityfs_header(source)
         if header and not valid_unity_version(header.engine_version) and not self.fallback_version:
             raise ValueError("资源缺少有效 Unity 版本，且当前输入中未找到一致的版本信息")
@@ -56,9 +70,9 @@ class UnityPyBackend:
                 handle.seek(header.offset)
                 payload = handle.read()
             # Keep the source directory for external .resource/.resS lookup.
-            environment = self._unitypy.load(payload, path=str(source.parent))
+            environment = self._unitypy.load(payload, path=str(source.parent), fs=filesystem)
         else:
-            environment = self._unitypy.load(str(source))
+            environment = self._unitypy.load(str(source), fs=filesystem)
         if not self._has_serialized_file(environment):
             raise ValueError("未解析出 Unity 序列化资源，可能存在不支持的前缀、混淆或损坏")
         if header and header.offset:

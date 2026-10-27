@@ -52,6 +52,10 @@ Split resources participate after merging. Conflicting or missing versions are
 not guessed. UnityPy's fallback setting is restored after each resource, including
 errors. The summary includes `unityVersionFallback` and `normalizedBundles`.
 
+Each resource uses a scoped local filesystem. Its source and companion file
+handles close when iteration completes, fails, or is explicitly closed, so
+Windows can remove temporary split resources without waiting for garbage collection.
+
 A candidate that yields no recognized serialized resource is a parse failure
 (`partial` with a warning). A successfully parsed resource with no AudioClip is
 valid and may produce an `empty` result.

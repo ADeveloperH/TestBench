@@ -31,6 +31,14 @@ class UnityBackendTests(unittest.TestCase):
         patcher = patch.dict(sys.modules, {"UnityPy": self.module})
         patcher.start()
         self.addCleanup(patcher.stop)
+        filesystem = patch(
+            "unity_audio_extractor.unity_backend._resource_filesystem",
+            side_effect=lambda resources: SimpleNamespace(
+                open=lambda path: resources.enter_context(Path(path).open("rb"))
+            ),
+        )
+        filesystem.start()
+        self.addCleanup(filesystem.stop)
 
     def environment(self, objects: list | None = None) -> SimpleNamespace:
         return SimpleNamespace(files={"CAB": SerializedFile()}, objects=objects or [])
@@ -46,10 +54,11 @@ class UnityBackendTests(unittest.TestCase):
         source = self.source(original)
         backend = UnityPyBackend(fallback_version="2022.3.62f2")
 
-        def load(data: bytes, **kwargs: str) -> SimpleNamespace:
+        def load(data: bytes, **kwargs) -> SimpleNamespace:
             self.assertEqual(self.module.config.FALLBACK_UNITY_VERSION, "2022.3.62f2")
             self.assertEqual(data, bundle)
-            self.assertEqual(kwargs, {"path": str(source.parent)})
+            self.assertEqual(kwargs["path"], str(source.parent))
+            self.assertTrue(callable(kwargs["fs"].open))
             return self.environment()
 
         self.module.load.side_effect = load
@@ -57,6 +66,34 @@ class UnityBackendTests(unittest.TestCase):
         self.assertEqual(backend.normalized_bundles, 1)
         self.assertEqual(source.read_bytes(), original)
         self.assertEqual(self.module.config.FALLBACK_UNITY_VERSION, "previous-setting")
+
+    def test_closes_opened_files_on_completion_error_and_generator_close(self) -> None:
+        source = self.source(make_unityfs())
+        backend = UnityPyBackend()
+        opened = []
+
+        def load(*args, **kwargs):
+            opened.append(kwargs["fs"].open(source))
+            if mode == "error":
+                raise ValueError("failed after opening source")
+            clip = SimpleNamespace(m_Name="tone", samples={"tone.wav": make_wav_bytes()})
+            obj = SimpleNamespace(type=SimpleNamespace(name="AudioClip"), path_id=1, read=lambda: clip)
+            return self.environment([obj])
+
+        self.module.load.side_effect = load
+        for mode in ("complete", "error", "close"):
+            with self.subTest(mode=mode):
+                items = backend.iter_audio_items(source)
+                if mode == "error":
+                    with self.assertRaisesRegex(ValueError, "failed after opening"):
+                        list(items)
+                elif mode == "close":
+                    next(items)
+                    self.assertFalse(opened[-1].closed)
+                    items.close()
+                else:
+                    list(items)
+                self.assertTrue(opened[-1].closed)
 
     def test_restores_version_on_parse_error_and_generator_close(self) -> None:
         source = self.source(make_unityfs())
@@ -134,6 +171,7 @@ class RealUnityPyTests(unittest.TestCase):
         except ImportError:
             self.skipTest("optional UnityPy dependency is not installed")
         real_load = UnityPy.load
+        opened = []
         with tempfile.TemporaryDirectory() as temporary:
             source = Path(temporary) / "sample.bundle"
             source.write_bytes(b"!" * 31 + make_unityfs())
@@ -142,6 +180,8 @@ class RealUnityPyTests(unittest.TestCase):
 
             def load_and_check(*args, **kwargs):
                 environment = real_load(*args, **kwargs)
+                opened.append(kwargs["fs"].open(source, "rb"))
+                opened.append(kwargs["fs"].open(source.parent / "external.resource", "rb"))
                 bundle = next(iter(environment.files.values()))
                 serialized = next(iter(bundle.files.values()))
                 self.assertEqual(
@@ -152,6 +192,7 @@ class RealUnityPyTests(unittest.TestCase):
 
             with patch.object(UnityPy, "load", side_effect=load_and_check):
                 self.assertEqual(list(UnityPyBackend().iter_audio_items(source)), [])
+            self.assertTrue(all(handle.closed for handle in opened))
 
 
 if __name__ == "__main__":
