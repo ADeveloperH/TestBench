@@ -38,6 +38,24 @@ Protocol events use `schemaVersion: 1` and the following event names:
 `completed` can report `complete`, `partial`, or `empty`. A partial result is a
 successful process exit with recoverable errors recorded in the summary.
 
+## Unity resource compatibility
+
+The scanner accepts standard Unity resources and UnityFS bundles with an extra
+prefix of at most 4096 bytes. Prefix removal requires a valid bundle header and
+an exact declared-size match; source files are never modified. This also applies
+to bundles without an extension. Internal encryption or XOR changes are not
+handled by this compatibility layer.
+
+Missing bundle versions use a consistent version discovered from the input's
+serialized headers (prefer `globalgamemanagers`), then from other bundle headers.
+Split resources participate after merging. Conflicting or missing versions are
+not guessed. UnityPy's fallback setting is restored after each resource, including
+errors. The summary includes `unityVersionFallback` and `normalizedBundles`.
+
+A candidate that yields no recognized serialized resource is a parse failure
+(`partial` with a warning). A successfully parsed resource with no AudioClip is
+valid and may produce an `empty` result.
+
 ## Build the TestBench sidecar
 
 Runtime dependencies are pinned in `requirements.lock`; the standalone builder

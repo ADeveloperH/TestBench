@@ -12,6 +12,7 @@ from .naming import UniqueNameAllocator, sanitize_filename
 from .protocol import EventEmitter
 from .splits import inspect_split_groups, merge_split_group, stage_companion_resources
 from .unity_backend import UnityBackend, UnityIssue, UnityPyBackend, UnitySample
+from .unity_source import discover_unity_version, inspect_unityfs_header
 
 
 UNITY_FILENAMES = {"globalgamemanagers", "resources.assets"}
@@ -45,6 +46,8 @@ class ExtractionSummary:
     exportedBytes: int
     warnings: list[dict[str, str]]
     manifestPath: str
+    unityVersionFallback: str | None
+    normalizedBundles: int
 
 
 def is_unity_candidate(path: Path) -> bool:
@@ -56,7 +59,9 @@ def is_unity_candidate(path: Path) -> bool:
         return True
     try:
         with path.open("rb") as handle:
-            return handle.read(8).startswith(UNITY_MAGICS)
+            if handle.read(8).startswith(UNITY_MAGICS):
+                return True
+        return inspect_unityfs_header(path) is not None
     except OSError:
         return False
 
@@ -131,7 +136,9 @@ class AudioScanner:
                 self._emit_progress("standard-audio", completed_steps, total_steps, source)
 
             if candidates and self.backend is None:
-                self.backend = UnityPyBackend()
+                self.backend = UnityPyBackend(
+                    fallback_version=discover_unity_version(candidates)
+                )
             for source in candidates:
                 completed_steps += 1
                 self._scan_unity(source, allocator)
@@ -155,6 +162,8 @@ class AudioScanner:
             exportedBytes=sum(record.bytes for record in self.records),
             warnings=self.warnings,
             manifestPath=str(self.manifest_path),
+            unityVersionFallback=getattr(self.backend, "fallback_version", None),
+            normalizedBundles=getattr(self.backend, "normalized_bundles", 0),
         )
         self._write_summary(summary)
         return summary
