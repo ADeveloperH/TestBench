@@ -1,5 +1,6 @@
 mod adb;
 mod audio_export;
+mod automation;
 mod log_store;
 
 use std::io::{BufRead, BufReader};
@@ -21,9 +22,9 @@ use adb::{
     mdns_pairing_address as adb_mdns_pairing_address, mirror as adb_mirror,
     open_backdoor as adb_open_backdoor, pair as adb_pair, resolve_pids as adb_resolve_pids,
     restart_app as adb_restart_app, screencap_png as adb_screencap_png,
-    uninstall_app as adb_uninstall_app, App, AppRuntimeStatus, Device, DeviceInfo,
-    BugreportController, BugreportProgress, BugreportResult, InstalledPackageSource,
-    LogcatProcess, PairingInfo, ScrcpyRecord,
+    uninstall_app as adb_uninstall_app, App, AppRuntimeStatus, BugreportController,
+    BugreportProgress, BugreportResult, Device, DeviceInfo, InstalledPackageSource, LogcatProcess,
+    PairingInfo, ScrcpyRecord,
 };
 use audio_export::{AudioExportController, AudioExportResult};
 use log_store::LogSessionWriter;
@@ -95,11 +96,8 @@ fn start_logcat(
     }
 
     if new_session.unwrap_or(false) || state.session.lock().unwrap().is_none() {
-        let writer = app
-            .path()
-            .app_data_dir()
-            .ok()
-            .and_then(|app_data_dir| match LogSessionWriter::start(&app_data_dir) {
+        let writer = app.path().app_data_dir().ok().and_then(|app_data_dir| {
+            match LogSessionWriter::start(&app_data_dir) {
                 Ok(writer) => {
                     log::info!("日志会话落盘目录：{}", writer.dir().display());
                     Some(writer)
@@ -108,7 +106,8 @@ fn start_logcat(
                     log::warn!("日志会话落盘不可用，将继续使用内存展示：{error}");
                     None
                 }
-            });
+            }
+        });
         let mut session = state.session.lock().unwrap();
         *session = writer;
     }
@@ -257,7 +256,9 @@ async fn connect_device(ip: String, port: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn disconnect_device(target: String) -> Result<String, String> {
+async fn disconnect_device(app: AppHandle, target: String) -> Result<String, String> {
+    app.state::<automation::AutomationController>()
+        .ensure_available()?;
     log::info!("收到前端命令 disconnect_device：target={target}");
     adb_disconnect(&target)
 }
@@ -304,10 +305,7 @@ async fn inspect_audio_export_source(
         device,
         package
     );
-    run_blocking(move || {
-        adb_discover_installed_package_source(device.as_deref(), &package)
-    })
-    .await
+    run_blocking(move || adb_discover_installed_package_source(device.as_deref(), &package)).await
 }
 
 #[tauri::command]
@@ -487,9 +485,7 @@ fn publish_remote_config(token: String, content: String) -> Result<String, Strin
                     .and_then(|s| {
                         serde_json::from_str::<serde_json::Value>(&s)
                             .ok()
-                            .and_then(|v| {
-                                v["message"].as_str().map(|m| m.to_string())
-                            })
+                            .and_then(|v| v["message"].as_str().map(|m| m.to_string()))
                     })
                     .unwrap_or_default();
                 match code {
@@ -521,16 +517,25 @@ fn publish_remote_config(token: String, content: String) -> Result<String, Strin
 
 #[tauri::command]
 async fn open_backdoor(
+    app: AppHandle,
     device: Option<String>,
     package: String,
     activity: String,
 ) -> Result<String, String> {
+    app.state::<automation::AutomationController>()
+        .ensure_available()?;
     log::info!("收到前端命令 open_backdoor：package={package} activity={activity}");
     adb_open_backdoor(device.as_deref(), &package, &activity)
 }
 
 #[tauri::command]
-async fn restart_app(device: Option<String>, package: String) -> Result<(), String> {
+async fn restart_app(
+    app: AppHandle,
+    device: Option<String>,
+    package: String,
+) -> Result<(), String> {
+    app.state::<automation::AutomationController>()
+        .ensure_available()?;
     log::info!("收到前端命令 restart_app：package={package}");
     adb_restart_app(device.as_deref(), &package)
 }
@@ -561,19 +566,37 @@ async fn pick_apk(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-async fn install_apk(device: Option<String>, path: String) -> Result<String, String> {
+async fn install_apk(
+    app: AppHandle,
+    device: Option<String>,
+    path: String,
+) -> Result<String, String> {
+    app.state::<automation::AutomationController>()
+        .ensure_available()?;
     log::info!("收到前端命令 install_apk：path={path}");
     adb_install_apk(device.as_deref(), &path)
 }
 
 #[tauri::command]
-async fn clear_app_data(device: Option<String>, package: String) -> Result<String, String> {
+async fn clear_app_data(
+    app: AppHandle,
+    device: Option<String>,
+    package: String,
+) -> Result<String, String> {
+    app.state::<automation::AutomationController>()
+        .ensure_available()?;
     log::info!("收到前端命令 clear_app_data：package={package}");
     adb_clear_app_data(device.as_deref(), &package)
 }
 
 #[tauri::command]
-async fn uninstall_app(device: Option<String>, package: String) -> Result<String, String> {
+async fn uninstall_app(
+    app: AppHandle,
+    device: Option<String>,
+    package: String,
+) -> Result<String, String> {
+    app.state::<automation::AutomationController>()
+        .ensure_available()?;
     log::info!("收到前端命令 uninstall_app：package={package}");
     adb_uninstall_app(device.as_deref(), &package)
 }
@@ -597,7 +620,12 @@ async fn start_recording(
     device: Option<String>,
     mbps: u32,
 ) -> Result<Option<String>, String> {
-    log::info!("收到前端命令 start_recording：device={:?} mbps={mbps}", device);
+    app.state::<automation::AutomationController>()
+        .ensure_available()?;
+    log::info!(
+        "收到前端命令 start_recording：device={:?} mbps={mbps}",
+        device
+    );
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let name = format!("recording_{ts}.mp4");
     let picked = save_file_dialog(&app, &name, "视频", &["mp4"])?;
@@ -605,12 +633,18 @@ async fn start_recording(
         return Ok(None);
     };
     let p = path.display().to_string();
+    // Recheck after the save dialog: automation may have started while it was open.
+    app.state::<automation::AutomationController>()
+        .ensure_available()?;
 
     if let Some(mut old) = state.session.lock().unwrap().take() {
         old.child.stop();
     }
     let child = ScrcpyRecord::start(device.as_deref(), &p, mbps)?;
-    *state.session.lock().unwrap() = Some(RecordingSession { child, path: p.clone() });
+    *state.session.lock().unwrap() = Some(RecordingSession {
+        child,
+        path: p.clone(),
+    });
     Ok(Some(p))
 }
 
@@ -625,7 +659,9 @@ async fn stop_recording(state: State<'_, RecordingState>) -> Result<Option<Strin
 }
 
 #[tauri::command]
-async fn mirror(device: Option<String>, mbps: u32) -> Result<(), String> {
+async fn mirror(app: AppHandle, device: Option<String>, mbps: u32) -> Result<(), String> {
+    app.state::<automation::AutomationController>()
+        .ensure_available()?;
     log::info!("收到前端命令 mirror：device={:?} mbps={mbps}", device);
     adb_mirror(device.as_deref(), mbps)
 }
@@ -637,6 +673,8 @@ async fn export_bugreport(
     recording_state: State<'_, RecordingState>,
     device: Option<String>,
 ) -> Result<Option<BugreportResult>, String> {
+    app.state::<automation::AutomationController>()
+        .ensure_available()?;
     log::info!("收到前端命令 export_bugreport：device={:?}", device);
     if state.controller.is_running() {
         return Err("已有故障报告正在生成，请稍候".to_string());
@@ -696,10 +734,19 @@ async fn export_bugreport(
 /// 导致安装器「Error opening file for writing」。
 #[tauri::command]
 async fn cleanup_for_update(
+    app: AppHandle,
     logcat_state: State<'_, RunningLogcat>,
     recording_state: State<'_, RecordingState>,
     bugreport_state: State<'_, BugreportState>,
 ) -> Result<(), String> {
+    let automation_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        automation_app
+            .state::<automation::AutomationController>()
+            .shutdown()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     log::info!("收到前端命令 cleanup_for_update：停止子进程以准备更新");
 
     // 1. 停止 logcat（adb）
@@ -767,12 +814,7 @@ fn export_session_logs(
     if state.session.lock().unwrap().is_none() {
         return Ok(None);
     }
-    let picked = save_file_dialog(
-        &app,
-        "logcat-session.txt",
-        "完整日志文件",
-        &["txt", "log"],
-    )?;
+    let picked = save_file_dialog(&app, "logcat-session.txt", "完整日志文件", &["txt", "log"])?;
     let Some(destination) = picked else {
         return Ok(None);
     };
@@ -1027,6 +1069,7 @@ fn quit_app(app: &tauri::AppHandle) {
 
 /// 优雅停止录屏（SIGINT 收尾 mp4）与 logcat 后退出应用。
 fn stop_all_and_exit(app: &tauri::AppHandle) {
+    app.state::<automation::AutomationController>().shutdown();
     let state = app.state::<RecordingState>();
     if let Some(mut session) = state.session.lock().unwrap().take() {
         session.child.stop();
@@ -1098,6 +1141,7 @@ pub fn run() {
                 }
             }
         })
+        .manage(automation::AutomationController::default())
         .manage(RunningLogcat {
             child: Mutex::new(None),
             generation: Arc::new(AtomicU64::new(0)),
@@ -1119,6 +1163,16 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            automation::plans::automation_plans_read,
+            automation::plans::automation_plans_update,
+            automation::automation_export_config,
+            automation::automation_connect,
+            automation::automation_snapshot,
+            automation::automation_start,
+            automation::automation_stop,
+            automation::automation_disconnect,
+            automation::automation_default_output,
+            automation::automation_open_output,
             list_devices,
             start_logcat,
             stop_logcat,

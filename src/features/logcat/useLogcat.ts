@@ -42,7 +42,7 @@ export interface UseLogcatResult {
   running: boolean;
   paused: boolean;
   setPaused: (p: boolean) => void;
-  start: () => Promise<void>;
+  start: (strict?: boolean) => Promise<void>;
   stop: () => Promise<void>;
   clear: () => Promise<void>;
   exportLogs: (entries?: LogEntry[]) => Promise<void>;
@@ -149,8 +149,11 @@ export function useLogcat(
     }
   }, []);
 
-  const start = useCallback(async () => {
-    if (!selectedDevice) return;
+  const start = useCallback(async (strict = false) => {
+    if (!selectedDevice) {
+      if (strict) throw new Error("请先选择日志采集设备");
+      return;
+    }
     manualStopRef.current = false;
     log.info(`开始抓取日志：device=${selectedDevice} buffer=${buffer}`);
     setError(null);
@@ -173,6 +176,7 @@ export function useLogcat(
     } catch (e) {
       log.error(`start_logcat 失败：${String(e)}`);
       setError(String(e));
+      if (strict) throw e;
     }
   }, [selectedDevice, buffer]);
 

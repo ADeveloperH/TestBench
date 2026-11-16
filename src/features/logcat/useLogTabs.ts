@@ -31,7 +31,9 @@ export const EMPTY_LOG_FIND: LogFindState = {
 export interface LogTabState {
   id: string;
   name: string;
-  kind: "log" | "test";
+  kind: "log" | "test" | "automation";
+  automationDevice?: string;
+  automationPackage?: string;
   filters: FilterState;
   /** Ctrl/Cmd+F 查找条状态，每个 Tab 独立。 */
   find: LogFindState;
@@ -94,7 +96,7 @@ function loadWorkspace(): { tabs: LogTabState[]; activeTabId: string } {
           ...tab,
           id: tab.id as string,
           name: (tab.name as string).trim() || "未命名日志",
-          kind: tab.kind === "test" ? "test" : "log",
+          kind: tab.kind === "test" ? "test" : tab.kind === "automation" ? "automation" : "log",
           filters: { ...EMPTY_LOG_FILTERS, ...tab.filters, pid: "" },
           find: {
             ...EMPTY_LOG_FIND,
@@ -181,33 +183,41 @@ export function useLogTabs() {
     [updateTab, workspace.activeTabId],
   );
 
-  const createTab = useCallback(() => {
+  const createTab = useCallback((activate = true) => {
     const tab = makeTab("新日志");
     setWorkspace((current) => ({
       tabs: [...current.tabs, tab],
-      activeTabId: tab.id,
+      activeTabId: activate ? tab.id : current.activeTabId,
     }));
     return tab;
   }, []);
 
   const createTestTab = useCallback(
-    (packageName: string, name: string, startedAtId: number) => {
+    (packageName: string, name: string, startedAtId: number, activate = true) => {
       const filters = { ...EMPTY_LOG_FILTERS, app: packageName };
       const tab = makeTab(name.trim() || "测试用例监控", filters, "test");
       tab.testPackage = packageName;
       tab.testStartedAtId = startedAtId;
       setWorkspace((current) => ({
         tabs: [...current.tabs, tab],
-        activeTabId: tab.id,
+        activeTabId: activate ? tab.id : current.activeTabId,
       }));
       return tab;
     },
     [],
   );
 
+  const createAutomationTab = useCallback((packageName: string, device: string, name: string) => {
+    const tab = makeTab(name, { ...EMPTY_LOG_FILTERS, app: packageName }, "automation");
+    tab.automationPackage = packageName; tab.automationDevice = device;
+    setWorkspace((current) => ({ tabs: [...current.tabs, tab], activeTabId: tab.id }));
+    return tab;
+  }, []);
+
   const duplicateTab = useCallback((source: LogTabState, startedAtId = -1) => {
     const tab = makeTab(`${source.name} 副本`, source.filters, source.kind);
     tab.showTestCases = source.showTestCases;
+    tab.automationDevice = source.automationDevice; tab.automationPackage = source.automationPackage;
     tab.activeFilterId = source.activeFilterId;
     tab.testPackage = source.testPackage;
     tab.testStartedAtId = source.kind === "test" ? startedAtId : -1;
@@ -278,6 +288,7 @@ export function useLogTabs() {
     updateActiveTab,
     createTab,
     createTestTab,
+    createAutomationTab,
     duplicateTab,
     closeTab,
     renameTab,

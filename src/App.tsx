@@ -38,6 +38,9 @@ import {
   type ProjectionCache,
 } from "./features/logcat/projectionCache";
 import { ManagePage, type ManageTab } from "./features/settings/ManagePage";
+import { AutomationTab } from "./features/automation/AutomationTab";
+import type { Draft } from "./features/automation/model";
+import { useAutomation } from "./features/automation/useAutomation";
 import { TestCaseSidebar } from "./features/testcases/TestCaseSidebar";
 import {
   ToolsPage,
@@ -148,7 +151,7 @@ export default function App() {
     waiting,
   } = useLogcat(
     logTabs.activeTab.filters,
-    logTabs.activeTab.kind === "test",
+    logTabs.tabs.some((tab) => tab.kind === "test" || tab.kind === "automation"),
   );
   // 普通日志列表允许低优先级跟随采集，避免高频日志阻塞 Tab/筛选等交互；
   // 测试监控仍使用 allEntries 的实时数据，不延迟判定。
@@ -175,6 +178,9 @@ export default function App() {
   const [showBlockedTags, setShowBlockedTags] = useState(false);
   const [tagBlockDialog, setTagBlockDialog] =
     useState<TagBlockDialogState | null>(null);
+  const automation = useAutomation();
+  const automationViewsRef = useRef(new Map<string, { logId: string; testId: string; floor: number }>());
+  const [testCreateKind, setTestCreateKind] = useState<"test" | "automation">("test");
   const [showTestTabCreate, setShowTestTabCreate] = useState(false);
   const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null);
   const [testTabPackage, setTestTabPackage] = useState("");
@@ -382,6 +388,26 @@ export default function App() {
   const activeTestStartedAtId = logTabs.activeTab.testStartedAtId;
   const activeTestPidHistory = logTabs.activeTab.pidHistory;
   const isTestTab = logTabs.activeTab.kind === "test";
+  const isAutomationTab = logTabs.activeTab.kind === "automation";
+  useEffect(() => {
+    const binding = logTabs.activeTab;
+    if (automation.state.busy && selectedDevice !== automation.state.device) { setSelectedDevice(automation.state.device); return; }
+    if (binding.kind === "automation" && binding.automationDevice && !automation.state.busy && !automation.pending && selectedDevice !== binding.automationDevice) setSelectedDevice(binding.automationDevice);
+  }, [logTabs.activeTab, automation.state.busy, automation.pending, selectedDevice, setSelectedDevice]);
+  useEffect(() => {
+    const association = automationViewsRef.current.get(automation.state.ownerTab);
+    if (!automation.state.busy || !association) return;
+    let disposed = false; let polling = false;
+    const poll = async () => {
+      if (polling) return; polling = true;
+      try {
+        const pids = await invoke<string[]>("resolve_pids", { device: automation.state.device, package: automation.state.package });
+        if (!disposed) logTabs.addTabPids(association.testId, pids);
+      } catch { /* normal log view keeps reporting device errors */ } finally { polling = false; }
+    };
+    void poll(); const timer = window.setInterval(poll, 1500);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [automation.state.busy, automation.state.ownerTab, automation.state.device, automation.state.package, logTabs.addTabPids]);
   const testFilterCachesRef = useRef(new Map<string, IncrementalFilterCache>());
   const projectionCachesRef = useRef(new Map<string, ProjectionCache>());
 
@@ -1206,18 +1232,37 @@ export default function App() {
     logTabs.selectTab(tab.id);
     setFilters({ ...tab.filters });
     setSelectedPackage(
-      tab.kind === "test" ? tab.testPackage : (tab.filters.app ?? ""),
+      tab.kind === "test" ? tab.testPackage : tab.kind === "automation" ? "" : (tab.filters.app ?? ""),
     );
     setSelectedId(tab.selectedLogId);
     setShowCases(tab.kind === "test" ? true : tab.showTestCases);
     setActiveFilterId(tab.activeFilterId);
     setShowFilterSave(false);
     const packageName = tab.kind === "test" ? tab.testPackage : tab.filters.app;
-    if (packageName && selectedDevice) {
+    if (packageName && selectedDevice && tab.kind !== "automation") {
       applyAppFilter(packageName, tab);
     }
   };
 
+  const startAutomation = async (draft: Draft) => {
+    const owner = logTabs.activeTab;
+    if (owner.automationDevice !== selectedDevice) throw new Error("正在切换日志采集设备，请稍后运行");
+    await automation.start(owner.id, draft, async () => {
+      if (!running) await start(true);
+      // start()开启新日志会话后ID归零；当前闭包仍持有上一轮entries。
+      const floor = running ? allEntries[allEntries.length - 1]?.id ?? -1 : -1;
+      const pkg = owner.automationPackage ?? "";
+      const name = effectiveApps.find((app) => app.package === pkg)?.name ?? pkg;
+      const previous = automationViewsRef.current.get(owner.id);
+      let logTab = logTabs.tabs.find((tab) => tab.id === previous?.logId);
+      let testTab = logTabs.tabs.find((tab) => tab.id === previous?.testId);
+      if (!logTab) logTab = logTabs.createTab(false);
+      logTabs.updateTab(logTab.id, { name: `日志 · ${name}`, filters: { ...logTab.filters, app: pkg }, clearedBeforeId: floor, pausedAtId: null });
+      if (!testTab) testTab = logTabs.createTestTab(pkg, `用例 · ${name}`, floor, false);
+      else logTabs.updateTab(testTab.id, { testPackage: pkg, filters: { ...testTab.filters, app: pkg }, testStartedAtId: floor, clearedBeforeId: floor, pidHistory: [], pausedAtId: null });
+      automationViewsRef.current.set(owner.id, { logId: logTab.id, testId: testTab.id, floor });
+    });
+  };
   const handleSelectLogTab = (id: string) => {
     const tab = logTabs.tabs.find((item) => item.id === id);
     if (!tab || tab.id === logTabs.activeTabId) return;
@@ -1229,17 +1274,24 @@ export default function App() {
     showLogTab(tab);
   };
 
-  const handleOpenTestTabCreate = () => {
+  const handleOpenTestTabCreate = (kind: "test" | "automation" = "test") => {
+    setTestCreateKind(kind);
     const firstPackage =
       parseAppPackages(selectedPackage)[0] || logPageApps[0]?.package || "";
     const appName = logPageApps.find((app) => app.package === firstPackage)?.name;
     setTestTabPackage(firstPackage);
-    setTestTabName(appName ? `用例 · ${appName}` : "测试用例监控");
+    setTestTabName(appName ? `${kind === "automation" ? "自动化" : "用例"} · ${appName}` : kind === "automation" ? "自动化" : "测试用例监控");
     setShowTestTabCreate(true);
   };
 
   const handleCreateTestTab = () => {
     if (!testTabPackage) return;
+    if (testCreateKind === "automation") {
+      if (!selectedDevice) { showToast("请先选择设备，再创建自动化Tab"); return; }
+      const appName = effectiveApps.find((app) => app.package === testTabPackage)?.name;
+      const tab = logTabs.createAutomationTab(testTabPackage, selectedDevice ?? "", testTabName.trim() || `自动化 · ${appName ?? testTabPackage}`);
+      setShowTestTabCreate(false); showLogTab(tab); return;
+    }
     const lastId = allEntries[allEntries.length - 1]?.id ?? -1;
     const appName = effectiveApps.find((app) => app.package === testTabPackage)?.name;
     const tab = logTabs.createTestTab(
@@ -1252,6 +1304,7 @@ export default function App() {
   };
 
   const handleCloseLogTab = (id: string) => {
+    if ((automation.state.busy || automation.pending) && automation.state.ownerTab === id) { showToast("请先停止自动化，再关闭Tab"); setPendingCloseTabId(null); return; }
     if (logTabs.tabs.length <= 1) {
       setPendingCloseTabId(null);
       return;
@@ -1542,6 +1595,7 @@ export default function App() {
                 fullLabel: `${d.model || d.serial}（${d.transport === "wifi" ? "WiFi" : "USB"}）`,
               })),
             ]}
+            disabled={automation.state.busy || automation.pending}
             onChange={(v) => setSelectedDevice(v)}
           />
             {waiting && (
@@ -1564,7 +1618,7 @@ export default function App() {
             ) : (
               <button
                 className="toolbar-icon-action primary-action"
-                onClick={start}
+                onClick={() => start()}
                 disabled={!selectedDevice}
               >
                 <ToolbarIcon name="play" />
@@ -1659,12 +1713,14 @@ export default function App() {
           activeTabId={logTabs.activeTabId}
           onSelect={handleSelectLogTab}
           onCreateLog={handleCreateLogTab}
-          onCreateTest={handleOpenTestTabCreate}
+          onCreateTest={() => handleOpenTestTabCreate("test")}
+          onCreateAutomation={() => handleOpenTestTabCreate("automation")}
+          runningTabId={automation.state.busy || automation.pending ? automation.state.ownerTab : undefined}
           onClose={setPendingCloseTabId}
           onRename={logTabs.renameTab}
         />
 
-        <div className="toolbar-row toolbar-filter-row">
+        {!isAutomationTab && <div className="toolbar-row toolbar-filter-row">
           <div className="toolbar-group tab-processing-actions">
             <button
               className={`toolbar-icon-action ${logTabs.activeTab.pausedAtId != null ? "active" : ""}`}
@@ -1861,7 +1917,7 @@ export default function App() {
               </span>
             )}
           </span>
-        </div>
+        </div>}
 
         {showWifi && <WifiPanel onChanged={refreshDevices} />}
       </div>
@@ -1922,15 +1978,16 @@ export default function App() {
               className="save-description-dialog test-tab-create-dialog"
               role="dialog"
               aria-modal="true"
-              aria-label="新建测试用例监控"
+              aria-label={testCreateKind === "automation" ? "新建自动化" : "新建测试用例监控"}
               onKeyDown={(event) => {
                 if (event.key === "Escape") setShowTestTabCreate(false);
               }}
             >
-              <h3>新建测试用例监控</h3>
-              <p>选择用例需要监控的应用。此 Tab 会保留完整应用日志并锁定筛选条件，保证用例判定和问题定位使用同一份日志。</p>
+              <h3>{testCreateKind === "automation" ? "新建自动化" : "新建测试用例监控"}</h3>
+              <p>{testCreateKind === "automation" ? "选择自动化测试的应用。创建后固定绑定当前设备和应用，连接后读取可用场景。" : "选择用例需要监控的应用。此 Tab 会保留完整应用日志并锁定筛选条件，保证用例判定和问题定位使用同一份日志。"}</p>
+              {testCreateKind === "automation" && <p className="test-tab-create-note">绑定设备：{devices.find((d) => d.serial === selectedDevice)?.model ?? selectedDevice ?? "未选择设备，请先在顶部选择"}</p>}
               <label>
-                监控应用
+                {testCreateKind === "automation" ? "自动化应用" : "监控应用"}
                 <Select
                   className="test-tab-app-select"
                   value={testTabPackage}
@@ -1960,10 +2017,11 @@ export default function App() {
                     setTestTabPackage(packageName);
                     if (
                       !testTabName.trim()
-                      || testTabName === "测试用例监控"
+                      || testTabName === "测试用例监控" || testTabName === "自动化"
+                      || testTabName === `自动化 · ${previousDefault?.name ?? ""}`
                       || testTabName === `用例 · ${previousDefault?.name ?? ""}`
                     ) {
-                      setTestTabName(nextApp ? `用例 · ${nextApp.name}` : "测试用例监控");
+                      setTestTabName(nextApp ? `${testCreateKind === "automation" ? "自动化" : "用例"} · ${nextApp.name}` : testCreateKind === "automation" ? "自动化" : "测试用例监控");
                     }
                   }}
                 />
@@ -1974,7 +2032,7 @@ export default function App() {
                   value={testTabName}
                   autoFocus
                   maxLength={32}
-                  placeholder="例如：登录流程用例监控"
+                  placeholder={testCreateKind === "automation" ? "例如：游戏自动化测试" : "例如：登录流程用例监控"}
                   onChange={(event) => setTestTabName(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && testTabPackage) handleCreateTestTab();
@@ -1982,16 +2040,16 @@ export default function App() {
                 />
               </label>
               <div className="test-tab-create-note">
-                应用重启后会自动跟踪新 PID，并保留本次测试中旧 PID 的日志。清空 Tab 即开始一轮新的用例会话。
+                {testCreateKind === "automation" ? "自动化Tab只显示配置、步骤和结果。运行时可切换Tab查看日志和测试用例。" : "应用重启后会自动跟踪新 PID，并保留本次测试中旧 PID 的日志。清空 Tab 即开始一轮新的用例会话。"}
               </div>
               <div className="save-description-actions">
                 <button onClick={() => setShowTestTabCreate(false)}>取消</button>
                 <button
                   className="primary-action"
                   onClick={handleCreateTestTab}
-                  disabled={!testTabPackage}
+                  disabled={!testTabPackage || (testCreateKind === "automation" && !selectedDevice)}
                 >
-                  创建并开始用例监控
+                  {testCreateKind === "automation" ? "创建自动化Tab" : "创建并开始用例监控"}
                 </button>
               </div>
             </div>
@@ -2197,7 +2255,14 @@ export default function App() {
           document.body,
         )}
 
-      <div className="log-main">
+      {isAutomationTab ? <AutomationTab
+        key={logTabs.activeTabId}
+        tabId={logTabs.activeTabId}
+        device={logTabs.activeTab.automationDevice ?? ""}
+        packageName={logTabs.activeTab.automationPackage ?? ""}
+        devices={devices} apps={logPageApps} controller={automation}
+        onRun={startAutomation}
+      /> :       <div className="log-main">
         <div className="log-left" ref={logLeftRef}>
           <LogList
             entries={tabEntries}
@@ -2300,7 +2365,7 @@ export default function App() {
             closable={false}
           />
         )}
-      </div>
+      </div>}
 
       {toast && (
         <div

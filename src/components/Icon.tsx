@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
 export type IconName =
+  | "automation"
+  | "video"
   | "play"
   | "stop"
   | "pause"
@@ -23,6 +25,8 @@ export type IconName =
 export function Icon({ name, className = "ui-icon" }: { name: IconName; className?: string }) {
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.8 };
   const paths: Record<IconName, ReactNode> = {
+    automation: <><rect x="5" y="6" width="14" height="14" rx="3" /><path d="M12 3v3M8 11h.01M16 11h.01M9 16h6M2 11h3M19 11h3" /></>,
+    video: <><rect x="3" y="5" width="13" height="14" rx="2" /><path d="m16 10 5-3v10l-5-3" /></>,
     edit: <><path d="m15 5 4 4M5 15 15 5a2.8 2.8 0 0 1 4 4L9 19l-5 1 1-5Z" /></>,
     "move-top": <path d="M5 4h14M12 20V8m-5 5 5-5 5 5" />,
     "move-up": <path d="M12 20V4m-5 5 5-5 5 5" />,

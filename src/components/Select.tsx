@@ -9,6 +9,7 @@ export interface SelectOption {
 }
 
 interface Props {
+  disabled?: boolean;
   value: string;
   options: SelectOption[];
   onChange: (value: string) => void;
@@ -48,6 +49,7 @@ interface MenuPosition {
  * （见 tauri-apps/tauri#1911），自绘菜单位置完全可控。
  */
 export function Select({
+  disabled = false,
   value,
   options,
   onChange,
@@ -62,6 +64,7 @@ export function Select({
   menuMaxHeight = 320,
 }: Props) {
   const [open, setOpen] = useState(false);
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   const [filter, setFilter] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -244,7 +247,8 @@ export function Select({
         type="button"
         className={`select-trigger ${open ? "open" : ""}`}
         title={title}
-        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        onClick={() => { if (!disabled) setOpen((v) => !v); }}
       >
         <span className="select-label">
           {triggerLabel ?? (current ? current.label : value || "—")}

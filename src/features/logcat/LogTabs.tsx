@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../../components/Icon";
 import type { LogTabState } from "./useLogTabs";
 
 interface Props {
@@ -7,6 +8,8 @@ interface Props {
   onSelect: (id: string) => void;
   onCreateLog: () => void;
   onCreateTest: () => void;
+  onCreateAutomation: () => void;
+  runningTabId?: string;
   onClose: (id: string) => void;
   onRename: (id: string, name: string) => void;
 }
@@ -68,14 +71,14 @@ export function LogTabs(props: Props) {
   }, [showCreateMenu]);
 
   return (
-    <div className="log-tabs-bar" aria-label="日志监控标签页">
+    <div className="log-tabs-bar" aria-label="工作区标签页">
       <div className="log-tabs-scroll" role="tablist">
         {props.tabs.map((tab) => {
           const active = tab.id === props.activeTabId;
           return (
             <div
               key={tab.id}
-              className={`log-tab ${tab.kind === "test" ? "log-tab-test" : ""} ${active ? "active" : ""}`}
+              className={`log-tab ${tab.kind === "test" ? "log-tab-test" : tab.kind === "automation" ? "log-tab-automation" : ""} ${active ? "active" : ""}`}
               role="tab"
               aria-selected={active}
               title={`${tab.name}（双击或按 F2 重命名）`}
@@ -84,7 +87,7 @@ export function LogTabs(props: Props) {
             >
               <span className={`log-tab-status ${tab.pausedAtId != null ? "paused" : "live"}`} />
               <span className="log-tab-kind" aria-hidden="true">
-                {tab.kind === "test" ? "✓" : ""}
+                {tab.kind === "test" ? "✓" : tab.kind === "automation" ? <Icon name="automation" /> : ""}
               </span>
               {editingId === tab.id ? (
                 <input
@@ -106,8 +109,8 @@ export function LogTabs(props: Props) {
               )}
               <button
                 className="log-tab-close"
-                disabled={props.tabs.length <= 1}
-                title={props.tabs.length <= 1 ? "至少保留一个日志 Tab" : "关闭 Tab"}
+                disabled={props.tabs.length <= 1 || props.runningTabId === tab.id}
+                title={props.runningTabId === tab.id ? "请先停止自动化运行" : props.tabs.length <= 1 ? "至少保留一个 Tab" : "关闭 Tab"}
                 aria-label={`关闭 ${tab.name}`}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -154,6 +157,10 @@ export function LogTabs(props: Props) {
                 <strong>测试用例监控</strong>
                 <small>固定应用，保留完整日志用于用例判定和定位</small>
               </span>
+            </button>
+            <button onClick={() => { setShowCreateMenu(false); props.onCreateAutomation(); }}>
+              <span className="log-tab-create-icon"><Icon name="automation" /></span>
+              <span><strong>自动化</strong><small>连接手机，配置片段并自动录制素材</small></span>
             </button>
           </div>
         )}
