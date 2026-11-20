@@ -23,6 +23,7 @@ import type { FilterState } from "../../core/types";
 import { FilterManager } from "../filters/FilterManager";
 import { TestCaseManager } from "../testcases/TestCaseManager";
 import { TagBlockManager } from "./TagBlockManager";
+import { LogStorageSettings } from "./LogStorageSettings";
 import type {
   EffectiveTagBlockRule,
   TagBlockMatch,
@@ -412,6 +413,7 @@ export function ManagePage(props: Props) {
             </article>
           </div>
           {configMsg && <div className="settings-inline-status">{configMsg}</div>}
+          <LogStorageSettings />
         </section>
       )}
       {tab === "apps" && (

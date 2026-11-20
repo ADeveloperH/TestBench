@@ -2,6 +2,7 @@ mod adb;
 mod audio_export;
 mod automation;
 mod log_store;
+mod log_storage;
 
 use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -110,6 +111,10 @@ fn start_logcat(
         });
         let mut session = state.session.lock().unwrap();
         *session = writer;
+        drop(session);
+        if let Some(storage) = app.try_state::<Arc<log_storage::LogStorage>>() {
+            storage.request();
+        }
     }
 
     let mut proc = LogcatProcess::start(device.as_deref(), buffer.as_deref())?;
@@ -807,7 +812,7 @@ async fn export_logs(app: AppHandle, text: String) -> Result<Option<String>, Str
 
 /// 直接导出当前会话的完整原始日志，避免把历史日志重新拼到前端内存中。
 #[tauri::command]
-fn export_session_logs(
+async fn export_session_logs(
     app: AppHandle,
     state: State<'_, RunningLogcat>,
 ) -> Result<Option<String>, String> {
@@ -819,35 +824,33 @@ fn export_session_logs(
         return Ok(None);
     };
 
-    let mut session = state.session.lock().unwrap();
-    let Some(writer) = session.as_mut() else {
-        return Ok(None);
+    let snapshot = {
+        let mut session = state.session.lock().unwrap();
+        let Some(writer) = session.as_mut() else { return Ok(None); };
+        // 固定导出边界并续持OS锁，复制期间不锁住采集线程。
+        writer.export_snapshot()?
     };
-    writer.flush();
-    let dir = writer.dir().to_path_buf();
-
-    let mut segments = std::fs::read_dir(&dir)
-        .map_err(|e| format!("读取日志会话目录失败：{e}"))?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("logs-") && name.ends_with(".log"))
-        })
-        .collect::<Vec<_>>();
-    segments.sort();
-
-    let mut output = std::fs::File::create(&destination)
-        .map_err(|e| format!("创建导出文件失败：{e}"))?;
-    for segment in segments {
-        let mut input = std::fs::File::open(&segment)
-            .map_err(|e| format!("读取日志分段失败：{e}"))?;
-        std::io::copy(&mut input, &mut output)
-            .map_err(|e| format!("导出日志失败：{e}"))?;
-    }
-    log::info!("完整日志已导出到：{}", destination.display());
-    Ok(Some(destination.display().to_string()))
+    let sessions = app.path().app_data_dir().map_err(|e| e.to_string())?.join("sessions");
+    run_blocking(move || {
+        use std::io::Read;
+        let (_pin, segments) = snapshot;
+        let sessions = sessions.canonicalize().map_err(|e| e.to_string())?;
+        let parent = destination.parent().ok_or("导出路径缺少父目录")?.canonicalize().map_err(|e| e.to_string())?;
+        if parent.starts_with(&sessions) {
+            return Err("请把导出文件保存在日志会话目录以外，避免覆盖原始日志".into());
+        }
+        if destination.exists() && destination.canonicalize().map_err(|e| e.to_string())?.starts_with(&sessions) {
+            return Err("不能覆盖原始日志文件".into());
+        }
+        let mut output = std::fs::File::create(&destination).map_err(|e| format!("创建导出文件失败：{e}"))?;
+        for (segment, size) in segments {
+            let mut input = std::fs::File::open(segment).map_err(|e| format!("读取日志分段失败：{e}"))?.take(size);
+            let copied = std::io::copy(&mut input, &mut output).map_err(|e| format!("导出日志失败：{e}"))?;
+            if copied != size { return Err("原始日志文件长度变化，导出未完成".into()); }
+        }
+        log::info!("完整日志已导出到：{}", destination.display());
+        Ok(Some(destination.display().to_string()))
+    }).await
 }
 
 #[tauri::command]
@@ -1159,10 +1162,22 @@ pub fn run() {
         .setup(|app| {
             let resource_dir = app.path().resource_dir().ok();
             adb::init_binary_paths(resource_dir);
+            match app.path().app_data_dir() {
+                Ok(path) => {
+                    let storage = Arc::new(log_storage::LogStorage::new(path));
+                    app.manage(storage.clone());
+                    storage.start_timer();
+                }
+                Err(e) => log::warn!("本机日志存储不可用，仍可继续采集：{e}"),
+            }
             build_tray(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            log_storage::log_storage_status,
+            log_storage::log_storage_preview,
+            log_storage::log_storage_confirm,
+            log_storage::log_storage_open_directory,
             automation::plans::automation_plans_read,
             automation::plans::automation_plans_update,
             automation::automation_export_config,

@@ -3417,6 +3417,29 @@ body.light .tools-page {
   gap: 12px;
 }
 
+.log-storage-settings { margin-top: 18px; padding: 18px 0 0; border-top: 1px solid var(--border); min-width: 0; }
+.log-storage-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.log-storage-heading h3 { margin: 0 0 6px; font-size: 14px; }
+.log-storage-heading p, .log-storage-note { margin: 6px 0 12px; color: var(--text-dim); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.log-storage-heading > button { flex-shrink: 0; }
+.log-storage-stats { display: flex; flex-wrap: wrap; gap: 18px 40px; margin: 18px 0; }
+.log-storage-stats dt { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+.log-storage-stats dd { margin: 0; font-size: 15px; font-variant-numeric: tabular-nums; }
+.log-storage-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; margin: 18px 0 10px; }
+.log-storage-fields > label { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.log-storage-fields .select-wrap { min-width: 112px; }
+.log-storage-checkbox { cursor: pointer; }
+.log-storage-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.log-storage-notice { padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--bg-input); font-size: 12px; line-height: 1.7; }
+.log-storage-error { color: var(--danger); font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.log-storage-dialog { max-width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 36px); overflow: auto; box-sizing: border-box; }
+.log-storage-dialog p { white-space: normal; overflow-wrap: anywhere; line-height: 1.8; font-size: 13px; }
+@media (max-width: 620px) {
+  .log-storage-heading { flex-wrap: wrap; }
+  .log-storage-fields { align-items: flex-start; flex-direction: column; }
+  .log-storage-dialog .save-description-actions { flex-wrap: wrap; }
+}
+
 .settings-card,
 .tool-card,
 .tool-context-card {

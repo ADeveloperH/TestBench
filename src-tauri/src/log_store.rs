@@ -3,10 +3,10 @@
 //! 这里只负责顺序写入原始 logcat 行，不参与前端筛选。日志按 50 MiB 分段，
 //! 既避免单个文件无限增长，也让后续分页读取和故障恢复有明确边界。
 
-use std::fs::{create_dir_all, File};
+use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 const SEGMENT_LIMIT_BYTES: u64 = 50 * 1024 * 1024;
 const FLUSH_INTERVAL: Duration = Duration::from_millis(500);
@@ -17,19 +17,13 @@ pub struct LogSessionWriter {
     bytes: u64,
     file: BufWriter<File>,
     last_flush: Instant,
+    // File最后一个副本关闭才释放OS锁，停止采集不释放当前会话，导出可独立续持。
+    lease: File,
 }
 
 impl LogSessionWriter {
     pub fn start(app_data_dir: &Path) -> Result<Self, String> {
-        let sessions_dir = app_data_dir.join("sessions");
-        create_dir_all(&sessions_dir).map_err(|e| format!("创建日志会话目录失败：{e}"))?;
-
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|e| format!("获取日志会话时间失败：{e}"))?
-            .as_nanos();
-        let dir = sessions_dir.join(format!("{stamp}"));
-        create_dir_all(&dir).map_err(|e| format!("创建日志会话目录失败：{e}"))?;
+        let (dir, lease) = crate::log_storage::create_session(app_data_dir)?;
         let file = open_segment(&dir, 0)?;
 
         Ok(Self {
@@ -38,6 +32,7 @@ impl LogSessionWriter {
             bytes: 0,
             file: BufWriter::new(file),
             last_flush: Instant::now(),
+            lease,
         })
     }
 
@@ -74,6 +69,25 @@ impl LogSessionWriter {
 
     pub fn dir(&self) -> &Path {
         &self.dir
+    }
+
+    pub fn export_snapshot(&mut self) -> Result<(File, Vec<(PathBuf, u64)>), String> {
+        self.file.flush().map_err(|e| e.to_string())?;
+        let pin = self.lease.try_clone().map_err(|e| e.to_string())?;
+        let mut files = Vec::new();
+        for entry in std::fs::read_dir(&self.dir).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if crate::log_storage::is_segment(&entry.file_name().to_string_lossy()) {
+                let metadata =
+                    std::fs::symlink_metadata(entry.path()).map_err(|e| e.to_string())?;
+                if !metadata.is_file() || metadata.file_type().is_symlink() {
+                    return Err("日志分段不是普通文件".into());
+                }
+                files.push((entry.path(), metadata.len()));
+            }
+        }
+        files.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok((pin, files))
     }
 }
 
