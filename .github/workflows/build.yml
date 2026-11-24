@@ -55,6 +55,17 @@ jobs:
       - name: 安装前端依赖
         run: pnpm install
 
+      - name: 准备并校验 go-ios（Windows x64）
+        run: |
+          node -e "if(process.platform !== 'win32' || process.arch !== 'x64') process.exit(1)"
+          if ($LASTEXITCODE -ne 0) { throw "Unexpected runner architecture" }
+          node scripts/prepare-ios-sidecar.mjs --platform win32 --arch x64
+          if ($LASTEXITCODE -ne 0) { throw "go-ios preparation failed" }
+          node scripts/prepare-ios-sidecar.mjs --check --platform win32 --arch x64
+          if ($LASTEXITCODE -ne 0) { throw "go-ios validation failed" }
+          node --test scripts/tests/ios-sidecar-prepare.test.mjs scripts/tests/ios-bundle-check.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "go-ios tests failed" }
+
       - name: 生成内置 adb / scrcpy 二进制
         run: powershell -ExecutionPolicy Bypass -File scripts/bundle-binaries.ps1
 
@@ -69,6 +80,21 @@ jobs:
 
       - name: 构建 Windows 安装包
         run: pnpm tauri build
+
+      - name: 检查 MSI 内嵌 go-ios（管理解包，不安装）
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem src-tauri/target/release/bundle/msi/*.msi)
+          if ($packages.Count -ne 1) { throw "Expected exactly one MSI" }
+          $destination = Join-Path $env:RUNNER_TEMP "TestBench MSI 检查"
+          New-Item -ItemType Directory -Force $destination | Out-Null
+          $installer = Start-Process msiexec.exe -ArgumentList @('/a', "`"$($packages[0].FullName)`"", '/qn', "TARGETDIR=`"$destination`"") -Wait -PassThru
+          if ($installer.ExitCode -ne 0) { throw "MSI extraction failed: $($installer.ExitCode)" }
+          $tools = @(Get-ChildItem $destination -Recurse -Filter ios.exe | Where-Object { $_.FullName -match '[\\/]bin[\\/]windows[\\/]ios.exe$' })
+          if ($tools.Count -ne 1) { throw "Expected exactly one embedded ios.exe" }
+          $installRoot = $tools[0].Directory.Parent.Parent.FullName
+          node scripts/check-ios-bundle.mjs "$installRoot" x64
+          if ($LASTEXITCODE -ne 0) { throw "Embedded go-ios verification failed" }
 
       - name: 上传安装包与更新产物
         uses: actions/upload-artifact@v4
@@ -122,6 +148,13 @@ jobs:
       - name: 安装前端依赖
         run: pnpm install
 
+      - name: 准备并校验 go-ios（macOS 原生架构）
+        run: |
+          node -e "if(process.platform !== 'darwin' || process.arch !== '${{ matrix.arch }}') process.exit(1)"
+          node scripts/prepare-ios-sidecar.mjs --platform darwin --arch ${{ matrix.arch }}
+          node scripts/prepare-ios-sidecar.mjs --check --platform darwin --arch ${{ matrix.arch }}
+          node --test scripts/tests/ios-sidecar-prepare.test.mjs scripts/tests/ios-bundle-check.test.mjs
+
       - name: 生成内置 adb / scrcpy 二进制
         env:
           # macOS runner 新版 Homebrew 的 tap trust 校验会告警/阻断 brew install，禁用它
@@ -156,6 +189,14 @@ jobs:
           SIDECAR="src-tauri/target/release/bundle/macos/TestBench.app/Contents/Resources/bin/macos/unity-audio-extractor"
           test -x "$SIDECAR"
           "$SIDECAR" --version
+
+      - name: 检查签名后应用包内嵌 go-ios
+        run: |
+          node scripts/check-ios-bundle.mjs src-tauri/target/release/bundle/macos/TestBench.app ${{ matrix.arch }}
+          CHECK_DIR=$(mktemp -d "$RUNNER_TEMP/ios-updater.XXXXXX")
+          trap 'rm -rf "$CHECK_DIR"' EXIT
+          tar -xzf src-tauri/target/release/bundle/macos/TestBench.app.tar.gz -C "$CHECK_DIR"
+          node scripts/check-ios-bundle.mjs "$CHECK_DIR/TestBench.app" ${{ matrix.arch }}
 
       # 两个架构的更新包同名，加架构后缀避免 Release 资产冲突
       - name: 重命名更新包（加架构后缀）

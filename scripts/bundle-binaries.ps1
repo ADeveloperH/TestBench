@@ -1,4 +1,4 @@
-# Bundle adb + scrcpy (Windows) into src-tauri/bin/windows/
+# Bundle go-ios + adb + scrcpy (Windows) into src-tauri/bin/windows/
 # Run on a Windows machine:
 #   powershell -ExecutionPolicy Bypass -File scripts/bundle-binaries.ps1
 #
@@ -7,6 +7,8 @@
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
+& node (Join-Path $PSScriptRoot "prepare-ios-sidecar.mjs")
+if ($LASTEXITCODE -ne 0) { throw "Pinned go-ios preparation failed" }
 $Dest = Join-Path $Root "src-tauri\bin\windows"
 New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 

@@ -1,0 +1,31 @@
+{
+  "version": "1.3.2",
+  "releaseUrl": "https://github.com/danielpaulus/go-ios/releases/tag/v1.3.2",
+  "license": {
+    "spdx": "MIT",
+    "source": "https://raw.githubusercontent.com/danielpaulus/go-ios/v1.3.2/LICENSE",
+    "sha256": "d368be6f632f8f928369c6f1923cf2f884a1ae42a5f0dd218acd96f9bcfa75b4"
+  },
+  "platforms": {
+    "darwin": {
+      "directory": "macos",
+      "architectures": ["arm64", "x64"],
+      "asset": "go-ios-mac.zip",
+      "url": "https://github.com/danielpaulus/go-ios/releases/download/v1.3.2/go-ios-mac.zip",
+      "archiveSize": 16821315,
+      "archiveSha256": "100f225bfdd039081bcbdaf45029df3e67032673f3e0ca1fa3c050898c230c57",
+      "binary": "ios",
+      "binarySha256": "0b841d42da8d98141efcb0a63f0abab90c86b36e7b90011b1b68eee2c2d1c234"
+    },
+    "win32": {
+      "directory": "windows",
+      "architectures": ["x64"],
+      "asset": "go-ios-win.zip",
+      "url": "https://github.com/danielpaulus/go-ios/releases/download/v1.3.2/go-ios-win.zip",
+      "archiveSize": 8824605,
+      "archiveSha256": "939c6bcaafed183a92afb9f79cc11b1f935fa6389bfc94d3902e3f52c4dff3fe",
+      "binary": "ios.exe",
+      "binarySha256": "c99b04f1d615fa716637efae457d5c554f32259f9d249375de0086e3cc1a1df5"
+    }
+  }
+}

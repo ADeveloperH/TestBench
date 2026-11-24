@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -29,6 +28,11 @@ import { HistoryInput } from "./components/HistoryInput";
 import { Icon as ToolbarIcon } from "./components/Icon";
 import { Select } from "./components/Select";
 import { LogList } from "./features/logcat/LogList";
+import { LogFilterToolbar, LogSearchInput, SavedFilterControls } from "./features/logcat/LogFilterToolbar";
+import { configuredIosApps } from "./core/iosApps";
+import { useIosApplications } from "./features/ios/useIosApplications";
+import { IosWorkspaceToolbar } from "./features/ios/IosWorkspaceToolbar";
+import { normalizeIosFilterPreferences } from "./features/ios/iosFilterPreferences";
 import { LogTabs } from "./features/logcat/LogTabs";
 import { useLogTabs } from "./features/logcat/useLogTabs";
 import {
@@ -50,6 +54,21 @@ import {
   type BugreportResult,
 } from "./features/tools/ToolsPage";
 import { WifiPanel } from "./features/devices/WifiPanel";
+import { useWorkspaceDevices } from "./features/devices/useWorkspaceDevices";
+import { androidDevice } from "./core/workspaceDevice";
+import { IosProbePage } from "./features/ios/IosProbePage";
+import { useIosProbe } from "./features/ios/useIosProbe";
+import { IosLogWorkspace } from "./features/ios/IosLogWorkspace";
+import { useIosWorkspaceActions } from "./features/ios/useIosWorkspaceActions";
+import { useIosPilotMonitoring } from "./features/ios/useIosPilotMonitoring";
+import { canStartIosPilot } from "./features/ios/iosPilotMonitoring";
+import { IOS_PILOT_BUNDLE } from "./features/ios/iosPilotCases";
+import { IOS_BUSINESS_CANDIDATES_ENABLED, IOS_BUSINESS_CASE_COUNT, IOS_DEFAULT_BUSINESS_CASE_COUNT } from "./features/ios/iosBusinessCases";
+import { IOS_PILOT_APP_NAME, IOS_PILOT_IS_FIXTURE } from "./features/ios/iosPilotTarget";
+import { LogDetail } from "./features/logcat/LogDetail";
+import { LogWorkspaceFrame } from "./features/logcat/LogWorkspaceFrame";
+import { useLogWorkspaceShortcuts } from "./features/logcat/useLogWorkspaceShortcuts";
+import { useIosWorkspaceTabs } from "./features/ios/useIosWorkspaceTabs";
 import { DEFAULT_BACKDOOR } from "./core/apps";
 import type { AppInfo } from "./core/apps";
 import {
@@ -63,7 +82,7 @@ import {
   isTagBlocked,
   type TagBlockMatch,
 } from "./core/tagBlockRules";
-import { IS_DEBUG } from "./core/debug";
+import { ENABLE_IOS_PROBE, IS_DEBUG } from "./core/debug";
 import { getVersion } from "@tauri-apps/api/app";
 import {
   checkForUpdate,
@@ -82,10 +101,6 @@ import type {
 } from "./core/types";
 import "./App.css";
 
-// 日志详情面板高度：可拖动调整，持久化记住上次高度。
-const DETAIL_HEIGHT_KEY = "log-detail-height-v1";
-const DETAIL_MIN_HEIGHT = 80;
-const DETAIL_MAX_HEIGHT = 600;
 /** 普通日志 Tab 选择了未运行应用时，用一个不可能命中的 PID 保持空结果。 */
 const NO_RUNNING_APP_PID = "__testbench_no_running_app__";
 
@@ -114,26 +129,23 @@ function appNotRunningMessage(packages: string[]): string {
   return `应用「${target}」当前未运行`;
 }
 
-function loadDetailHeight(): number {
-  try {
-    const v = Number(localStorage.getItem(DETAIL_HEIGHT_KEY));
-    if (v >= DETAIL_MIN_HEIGHT && v <= DETAIL_MAX_HEIGHT) return v;
-  } catch {
-    // 忽略损坏的缓存
-  }
-  return 220;
-}
-
-
 export default function App() {
   const prefs = usePrefs();
+  const workspaceDevices = useWorkspaceDevices();
+  const iosCapture = useIosProbe(workspaceDevices.markIosUnavailable);
+  const [iosExporting, setIosExporting] = useState(false);
+  const iosSelected = workspaceDevices.selectedIosKey !== null;
+  const iosStatusMatchesDevice = iosCapture.status.deviceKey === workspaceDevices.selectedIosKey;
+  const iosTabs = useIosWorkspaceTabs(workspaceDevices.selectedIosKey, iosStatusMatchesDevice ? iosCapture.status.sessionId : null);
+  const iosActions = useIosWorkspaceActions(iosTabs.active, iosCapture.records, iosTabs.update, iosStatusMatchesDevice && iosCapture.status.state === "running", prefs.prefs.iosLog?.blocking);
+  const [androidSessionId, setAndroidSessionId] = useState(0);
   const logTabs = useLogTabs();
   const activeTabIdRef = useRef(logTabs.activeTabId);
   activeTabIdRef.current = logTabs.activeTabId;
 
   const {
     devices,
-    selectedDevice,
+    selectedDevice: androidSelectedDevice,
     setSelectedDevice,
     refreshDevices,
     running,
@@ -152,12 +164,59 @@ export default function App() {
   } = useLogcat(
     logTabs.activeTab.filters,
     logTabs.tabs.some((tab) => tab.kind === "test" || tab.kind === "automation"),
+    !iosSelected,
   );
+  const selectedDevice = iosSelected ? null : androidSelectedDevice;
+  const workspaceDeviceList = [...devices.map(androidDevice), ...workspaceDevices.devices];
+  const selectedWorkspaceKey = workspaceDevices.selectedIosKey ?? (selectedDevice ? `android:${selectedDevice}` : "");
+  const selectedWorkspaceDevice = workspaceDeviceList.find((device) => device.key === selectedWorkspaceKey);
+  const [deviceSwitching, setDeviceSwitching] = useState(false);
+  const switchWorkspaceDevice = async (key: string) => {
+    if (deviceSwitching || automation.state.busy || automation.pending) return;
+    setDeviceSwitching(true);
+    try {
+      await stop();
+      await iosCapture.stop();
+      iosCapture.clear();
+      if (key.startsWith("ios:")) {
+        iosCapture.setSelectedDevice(key.slice(4));
+        workspaceDevices.setSelectedIosKey(key);
+      } else {
+        workspaceDevices.setSelectedIosKey(null);
+        setSelectedDevice(key.slice("android:".length));
+      }
+    } finally { setDeviceSwitching(false); }
+  };
   // 普通日志列表允许低优先级跟随采集，避免高频日志阻塞 Tab/筛选等交互；
   // 测试监控仍使用 allEntries 的实时数据，不延迟判定。
   const displayEntries = useDeferredValue(entries);
 
-  const [view, setView] = useState<"log" | "manage" | "tools">("log");
+  const [view, setView] = useState<"log" | "manage" | "tools" | "ios-probe">("log");
+  const iosAppCatalog = configuredIosApps(normalizeIosFilterPreferences(prefs.prefs.iosLog).customApps, normalizeIosFilterPreferences(prefs.prefs.iosLog).removedBuiltinApps, IS_DEBUG);
+  const iosApplications = useIosApplications(workspaceDevices.selectedIosKey, view === "log" && iosSelected, iosCapture.busy || iosCapture.status.state === "running",
+    IOS_PILOT_IS_FIXTURE ? [{ bundleId: IOS_PILOT_BUNDLE, name: IOS_PILOT_APP_NAME }, ...iosAppCatalog.filter(app => app.bundleId !== IOS_PILOT_BUNDLE)] : iosAppCatalog);
+  const iosMonitoring = useIosPilotMonitoring(workspaceDevices.selectedIosKey, iosTabs.tabs, iosCapture.records, iosCapture.status, iosCapture.busy || deviceSwitching);
+  const canStartIosTest = canStartIosPilot(iosApplications.bundleId, iosApplications.target.executable, iosCapture.scope,
+    iosCapture.status, workspaceDevices.selectedIosKey, iosCapture.busy) && iosApplications.canStart;
+  const iosTestBoundary = () => Math.max(iosCapture.records[iosCapture.records.length - 1]?.sequence ?? 0, iosCapture.status.emittedCount);
+  const canRestartIosTest = canStartIosTest && iosTabs.active.kind === "test" && iosTabs.active.testBundleId === IOS_PILOT_BUNDLE;
+  const restartIosTest = () => {
+    if (canRestartIosTest && iosCapture.status.sessionId) iosTabs.restartTest(iosTabs.active.id, iosCapture.status.sessionId, iosTestBoundary());
+  };
+  const iosMonitor = iosMonitoring.forTab(iosTabs.active);
+  const iosTestNotice = !iosTabs.active.testRun ? `请先精确采集 ${IOS_PILOT_APP_NAME}，再点击重新开始测试。试点规则暂不支持编辑。`
+    : iosTabs.active.testRun.sessionId !== iosCapture.status.sessionId ? "采集会话已改变，请重新开始测试；不跨会话累计结果。"
+    : `${iosCapture.status.state === "running" ? "正在监测；切换 Tab、暂停或清空展示不影响判定。" : "本轮采集已结束；已保留命中证据，重新采集后请重新开始测试。"}试点规则暂不支持编辑。`
+      + (iosMonitor.runtime?.incomplete ? " 采集存在丢弃、序列缺口或落盘错误，结果可能不完整。" : "")
+      + (iosMonitor.runtime?.limitedContent ? " 部分业务正文隐藏、截断或无法还原，未命中不代表功能失败。" : "")
+      + (IOS_BUSINESS_CANDIDATES_ENABLED && (iosMonitor.runtime?.absenceSuspended || iosMonitor.runtime?.incomplete || iosMonitor.runtime?.limitedContent) ? " 本轮缺失判定已暂停；请确认采集完整后重新开始测试。" : "")
+      + (iosMonitor.runtime?.interrupted ? " 采集异常中断。" : "");
+  const iosBusinessNotice = IOS_BUSINESS_CANDIDATES_ENABLED
+    ? ` ${IOS_BUSINESS_CASE_COUNT} 项业务候选已在内部验收构建开启，${IOS_PILOT_IS_FIXTURE ? "当前仅为可控日志验证，不代表 Fruit 真实业务异常。" : "各分支待集中业务验收；未命中异常不代表通过。"}`
+    : ` 已启用两项正向试点及 ${IOS_DEFAULT_BUSINESS_CASE_COUNT} 项业务用例的已验证分支，其余 ${IOS_BUSINESS_CASE_COUNT - IOS_DEFAULT_BUSINESS_CASE_COUNT} 项候选待补验。`;
+  const startIosApplication = () => {
+    if (iosApplications.canStart) void iosCapture.start({ processFilter: iosApplications.target.executable ?? "", exactProcess: true });
+  };
   const [bugreportProgress, setBugreportProgress] = useState<BugreportProgress | null>(null);
   const [bugreportStatus, setBugreportStatus] = useState("");
   const [audioExportProgress, setAudioExportProgress] = useState<AudioExportProgress | null>(null);
@@ -171,7 +230,6 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(
     logTabs.activeTab.selectedLogId,
   );
-  const [detailHeight, setDetailHeight] = useState<number>(loadDetailHeight);
   const [showCases, setShowCases] = useState(logTabs.activeTab.showTestCases);
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showFilterSave, setShowFilterSave] = useState(false);
@@ -390,10 +448,11 @@ export default function App() {
   const isTestTab = logTabs.activeTab.kind === "test";
   const isAutomationTab = logTabs.activeTab.kind === "automation";
   useEffect(() => {
+    if (iosSelected) return;
     const binding = logTabs.activeTab;
     if (automation.state.busy && selectedDevice !== automation.state.device) { setSelectedDevice(automation.state.device); return; }
     if (binding.kind === "automation" && binding.automationDevice && !automation.state.busy && !automation.pending && selectedDevice !== binding.automationDevice) setSelectedDevice(binding.automationDevice);
-  }, [logTabs.activeTab, automation.state.busy, automation.pending, selectedDevice, setSelectedDevice]);
+  }, [iosSelected, logTabs.activeTab, automation.state.busy, automation.pending, selectedDevice, setSelectedDevice]);
   useEffect(() => {
     const association = automationViewsRef.current.get(automation.state.ownerTab);
     if (!automation.state.busy || !association) return;
@@ -1014,27 +1073,12 @@ export default function App() {
   useEffect(() => {
     if (running && !previousRunningRef.current) {
       logTabs.resetRuntimeState();
+      setAndroidSessionId((value) => value + 1);
       setSelectedId(null);
+      setScrollCommand(null);
     }
     previousRunningRef.current = running;
   }, [running, logTabs.resetRuntimeState]);
-
-  // 选中某行后，Cmd/Ctrl+C 复制该行；不干扰手动框选文本的复制。
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
-        const sel = window.getSelection();
-        if (selectedEntry && sel && sel.isCollapsed) {
-          e.preventDefault();
-          writeText(selectedEntry.raw)
-            .then(() => showToast("复制成功"))
-            .catch((err) => setError(`复制失败：${String(err)}`));
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [selectedEntry, setError]);
 
   // 关闭窗口 → 隐藏到托盘：由 Rust 侧 on_window_event 同步处理
   // （JS 异步回调在 Windows 上会死锁，见 src-tauri/src/lib.rs）。
@@ -1106,41 +1150,33 @@ export default function App() {
 
   const exportCurrentTab = () => exportLogs(tabEntries);
   const exportCompleteSession = async () => {
-    await exportSessionLogs();
+    if (iosSelected) {
+      if (iosExporting || iosCapture.status.deviceKey !== workspaceDevices.selectedIosKey) return;
+      setIosExporting(true);
+      try {
+        const saved = await invoke<string | null>("export_ios_session_logs", { sessionId: iosCapture.status.sessionId });
+        if (saved) await message(iosCapture.status.storageError
+          ? `iOS 会话存在落盘错误，导出仅包含已落盘部分：${saved}\n${iosCapture.status.storageError}`
+          : `完整 iOS 会话已导出：${saved}`, { title: "导出完成", kind: iosCapture.status.storageError ? "warning" : "info" });
+      } catch (error) {
+        await message(String(error), { title: "导出失败", kind: "error" });
+      } finally {
+        setIosExporting(false);
+      }
+    } else await exportSessionLogs();
     setShowMoreActions(false);
   };
 
-  // 快捷键：空格暂停当前 Tab，Cmd/Ctrl+L 清空当前 Tab，Cmd/Ctrl+E 导出当前 Tab。
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t.tagName === "INPUT" ||
-          t.tagName === "TEXTAREA" ||
-          t.tagName === "SELECT" ||
-          t.tagName === "BUTTON")
-      ) {
-        return;
-      }
-      if (e.key === " ") {
-        e.preventDefault();
-        if (running) toggleCurrentTabPause();
-        return;
-      }
-      if (!e.metaKey && !e.ctrlKey) return;
-      const k = e.key.toLowerCase();
-      if (k === "l") {
-        e.preventDefault();
-        clearCurrentTab();
-      } else if (k === "e") {
-        e.preventDefault();
-        exportCurrentTab();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [running, logTabs.activeTab, allEntries, tabEntries, exportLogs]);
+  useLogWorkspaceShortcuts({
+    enabled: view === "log", canPause: iosSelected ? iosActions.canPause : running, canExport: iosSelected ? iosActions.canExport : true,
+    onPause: iosSelected ? iosActions.pause : toggleCurrentTabPause,
+    onClear: iosSelected ? iosActions.clear : clearCurrentTab,
+    onExport: iosSelected ? () => void iosActions.exportCurrent() : exportCurrentTab,
+    onCopy: (iosSelected ? iosTabs.active.selected : selectedEntry) ? () => {
+      const raw = iosSelected ? iosTabs.active.selected?.raw : selectedEntry?.raw;
+      if (raw != null) writeText(raw).then(() => showToast("复制成功")).catch((error) => setError(`复制失败：${String(error)}`));
+    } : undefined,
+  });
 
   const handleSelect = (id: number) => {
     setSelectedId((prev) => (prev === id ? null : id));
@@ -1158,46 +1194,6 @@ export default function App() {
     }
     setSelectedId(id);
     setScrollCommand({ seq: Date.now(), kind: "id", id });
-  };
-
-  // 拖拽调整日志详情面板高度（顶部边缘手柄，向上拖 = 加高）。
-  // 详情最多占日志区 50%，保证日志列表始终可见（不遮挡）。
-  const logLeftRef = useRef<HTMLDivElement>(null);
-  const detailDragRef = useRef<{ startY: number; startH: number } | null>(null);
-  const onDetailResizeStart = (e: ReactMouseEvent) => {
-    e.preventDefault();
-    detailDragRef.current = { startY: e.clientY, startH: detailHeight };
-    let finalH = detailHeight;
-    const maxByArea = Math.max(
-      DETAIL_MIN_HEIGHT,
-      Math.floor((logLeftRef.current?.clientHeight ?? 0) * 0.5),
-    );
-    const maxH = Math.min(DETAIL_MAX_HEIGHT, maxByArea);
-    const onMove = (ev: MouseEvent) => {
-      if (!detailDragRef.current) return;
-      finalH = Math.min(
-        maxH,
-        Math.max(
-          DETAIL_MIN_HEIGHT,
-          detailDragRef.current.startH + (detailDragRef.current.startY - ev.clientY),
-        ),
-      );
-      setDetailHeight(finalH);
-    };
-    const onUp = () => {
-      detailDragRef.current = null;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.body.classList.remove("detail-resizing");
-      try {
-        localStorage.setItem(DETAIL_HEIGHT_KEY, String(finalH));
-      } catch {
-        // 忽略写入失败
-      }
-    };
-    document.body.classList.add("detail-resizing");
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
   };
 
   const handleSaveFilter = () => {
@@ -1246,6 +1242,7 @@ export default function App() {
 
   const startAutomation = async (draft: Draft) => {
     const owner = logTabs.activeTab;
+    if (iosSelected || deviceSwitching || owner.kind !== "automation") throw new Error("请在Android自动化Tab中运行");
     if (owner.automationDevice !== selectedDevice) throw new Error("正在切换日志采集设备，请稍后运行");
     await automation.start(owner.id, draft, async () => {
       if (!running) await start(true);
@@ -1357,7 +1354,7 @@ export default function App() {
       prefs.replacePrefs(merged.prefs);
       testCaseStore.replaceCases(merged.testCases);
       replaceFilters(merged.savedFilters);
-      return `已导入并合并（测试用例 ${merged.testCases.length} 条、过滤器 ${merged.savedFilters.length} 个）`;
+      return `已导入并合并（测试用例 ${merged.testCases.length} 条、过滤器 ${merged.savedFilters.length + (merged.prefs.iosLog?.savedFilters.length ?? 0)} 个）`;
     } catch (e) {
       return `导入失败：${String(e)}`;
     }
@@ -1516,6 +1513,7 @@ export default function App() {
             prefs.moveFavorite(kind, from, to)
           }
           savedFilters={savedFilters}
+          onUpdateIosLog={prefs.updateIosLog}
           onSaveFilter={saveFilter}
           onRenameFilter={renameFilter}
           onUpdateFilter={updateFilter}
@@ -1568,9 +1566,16 @@ export default function App() {
     );
   }
 
+  if (view === "ios-probe" && ENABLE_IOS_PROBE) {
+    return <IosProbePage probe={iosCapture} onBack={() => {
+      if (iosCapture.selectedDevice) workspaceDevices.setSelectedIosKey(`ios:${iosCapture.selectedDevice}`);
+      setView("log");
+    }} />;
+  }
+
   return (
     <div
-      className="app"
+      className={`app${iosSelected ? " app-ios" : ""}`}
       style={
         {
           "--log-font-size": `${prefs.prefs.logFontSize}px`,
@@ -1580,46 +1585,45 @@ export default function App() {
       <div className="toolbar">
         <div className="workspace-title">测试工作台</div>
         <div className="toolbar-row toolbar-primary">
+          <div className="toolbar-source-controls">
           <div className="toolbar-group toolbar-device-group">
             <Select
             className="device-select"
             title="选择设备"
-            value={selectedDevice ?? ""}
-            options={[
-              ...(devices.length === 0
-                ? [{ value: "", label: "无设备", fullLabel: "无设备" }]
-                : []),
-              ...devices.map((d) => ({
-                value: d.serial,
-                label: `${d.model || d.serial}（${d.transport === "wifi" ? "WiFi" : "USB"}）`,
-                fullLabel: `${d.model || d.serial}（${d.transport === "wifi" ? "WiFi" : "USB"}）`,
-              })),
-            ]}
-            disabled={automation.state.busy || automation.pending}
-            onChange={(v) => setSelectedDevice(v)}
+            disabled={deviceSwitching || automation.state.busy || automation.pending}
+            value={selectedWorkspaceKey}
+            options={workspaceDeviceList.length ? workspaceDeviceList.map((device) => ({
+              value: device.key,
+              label: `${device.platform === "ios" ? "iOS" : "Android"} · ${device.name}（${device.transport}）${device.connection !== "online" || !device.capabilities.includes("logs") ? " · 不可采集" : ""}`,
+            })) : [{ value: "", label: "无设备" }]}
+            onChange={(key) => { if (key && key !== selectedWorkspaceKey) void switchWorkspaceDevice(key); }}
           />
-            {waiting && (
+            {waiting && !iosSelected && (
               <span className="device-waiting-status" role="status">
                 <i />
                 等待设备连接…
               </span>
             )}
-            <button onClick={() => refreshDevices()} title="刷新设备列表">
+            <button disabled={deviceSwitching || workspaceDevices.refreshing} onClick={() => { void refreshDevices(); void workspaceDevices.refreshIos(); }} title="刷新设备列表">
               刷新
             </button>
           </div>
 
+          {iosSelected && <span className="device-waiting-status" title={workspaceDevices.error || undefined}>
+            {selectedWorkspaceDevice ? `iOS · ${selectedWorkspaceDevice.connection === "online" ? "在线" : "不可用"} · ${selectedWorkspaceDevice.locked == null ? "锁定未知" : selectedWorkspaceDevice.locked ? "已锁定" : "未锁定"}` : "iOS 设备未发现，请刷新"}
+          </span>}
+
           <div className="toolbar-group toolbar-capture-group">
-            {running ? (
-              <button className="toolbar-icon-action active" onClick={stop}>
+            {(iosSelected ? iosCapture.status.state === "running" : running) ? (
+              <button className="toolbar-icon-action active" disabled={deviceSwitching || iosCapture.busy} onClick={iosSelected ? iosCapture.stop : stop}>
                 <ToolbarIcon name="stop" />
                 停止采集
               </button>
             ) : (
               <button
                 className="toolbar-icon-action primary-action"
-                onClick={() => start()}
-                disabled={!selectedDevice}
+                onClick={iosSelected ? startIosApplication : () => start()}
+                disabled={deviceSwitching || (iosSelected ? iosCapture.busy || !iosApplications.canStart || !selectedWorkspaceDevice?.capabilities.includes("logs") : !selectedDevice)}
               >
                 <ToolbarIcon name="play" />
                 开始采集
@@ -1629,16 +1633,17 @@ export default function App() {
           </div>
 
           <span className="toolbar-spacer" />
+          </div>
 
           <div className="toolbar-group toolbar-actions-group">
-            <button className="toolbar-icon-action" onClick={() => setShowWifi(!showWifi)}>
+            {!iosSelected && <><button className="toolbar-icon-action" disabled={deviceSwitching} onClick={() => setShowWifi(!showWifi)}>
               <ToolbarIcon name="wifi" />
               WiFi 连接
             </button>
-            <button className="toolbar-icon-action" onClick={() => setView("tools")}>
+            <button className="toolbar-icon-action" disabled={deviceSwitching} onClick={() => setView("tools")}>
               <ToolbarIcon name="tools" />
               工具
-            </button>
+            </button></>}
             <div className="toolbar-more" ref={moreMenuRef}>
               <button
                 className={`toolbar-icon-action ${showMoreActions ? "active" : ""}`}
@@ -1661,11 +1666,24 @@ export default function App() {
                     <ToolbarIcon name="settings" />
                     设置与配置
                   </button>
+                  {ENABLE_IOS_PROBE && (
+                    <button
+                      className="toolbar-more-item"
+                      onClick={async () => {
+                        await stop();
+                        setView("ios-probe");
+                        setShowMoreActions(false);
+                      }}
+                    >
+                      <ToolbarIcon name="tools" />
+                      iOS 日志 Probe
+                    </button>
+                  )}
                   <button
                     className="toolbar-more-item"
                     onClick={exportCompleteSession}
-                    disabled={!running && entries.length === 0}
-                    title="导出当前会话的完整日志，不受前端显示窗口限制"
+                    disabled={iosSelected ? iosExporting || !iosCapture.status.sessionId || iosCapture.status.deviceKey !== workspaceDevices.selectedIosKey || iosCapture.status.state === "running" : (!running && entries.length === 0)}
+                    title={iosSelected ? "停止采集后导出完整 iOS 会话 ZIP，不受展示窗口限制" : "导出当前会话的完整日志，不受前端显示窗口限制"}
                   >
                     <ToolbarIcon name="export" />
                     导出完整会话
@@ -1708,7 +1726,18 @@ export default function App() {
           </div>
         </div>
 
-        <LogTabs
+        {iosSelected && <><LogTabs tabs={iosTabs.tabs} activeTabId={iosTabs.active.id} onSelect={iosTabs.select} onCreateLog={iosTabs.create} canCreateLog={iosTabs.tabs.length < 10} onClose={iosTabs.close} onRename={iosTabs.rename}
+          onCreateTest={() => { if (canStartIosTest && iosCapture.status.sessionId) iosTabs.createTest(iosApplications.bundleId, iosCapture.status.sessionId, iosTestBoundary(), IOS_PILOT_APP_NAME); }}
+          canCreateTest={canStartIosTest && iosTabs.tabs.length < 10} testDisabledReason={`请先选择并开始精确采集 ${IOS_PILOT_APP_NAME}；最多保留 10 个 Tab`} />
+          <IosWorkspaceToolbar key={`${selectedWorkspaceKey}:${iosTabs.active.id}`} view={iosTabs.active} onChange={iosTabs.update} records={iosCapture.records}
+            running={iosStatusMatchesDevice && iosCapture.status.state === "running"} busy={iosCapture.busy}
+            actions={iosActions} applications={iosApplications} captureScope={iosCapture.scope}
+            canRestartTest={canRestartIosTest} onRestartTest={restartIosTest}
+            preferences={normalizeIosFilterPreferences(prefs.prefs.iosLog)} updatePreferences={prefs.updateIosLog}
+            searchFavorites={prefs.prefs.searchFavorites} onPinSearch={(value, description) => prefs.addFavorite("search", value, description)}
+            onUnpinSearch={(value) => prefs.removeFavorite("search", value)} protectedSearchValues={IS_DEBUG ? NO_PROTECTED_VALUES : getBuiltinSearchValues()} />
+        </>}
+        {!iosSelected && <><LogTabs
           tabs={logTabs.tabs}
           activeTabId={logTabs.activeTabId}
           onSelect={handleSelectLogTab}
@@ -1720,36 +1749,7 @@ export default function App() {
           onRename={logTabs.renameTab}
         />
 
-        {!isAutomationTab && <div className="toolbar-row toolbar-filter-row">
-          <div className="toolbar-group tab-processing-actions">
-            <button
-              className={`toolbar-icon-action ${logTabs.activeTab.pausedAtId != null ? "active" : ""}`}
-              onClick={toggleCurrentTabPause}
-              disabled={!running}
-              title="只暂停/继续当前 Tab（空格）"
-            >
-              <ToolbarIcon name="pause" />
-              <span className="toolbar-action-label">
-                {logTabs.activeTab.pausedAtId != null ? "继续" : "暂停"}
-              </span>
-            </button>
-            <button
-              className="toolbar-icon-action"
-              onClick={clearCurrentTab}
-              title="只清空当前 Tab（⌘/Ctrl+L）"
-            >
-              <ToolbarIcon name="trash" />
-              <span className="toolbar-action-label">清空</span>
-            </button>
-            <button
-              className="toolbar-icon-action"
-              onClick={exportCurrentTab}
-              title="导出当前 Tab（⌘/Ctrl+E）"
-            >
-              <ToolbarIcon name="export" />
-              <span className="toolbar-action-label">导出</span>
-            </button>
-          </div>
+        {!isAutomationTab && <LogFilterToolbar paused={logTabs.activeTab.pausedAtId != null} pauseDisabled={!running} onPause={toggleCurrentTabPause} onClear={clearCurrentTab} onExport={exportCurrentTab}>
           {!isTestTab && (
             <>
               <label className="toolbar-field-label">应用</label>
@@ -1836,8 +1836,9 @@ export default function App() {
                 placeholder="Tag（逗号分隔，!排除）"
                 protectedValues={IS_DEBUG ? NO_PROTECTED_VALUES : getBuiltinTagValues()}
               />
-              <div className="toolbar-search-with-regex">
-                <HistoryInput
+                <LogSearchInput
+                  regex={filters.regex}
+                  onRegexChange={(regex) => setFilters({ ...filters, regex })}
                   value={filters.search}
                   onChange={(v) => setFilters({ ...filters, search: v })}
                   favorites={prefs.prefs.searchFavorites}
@@ -1851,42 +1852,13 @@ export default function App() {
                   placeholder="搜索（消息或 Tag）"
                   protectedValues={IS_DEBUG ? NO_PROTECTED_VALUES : getBuiltinSearchValues()}
                 />
-                <button
-                  type="button"
-                  className={`toolbar-regex-toggle ${filters.regex ? "on" : ""}`}
-                  aria-pressed={filters.regex}
-                  title="正则表达式"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => setFilters({ ...filters, regex: !filters.regex })}
-                >
-                  .*
-                </button>
-              </div>
-              <label className="toolbar-field-label">过滤器</label>
-              <Select
-                className="filter-select"
-                title="已保存的过滤器"
+              <SavedFilterControls
                 value={activeFilterId}
-                options={[
-                  { value: "", label: "（当前过滤）", fullLabel: "（当前过滤）" },
-                  ...savedFilters.map((f) => ({
-                    value: f.id,
-                    label: f.name,
-                  })),
-                ]}
+                options={savedFilters}
                 onChange={(v) => handleApplyFilter(v)}
+                onSave={() => setShowFilterSave((shown) => !shown)}
+                expanded={showFilterSave}
               />
-              <div className="toolbar-filter-save">
-                <button
-                  className={`toolbar-icon-action ${showFilterSave ? "active" : ""}`}
-                  onClick={() => setShowFilterSave((shown) => !shown)}
-                  title="保存当前筛选"
-                  aria-expanded={showFilterSave}
-                >
-                  <ToolbarIcon name="bookmark" />
-                  <span className="toolbar-action-label">保存筛选</span>
-                </button>
-              </div>
             </>
           )}
           {!isTestTab &&
@@ -1917,9 +1889,9 @@ export default function App() {
               </span>
             )}
           </span>
-        </div>}
+        </LogFilterToolbar>}
 
-        {showWifi && <WifiPanel onChanged={refreshDevices} />}
+        {showWifi && <WifiPanel onChanged={refreshDevices} />}</>}
       </div>
 
       {showFilterSave &&
@@ -2255,16 +2227,25 @@ export default function App() {
           document.body,
         )}
 
-      {isAutomationTab ? <AutomationTab
-        key={logTabs.activeTabId}
-        tabId={logTabs.activeTabId}
-        device={logTabs.activeTab.automationDevice ?? ""}
-        packageName={logTabs.activeTab.automationPackage ?? ""}
-        devices={devices} apps={logPageApps} controller={automation}
-        onRun={startAutomation}
-      /> :       <div className="log-main">
-        <div className="log-left" ref={logLeftRef}>
+      {iosSelected ? <>
+        <IosLogWorkspace key={selectedWorkspaceKey}
+          monitoring={iosTabs.active.kind === "test" ? { results: iosMonitor.results, notice: iosTestNotice + iosBusinessNotice, canRestart: canRestartIosTest,
+            canResetCase: canRestartIosTest && !!iosMonitor.runtime && iosTabs.active.testRun?.sessionId === iosCapture.status.sessionId,
+            restart: restartIosTest, resetCase: id => { if (canStartIosTest) iosMonitoring.resetCase(iosTabs.active, id); } } : undefined}
+          deviceKey={selectedWorkspaceKey} sessionId={iosStatusMatchesDevice ? iosCapture.status.sessionId ?? "idle" : "idle"}
+          view={iosTabs.active} onChange={iosTabs.update} actions={iosActions} tabId={iosTabs.active.id} fontSize={prefs.prefs.logFontSize}
+          dropped={iosStatusMatchesDevice ? iosCapture.status.frontendDroppedCount : 0}
+          statusText={iosStatusMatchesDevice ? `${iosCapture.status.state} · 接收 ${iosCapture.status.receivedCount} · 发送 ${iosCapture.status.emittedCount} · 后端丢弃 ${iosCapture.status.backendDroppedCount}` : "idle · 当前设备尚未开始采集"} />
+        {iosStatusMatchesDevice && iosCapture.status.storageError && <div className="error" role="alert">落盘失败，会话可能不完整：{iosCapture.status.storageError}</div>}
+        {iosCapture.error && <div className="error">{iosCapture.error}</div>}
+      </> : isAutomationTab ? <AutomationTab key={logTabs.activeTabId} tabId={logTabs.activeTabId}
+        device={logTabs.activeTab.automationDevice ?? ""} packageName={logTabs.activeTab.automationPackage ?? ""}
+        devices={devices} apps={logPageApps} controller={automation} onRun={startAutomation} /> : <LogWorkspaceFrame sidebar={isTestTab ? <TestCaseSidebar
+        store={testCaseStore} allEntries={tabAllEntries} scopePkg={logTabs.activeTab.testPackage} pidFilter={activeTestPidHistory.join(",")}
+        sessionKey={`${logTabs.activeTabId}:${activeTestStartedAtId}:${activeTabClearedBeforeId}`} onLocate={locateEntry}
+        onManage={() => { setManageTab("testcases"); setView("manage"); }} onClose={() => setShowCases(false)} closable={false} /> : null}>
           <LogList
+            deviceKey={selectedWorkspaceKey} sessionId={String(androidSessionId)}
             entries={tabEntries}
             selectedId={selectedId}
             onSelect={handleSelect}
@@ -2279,18 +2260,12 @@ export default function App() {
             onFindStateChange={(find) =>
               logTabs.updateTab(logTabs.activeTabId, { find })
             }
-            layoutKey={`${logTabs.activeTabId}|${filters.search}|${filters.regex}|${filters.tags}|${filters.app}|${filters.minLevel}|${prefs.prefs.tagBlockingEnabled}|${showBlockedTags}|${prefs.tagBlockRules.filter((rule) => rule.enabled).map((rule) => rule.id).join(",")}|${logTabs.activeTab.clearedBeforeId}|${logTabs.activeTab.pausedAtId ?? "live"}`}
+            layoutKey={`${prefs.prefs.logFontSize}|${logTabs.activeTabId}|${filters.search}|${filters.regex}|${filters.tags}|${filters.app}|${filters.minLevel}|${prefs.prefs.tagBlockingEnabled}|${showBlockedTags}|${prefs.tagBlockRules.filter((rule) => rule.enabled).map((rule) => rule.id).join(",")}|${logTabs.activeTab.clearedBeforeId}|${logTabs.activeTab.pausedAtId ?? "live"}`}
           />
-          {selectedEntry && (
-            <div className="log-detail" style={{ height: detailHeight }}>
-              <div
-                className="log-detail-resizer"
-                onMouseDown={onDetailResizeStart}
-                title="拖动调整详情高度"
-              />
-              <div className="log-detail-head">
-                <span className="log-detail-title">日志详情</span>
-                {!isTestTab && (
+          {selectedEntry && <LogDetail platform="android" raw={selectedEntry.raw} onClose={() => setSelectedId(null)}
+            onCopyResult={(error) => error == null ? showToast("复制成功") : setError(`复制失败：${String(error)}`)}
+            actions={<>
+              {!isTestTab && (
                   <>
                     <button
                       title={`只显示 Tag 为「${selectedEntry.tag}」的日志`}
@@ -2334,39 +2309,10 @@ export default function App() {
                     </button>
                   </>
                 )}
-                <button
-                  onClick={() =>
-                    writeText(selectedEntry.raw)
-                      .then(() => showToast("复制成功"))
-                      .catch((e) => setError(`复制失败：${String(e)}`))
-                  }
-                >
-                  复制
-                </button>
-                <button onClick={() => setSelectedId(null)}>关闭</button>
-              </div>
-              <pre className="log-detail-body">{selectedEntry.raw}</pre>
-            </div>
-          )}
-        </div>
-        {isTestTab && (
-          <TestCaseSidebar
-            store={testCaseStore}
-            allEntries={tabAllEntries}
-            scopePkg={logTabs.activeTab.testPackage}
-            pidFilter={activeTestPidHistory.join(",")}
-            sessionKey={`${logTabs.activeTabId}:${activeTestStartedAtId}:${activeTabClearedBeforeId}`}
-            onLocate={locateEntry}
-            onManage={() => {
-              setManageTab("testcases");
-              setView("manage");
-            }}
-            onClose={() => setShowCases(false)}
-            closable={false}
-          />
-        )}
-      </div>}
+            </>} />}
+      </LogWorkspaceFrame>
 
+      }
       {toast && (
         <div
           className={toastBusy ? "banner banner-busy" : "banner banner-ok"}

@@ -1,11 +1,13 @@
 //! 配置导入导出：把本地配置打包成 JSON，导入时按「本地优先」规则合并。
 
+import { migrateSharedSearchFavorites } from "./sharedSearchPreferences";
 import type { AppInfo } from "../../core/apps";
 import type { TestCase } from "../testcases/engine";
 import type { SavedFilter } from "../filters/useSavedFilters";
 import type { Favorite, Prefs } from "./usePrefs";
 import type { TagBlockRule } from "../../core/tagBlockRules";
 import { getBuiltinTestCaseIds } from "../../core/builtinRegistry";
+import { normalizeIosFilterPreferences, mergeIosFilterPreferences } from "../ios/iosFilterPreferences";
 
 export interface ExportConfig {
   version: number;
@@ -20,6 +22,7 @@ const CONFIG_VERSION = 2;
 function defaultPrefs(): Prefs {
   return {
     searchFavorites: [],
+    iosLog: normalizeIosFilterPreferences(undefined),
     searchHistory: [],
     tagFavorites: [],
     tagHistory: [],
@@ -80,7 +83,7 @@ export function buildExportConfig(
   return {
     version: CONFIG_VERSION,
     exportedAt: new Date().toISOString(),
-    prefs,
+    prefs: migrateSharedSearchFavorites(prefs),
     testCases,
     savedFilters,
   };
@@ -89,8 +92,9 @@ export function buildExportConfig(
 function normalizePrefs(p: Partial<Prefs> | undefined): Prefs {
   const base = defaultPrefs();
   if (!p) return base;
-  return {
+  return migrateSharedSearchFavorites({
     searchFavorites: Array.isArray(p.searchFavorites) ? p.searchFavorites : [],
+    iosLog: normalizeIosFilterPreferences(p.iosLog),
     searchHistory: Array.isArray(p.searchHistory) ? p.searchHistory : [],
     tagFavorites: Array.isArray(p.tagFavorites) ? p.tagFavorites : [],
     tagHistory: Array.isArray(p.tagHistory) ? p.tagHistory : [],
@@ -116,7 +120,7 @@ function normalizePrefs(p: Partial<Prefs> | undefined): Prefs {
     removedBuiltinTags: Array.isArray(p.removedBuiltinTags)
       ? p.removedBuiltinTags
       : [],
-  };
+  });
 }
 
 /** 解析导入的 JSON；格式非法时抛错，由调用方提示。 */
@@ -182,8 +186,11 @@ function mergeOrder(localOrder: string[], importedOrder: string[]): string[] {
 }
 
 function mergePrefs(local: Prefs, imported: Prefs): Prefs {
+  local = migrateSharedSearchFavorites(local);
+  imported = migrateSharedSearchFavorites(imported);
   return {
     searchFavorites: mergeFavorites(local.searchFavorites, imported.searchFavorites),
+    iosLog: mergeIosFilterPreferences(local.iosLog, imported.iosLog),
     searchHistory: mergeHistory(local.searchHistory, imported.searchHistory),
     tagFavorites: mergeFavorites(local.tagFavorites, imported.tagFavorites),
     tagHistory: mergeHistory(local.tagHistory, imported.tagHistory),

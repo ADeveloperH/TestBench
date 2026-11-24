@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-// 一键环境准备：检查 pnpm/cargo → 安装依赖 → 打包内置 adb/scrcpy 二进制。
+// 一键环境准备：检查 pnpm/cargo → 安装依赖 → 准备 go-ios 与 adb/scrcpy。
 // 用法：
 //   pnpm run setup           # 完整流程（推荐 clone 后第一次执行）
 //   pnpm run bundle-bin      # 仅打包内置二进制（等价于 --bin-only）
-// 说明：内置二进制打包是 best-effort —— 找不到 adb/scrcpy 时仅告警，
-// 应用运行时自动回退到系统 PATH，构建本身不依赖二进制内容。
+// adb/scrcpy 保留 best-effort；go-ios 必须来自固定版本校验资产，失败返回非零。
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { platform } from "node:os";
@@ -50,8 +49,12 @@ if (!binOnly) {
   }
 }
 
-// 4. 内置二进制（best-effort，缺失时运行期回退系统 PATH 的 adb/scrcpy）
+// 4. go-ios 严格校验；adb/scrcpy 保留原 best-effort/PATH 开发回退策略。
 const os = platform();
+if ((os === "darwin" || os === "win32") && run(process.execPath, ["scripts/prepare-ios-sidecar.mjs"])) {
+  console.error("\ngo-ios 准备失败；请检查网络或使用 --archive 指定已校验的官方 ZIP 后重试。");
+  process.exit(1);
+}
 if (os === "darwin") {
   if (run("bash", ["scripts/bundle-binaries.sh"])) {
     console.warn("\n⚠ 内置二进制打包未完全成功（缺少 adb / scrcpy？）。");

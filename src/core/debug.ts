@@ -6,3 +6,7 @@
 //! 正式包中所有内置保护照旧生效。
 
 export const IS_DEBUG = import.meta.env.DEV;
+
+/** iOS Probe 仅在开发模式或显式开启的内部验收包中可见。 */
+export const ENABLE_IOS_PROBE =
+  IS_DEBUG || import.meta.env.VITE_ENABLE_IOS_PROBE === "true";

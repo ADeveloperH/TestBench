@@ -43,3 +43,6 @@ release-output/
 
 # pnpm 本地 store（依赖缓存）
 .pnpm-store/
+
+# 仓库内独立 Rust 工具的编译产物
+tools/*/target/

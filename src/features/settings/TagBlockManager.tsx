@@ -62,7 +62,7 @@ export function TagBlockManager(props: Props) {
   return (
     <section className="manage-section tag-block-section">
       <div className="manage-section-heading">
-        <h2>Tag 全局屏蔽</h2>
+        <h2>Android Tag 全局屏蔽</h2>
         <p>
           只影响普通日志页面的显示与当前视图导出；测试用例页面、规则检测和原始调试日志不受影响。
           规则按 Tag 名称自动排序。

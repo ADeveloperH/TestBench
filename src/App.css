@@ -1245,6 +1245,19 @@ body.col-resizing {
   width: 200px;
 }
 
+.log-process, .log-module, .log-semanticLevel {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.log-empty { padding: 12px; color: var(--text-dim); }
+.log-record-flag { color: var(--warn, #f5a623); }
+.log-session-status { flex-shrink: 0; padding: 4px 10px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 11px; overflow-wrap: anywhere; }
+.log-detail-meta { flex-shrink: 0; padding: 3px 12px; color: var(--text-dim); font-size: 11px; overflow-wrap: anywhere; }
+.log-detail-head { overflow-x: auto; }
+.log-detail-head > * { flex-shrink: 0; }
+.col-resizer:focus-visible, .log-detail-resizer:focus-visible { outline: 2px solid var(--accent); }
+
 .log-time,
 .log-pid,
 .log-tid,
@@ -1300,6 +1313,148 @@ body.col-resizing {
   flex-direction: column;
   overflow: hidden;
   padding: 12px 16px;
+}
+
+/* iOS Probe 是阶段 2 内部验收页；复用管理页结构，不改变正式日志工具栏。 */
+.ios-probe-page {
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.ios-log-workspace { display: flex; flex-direction: column; flex: 1 0 320px; min-height: 320px; border: 1px solid var(--border); background: var(--bg); overflow: hidden; }
+.ios-log-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px; background: var(--bg-toolbar); }
+.ios-workspace-process { width: 200px; min-width: 130px; }
+.app > .ios-log-workspace { flex: 1; min-height: 0; }
+.ios-log-filters > input { flex: 1; min-width: 180px; }
+.ios-log-filters label { display: flex; align-items: center; gap: 6px; }
+.ios-log-note { padding: 6px 10px; color: var(--text-dim); overflow-wrap: anywhere; }
+.ios-log-scroll { flex: 1; min-height: 150px; overflow: auto; }
+.ios-log-row { display: grid; grid-template-columns: 135px 180px 80px 80px minmax(200px, 1fr); gap: 8px; text-align: left; border: 0; border-radius: 0; background: transparent; padding: 3px 8px; min-width: 760px; font: 12px var(--mono); }
+.ios-log-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ios-log-row:hover, .ios-log-row.selected { background: var(--hover); }
+.ios-log-detail { flex-shrink: 0; border-top: 1px solid var(--border); padding: 8px; background: var(--bg-panel); }
+.ios-log-detail > div { display: flex; align-items: center; gap: 6px; }
+.ios-log-detail button { margin-left: auto; }
+.ios-log-detail pre { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); }
+
+/* Android 原布局不变；iOS 会话区滚动，更多菜单留在滚动区外。 */
+.toolbar-source-controls { display: contents; }
+.app-ios .workspace-title { display: none; }
+.app-ios .toolbar-primary { flex-wrap: nowrap; overflow: visible; }
+.app-ios .toolbar-source-controls { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; overflow-x: auto; }
+.app-ios .toolbar-source-controls > * { flex-shrink: 0; }
+.app-ios .toolbar-actions-group { margin-left: 0; }
+.app-ios .ios-log-filters { flex-wrap: nowrap; overflow-x: auto; flex-shrink: 0; }
+.app-ios .ios-log-filters > * { flex-shrink: 0; white-space: nowrap; }
+.app-ios .ios-log-filters > input { min-width: 180px; }
+.app-ios .ios-log-detail { min-height: 0; max-height: 45%; overflow: auto; }
+.app-ios .toolbar-filter-row { flex-wrap: nowrap; overflow-x: auto; }
+.app-ios .toolbar-filter-row > * { flex-shrink: 0; }
+.ios-follow-toggle { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ios-filter-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; }
+.ios-filter-editor label { display: flex; align-items: center; gap: 6px; }
+
+.ios-probe-controls,
+.ios-diagnostics,
+.ios-session-status,
+.ios-probe-placeholder {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  padding: 12px;
+}
+
+.ios-control-row,
+.ios-device-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ios-control-row input {
+  width: min(320px, 100%);
+}
+
+.ios-device-select {
+  width: min(390px, 100%);
+}
+
+.ios-device-state {
+  margin-top: 10px;
+  color: var(--text-dim);
+}
+
+.ios-device-state span,
+.ios-device-state code {
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+}
+
+.ios-diagnostics {
+  display: grid;
+  gap: 8px;
+}
+
+.ios-diagnostic {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.ios-diagnostic span,
+.ios-session-status span {
+  color: var(--text-dim);
+}
+
+.ios-status-error strong,
+.ios-status-unavailable strong {
+  color: var(--danger);
+}
+
+.ios-status-available strong {
+  color: var(--ok);
+}
+
+.ios-session-status {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.ios-session-status > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ios-session-status strong {
+  font: 600 16px var(--mono);
+}
+
+.ios-probe-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--text-dim);
+}
+
+.ios-probe-placeholder strong {
+  color: var(--text);
+}
+
+.ios-probe-placeholder code {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .ios-session-status {
+    grid-template-columns: repeat(2, minmax(110px, 1fr));
+  }
 }
 
 /* 页面级滚动（工具页用）：整页可滚 */
@@ -4083,6 +4238,41 @@ body.light button.danger:hover:not(:disabled) {
   }
 }
 
+.ios-level-trigger { width: 150px; flex-shrink: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ios-level-panel { z-index: 3900; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-toolbar); color: var(--text); box-shadow: 0 6px 24px #0004; }
+.ios-level-panel label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; font-size: 12px; }
+.ios-level-panel p { color: var(--text-dim); font-size: 12px; margin: 8px 0; }
+.ios-level-actions { display: flex; justify-content: space-between; gap: 8px; }
+.ios-marker-input { width: 250px; flex-shrink: 0; }
+.ios-marker-input .history-input { width: 100%; }
+
+.ios-app-picker { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; flex-shrink: 0; }
+.ios-app-picker[disabled] { opacity: .65; }
+.ios-app-scope-notice { padding: 5px 12px; color: var(--warn); background: var(--bg-toolbar); font-size: 12px; border-bottom: 1px solid var(--border); }
+
+.tc-sidebar-notice {
+  margin: 8px 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.tc-sidebar-with-notice .tc-rule {
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.tc-sidebar-with-notice .tc-rule > .count {
+  flex-basis: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.tc-sidebar-with-notice .tc-sidebar-detail {
+  background: var(--bg-toolbar);
+  border-color: var(--border);
+}
 /* 自动化是现有工作区中的一种 Tab；不改变日志/用例布局。 */
 .log-tab-automation .log-tab-kind { display: inline-flex; color: var(--accent); }
 .log-tab-kind .ui-icon { width: 15px; height: 15px; }

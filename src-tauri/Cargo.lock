@@ -1928,6 +1928,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ios-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4356,6 +4364,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "ios-core",
  "libc",
  "log",
  "serde",
@@ -4370,6 +4379,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
+ "tempfile",
  "ureq",
  "windows-sys 0.59.0",
  "zip",

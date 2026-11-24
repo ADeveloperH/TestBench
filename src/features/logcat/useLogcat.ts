@@ -9,6 +9,7 @@ import {
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { error as logError, info } from "@tauri-apps/plugin-log";
+import { MAX_LOG_ENTRIES as MAX_ENTRIES, LOG_TRIM_CHUNK as TRIM_CHUNK } from "../../core/logRetention";
 import { ChunkedLogAssembler } from "../../core/chunkedLog";
 import { LongLogParser, stripAnsi } from "../../core/logcat";
 import type { Device, FilterState, LogEntry } from "../../core/types";
@@ -23,8 +24,6 @@ const log = {
   },
 };
 
-const MAX_ENTRIES = 100_000;
-const TRIM_CHUNK = 5_000;
 const MAX_PENDING_LINES = 50_000;
 const MAX_LINES_PER_TICK = 5_000;
 const UI_FLUSH_MS = 150;
@@ -64,8 +63,11 @@ export interface UseLogcatResult {
 export function useLogcat(
   initialFilters?: FilterState,
   preserveLogsForTests = false,
+  enabled = true,
 ): UseLogcatResult {
   const [devices, setDevices] = useState<Device[]>([]);
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [buffer, setBuffer] = useState("main");
   const [running, setRunning] = useState(false);
@@ -135,6 +137,7 @@ export function useLogcat(
           );
         return same ? prev : list;
       });
+      if (!enabledRef.current) return;
       setSelectedDevice((prev) => {
         if (prev && list.some((d) => d.serial === prev)) return prev;
         const online = list.find((d) => d.state === "device");
@@ -147,10 +150,10 @@ export function useLogcat(
     } finally {
       refreshDevicesInFlightRef.current = false;
     }
-  }, []);
+  }, [enabled]);
 
   const start = useCallback(async (strict = false) => {
-    if (!selectedDevice) {
+    if (!enabled || !selectedDevice) {
       if (strict) throw new Error("请先选择日志采集设备");
       return;
     }
@@ -178,7 +181,7 @@ export function useLogcat(
       setError(String(e));
       if (strict) throw e;
     }
-  }, [selectedDevice, buffer]);
+  }, [selectedDevice, buffer, enabled]);
 
   const stop = useCallback(async () => {
     manualStopRef.current = true;
@@ -260,7 +263,7 @@ export function useLogcat(
       if (!device) return;
       const buf = bufferForResumeRef.current;
       setTimeout(() => {
-        if (manualStopRef.current || disposed) return;
+        if (manualStopRef.current || disposed || !enabledRef.current) return;
         invoke("start_logcat", {
           device,
           buffer: buf === "all" ? null : buf,
@@ -350,10 +353,10 @@ export function useLogcat(
 
   // 设备变化 → 自动开始抓取。
   useEffect(() => {
-    if (selectedDevice) start();
+    if (enabled && selectedDevice) start();
     // 仅依赖设备选择，避免 buffer 变化时重复触发。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDevice]);
+  }, [selectedDevice, enabled]);
 
   // buffer 变化 → 运行中则重启抓取。
   const prevBufferRef = useRef(buffer);

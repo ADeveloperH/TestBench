@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 打包内置的 adb + scrcpy（含 macOS 依赖 dylib）到 src-tauri/bin/macos/。
+# 打包 go-ios + adb + scrcpy（含 macOS 依赖 dylib）到 src-tauri/bin/macos/。
 # 用法：bash scripts/bundle-binaries.sh
 set -euo pipefail
 
@@ -11,6 +11,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
+node "$ROOT/scripts/prepare-ios-sidecar.mjs"
 mkdir -p "$DEST"
 
 # adb（优先 ANDROID_HOME，其次 macOS 默认 SDK 路径）

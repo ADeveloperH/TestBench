@@ -3,12 +3,15 @@ import { Icon } from "../../components/Icon";
 import type { LogTabState } from "./useLogTabs";
 
 interface Props {
-  tabs: LogTabState[];
+  tabs: Pick<LogTabState, "id" | "name" | "kind" | "pausedAtId">[];
   activeTabId: string;
   onSelect: (id: string) => void;
   onCreateLog: () => void;
-  onCreateTest: () => void;
-  onCreateAutomation: () => void;
+  canCreateLog?: boolean;
+  onCreateTest?: () => void;
+  canCreateTest?: boolean;
+  testDisabledReason?: string;
+  onCreateAutomation?: () => void;
   runningTabId?: string;
   onClose: (id: string) => void;
   onRename: (id: string, name: string) => void;
@@ -21,7 +24,7 @@ export function LogTabs(props: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const createRef = useRef<HTMLDivElement>(null);
 
-  const startRename = (tab: LogTabState) => {
+  const startRename = (tab: Props["tabs"][number]) => {
     setEditingId(tab.id);
     setDraftName(tab.name);
   };
@@ -135,6 +138,8 @@ export function LogTabs(props: Props) {
         {showCreateMenu && (
           <div className="log-tab-create-menu">
             <button
+              disabled={props.canCreateLog === false}
+              title={props.canCreateLog === false ? "已达到日志 Tab 数量上限" : undefined}
               onClick={() => {
                 setShowCreateMenu(false);
                 props.onCreateLog();
@@ -143,13 +148,15 @@ export function LogTabs(props: Props) {
               <span className="log-tab-create-icon">≡</span>
               <span>
                 <strong>普通日志</strong>
-                <small>自由使用搜索、Tag 和级别过滤</small>
+                <small>自由使用搜索和级别过滤</small>
               </span>
             </button>
-            <button
+            {props.onCreateTest && <button
+              disabled={props.canCreateTest === false}
+              title={props.canCreateTest === false ? props.testDisabledReason : undefined}
               onClick={() => {
                 setShowCreateMenu(false);
-                props.onCreateTest();
+                props.onCreateTest?.();
               }}
             >
               <span className="log-tab-create-icon">✓</span>
@@ -157,11 +164,11 @@ export function LogTabs(props: Props) {
                 <strong>测试用例监控</strong>
                 <small>固定应用，保留完整日志用于用例判定和定位</small>
               </span>
-            </button>
-            <button onClick={() => { setShowCreateMenu(false); props.onCreateAutomation(); }}>
+            </button>}
+            {props.onCreateAutomation && <button onClick={() => { setShowCreateMenu(false); props.onCreateAutomation?.(); }}>
               <span className="log-tab-create-icon"><Icon name="automation" /></span>
               <span><strong>自动化</strong><small>连接手机，配置片段并自动录制素材</small></span>
-            </button>
+            </button>}
           </div>
         )}
       </div>

@@ -9,7 +9,9 @@ import {
   getBuiltinTagValues,
   subscribeBuiltins,
 } from "../../core/builtinRegistry";
+import { migrateSharedSearchFavorites } from "./sharedSearchPreferences";
 import { IS_DEBUG } from "../../core/debug";
+import { normalizeIosFilterPreferences, type IosFilterPreferences } from "../ios/iosFilterPreferences";
 import type {
   EffectiveTagBlockRule,
   TagBlockMatch,
@@ -24,6 +26,8 @@ export interface Favorite {
 }
 
 export interface Prefs {
+  /** iOS 独立历史/业务标记/命名筛选；正文收藏共用 searchFavorites，旧 favorites 只作迁移输入。 */
+  iosLog?: IosFilterPreferences;
   searchFavorites: Favorite[];
   searchHistory: string[];
   tagFavorites: Favorite[];
@@ -211,6 +215,7 @@ function mergeFavoritesWithBuiltins(
  * 调试模式下应用「已删除内置」名单：被删的内置不再显示。
  */
 function applyBuiltinLayer(base: Prefs): Prefs {
+  base = migrateSharedSearchFavorites(base);
   const searchValues = getBuiltinSearchValues();
   const tagValues = getBuiltinTagValues();
   const removedSearch = IS_DEBUG ? new Set(base.removedBuiltinSearch) : new Set<string>();
@@ -260,12 +265,15 @@ function load(): Prefs {
   const merged = applyBuiltinLayer(base);
   // 旧数据可能没有日志字号字段或值非法，统一兜底
   merged.logFontSize = clampFontSize(merged.logFontSize);
+  merged.iosLog = normalizeIosFilterPreferences(merged.iosLog);
   return merged;
 }
 
 export function usePrefs() {
   const [prefs, setPrefs] = useState<Prefs>(load);
   const tagBlockRules = useMemo(() => mergeTagBlockRules(prefs), [prefs]);
+
+  useEffect(() => { setPrefs((current) => applyBuiltinLayer(current)); }, []);
 
   // 远程配置变化（内置层替换）时重算：内置置顶，用户数据保留。
   useEffect(() => {
@@ -535,7 +543,11 @@ export function usePrefs() {
   );
 
   const replacePrefs = useCallback((p: Prefs) => {
-    setPrefs(p);
+    setPrefs(applyBuiltinLayer(p));
+  }, []);
+
+  const updateIosLog = useCallback((update: (current: IosFilterPreferences) => IosFilterPreferences) => {
+    setPrefs((p) => applyBuiltinLayer({ ...p, iosLog: update(normalizeIosFilterPreferences(p.iosLog)) }));
   }, []);
 
   const setMergeStack = useCallback((v: boolean) => {
@@ -570,6 +582,7 @@ export function usePrefs() {
     setTagBlockRuleEnabled,
     setTagBlockGroupEnabled,
     replacePrefs,
+    updateIosLog,
     setMergeStack,
     setTheme,
     setLogFontSize,

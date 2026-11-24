@@ -8,6 +8,8 @@ import { useTestCases, type CaseStatus } from "./useTestCases";
 import { ruleSummary, type TestCase } from "./engine";
 import type { TestCasesStore } from "./useTestCasesStore";
 import type { LogEntry } from "../../core/types";
+import type { TestLogEntry } from "./testLogEntry";
+import type { TestCaseResult } from "./useTestCases";
 
 interface Props {
   store: TestCasesStore;
@@ -60,26 +62,29 @@ function effectLabel(effect: string) {
   }
 }
 
-export function TestCaseSidebar({
-  store,
-  allEntries,
-  scopePkg,
-  pidFilter,
-  sessionKey,
-  onLocate,
-  onManage,
-  onClose,
-  closable = true,
-}: Props) {
+export function TestCaseSidebar(props: Props) {
+  const monitor = useTestCases(props.allEntries, props.scopePkg, props.pidFilter, props.store.cases, props.sessionKey);
+  return <TestCaseSidebarView {...props} {...monitor} />;
+}
+
+export interface TestCaseSidebarViewProps {
+  results: TestCaseResult[];
+  resetAll: () => void;
+  resetCase: (id: string) => void;
+  scopePkg: string;
+  onLocate: (id: number) => void;
+  onLocateEvidence?: (entry: TestLogEntry) => void;
+  onManage?: () => void;
+  onClose: () => void;
+  closable?: boolean;
+  notice?: string;
+  resetDisabled?: boolean;
+  resetCaseDisabled?: boolean;
+}
+
+export function TestCaseSidebarView({ results, resetAll, resetCase, scopePkg, onLocate, onLocateEvidence, onManage, onClose, closable = true, notice, resetDisabled = false, resetCaseDisabled = resetDisabled }: TestCaseSidebarViewProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [width, setWidth] = useState<number>(loadSidebarWidth);
-  const { results, resetAll, resetCase } = useTestCases(
-    allEntries,
-    scopePkg,
-    pidFilter,
-    store.cases,
-    sessionKey,
-  );
   // 拖拽调整侧栏宽度（左边缘手柄，向左拖 = 加宽）。
   const sidebarRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
@@ -176,7 +181,7 @@ export function TestCaseSidebar({
   }, [sortedResults]);
 
   return (
-    <div className="tc-sidebar" style={{ width }} ref={sidebarRef}>
+    <div className={`tc-sidebar${notice ? " tc-sidebar-with-notice" : ""}`} style={{ width }} ref={sidebarRef}>
       <div
         className="tc-resizer"
         onMouseDown={onResizeStart}
@@ -192,12 +197,13 @@ export function TestCaseSidebar({
       </div>
 
       <div className="tc-sidebar-toolbar">
-        <button onClick={resetAll} title="重置全部用例状态，重新开始一轮监测">
+        <button onClick={resetAll} disabled={resetDisabled} title="重置全部用例状态，重新开始一轮监测">
           重置全部
         </button>
-        <button onClick={onManage}>管理</button>
+        {onManage && <button onClick={onManage}>管理</button>}
       </div>
 
+      {notice && <p className="tc-sidebar-notice" role="status">{notice}</p>}
       {!scopePkg && <p className="manage-desc">请先在日志页选择应用。</p>}
 
       <ul className="tc-sidebar-list">
@@ -226,6 +232,7 @@ export function TestCaseSidebar({
                     resetCase(r.testCase.id);
                   }}
                   title="重置该用例"
+                  disabled={resetCaseDisabled}
                 >
                   重置
                 </button>
@@ -261,13 +268,13 @@ export function TestCaseSidebar({
                                 <div
                                   key={entry.id}
                                   className="tc-match"
-                                  onClick={() => onLocate(entry.id)}
+                                  onClick={() => onLocateEvidence ? onLocateEvidence(entry) : onLocate(entry.id)}
                                   title="点击定位到该日志"
                                 >
                                   <span className="tc-match-time">
                                     {entry.date} {entry.time}
                                   </span>
-                                  <span className="tc-match-tag">{entry.tag}:</span>
+                                  <span className="tc-match-tag">{entry.tag ?? entry.module ?? "未知来源"}:</span>
                                   <span>{entry.message.slice(0, 120)}</span>
                                 </div>
                               ))}
@@ -277,6 +284,7 @@ export function TestCaseSidebar({
                         {rh.hit && rh.missing && (
                           <div className="tc-match missing">
                             （观察窗口内未出现，判定缺失）
+                            {rh.anchorEntry && <button onClick={() => onLocateEvidence ? onLocateEvidence(rh.anchorEntry!) : onLocate(rh.anchorEntry!.id)}>查看触发锚点</button>}
                           </div>
                         )}
                       </div>

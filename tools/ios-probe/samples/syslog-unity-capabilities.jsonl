@@ -1,0 +1,8 @@
+{"msg":"Nov  3 21:48:30 Test-iPhone TestFixture(UnityFramework)[42] <Notice>: [TestBench.iOSFixture] kind=log message=ordinary_log\nUnityEngine.Debug:Log(Object)"}
+{"msg":"Nov  3 21:48:34 Test-iPhone TestFixture(UnityFramework)[42] <Notice>: [TestBench.iOSFixture] kind=warning message=controlled_warning\nUnityEngine.Debug:LogWarning(Object)"}
+{"msg":"Nov  3 21:48:37 Test-iPhone TestFixture(UnityFramework)[42] <Notice>: [TestBench.iOSFixture] kind=error message=controlled_error\nUnityEngine.Debug:LogError(Object)"}
+{"msg":"Nov  3 21:48:40 Test-iPhone TestFixture(UnityFramework)[42] <Notice>: InvalidOperationException: [TestBench.iOSFixture] kind=exception message=controlled_exception\n  at TestFixture.Throw ()\nUnityEngine.DebugLogHandler:LogException(Exception, Object)"}
+{"msg":"Nov  3 21:48:47 Test-iPhone TestFixture(UnityFramework)[42] <Notice>: [TestBench.iOSFixture] kind=unicode message=‰∏≠Êñá üöÄ"}
+{"msg":"Nov  3 21:48:54 Test-iPhone TestFixture(UnityFramework)[42] <Notice>: [TestBench.iOSFixture] kind=nslog message=原生日志"}
+{"msg":"Nov  3 21:48:57 Test-iPhone TestFixture(UnityFramework)[42] <Notice>: [TestBench.iOSFixture] kind=os_log message=原生日志"}
+{"msg":"Nov  3 21:49:01 Test-iPhone TestFixture(UnityFramework)[42] <Notice>: ApplicationException: [TestBench.iOSFixture] kind=unhandled_coroutine_exception\n  at TestFixture.ThrowNextFrame ()\nUnityEngine.DebugLogHandler:LogException(Exception, Objec<…>"}

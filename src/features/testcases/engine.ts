@@ -1,4 +1,4 @@
-import type { LogEntry } from "../../core/types";
+import type { TestLogEntry } from "./testLogEntry";
 import { isBuiltinTestCase as isBuiltinTestCaseDynamic } from "../../core/builtinRegistry";
 
 export type RuleEffect = "pass" | "error" | "warn";
@@ -1707,13 +1707,14 @@ export function isBuiltinTestCase(id: string): boolean {
   return isBuiltinTestCaseDynamic(id);
 }
 
-export function conditionMatches(cond: Condition, entry: LogEntry): boolean {
+export function conditionMatches(cond: Condition, entry: TestLogEntry): boolean {
   const fieldValue =
     cond.field === "message"
       ? entry.message
       : cond.field === "tag"
         ? entry.tag
         : entry.level;
+  if (fieldValue == null) return false;
   switch (cond.op) {
     case "contains":
       return fieldValue.toLowerCase().includes(cond.value.toLowerCase());
@@ -1733,14 +1734,14 @@ export function conditionMatches(cond: Condition, entry: LogEntry): boolean {
   }
 }
 
-export function evalExpr(expr: ConditionExpr, entry: LogEntry): boolean {
+export function evalExpr(expr: ConditionExpr, entry: TestLogEntry): boolean {
   if (expr.kind === "cond") return conditionMatches(expr.cond, entry);
   return expr.op === "and"
     ? expr.children.every((c) => evalExpr(c, entry))
     : expr.children.some((c) => evalExpr(c, entry));
 }
 
-export function ruleMatches(rule: Rule, entry: LogEntry): boolean {
+export function ruleMatches(rule: Rule, entry: TestLogEntry): boolean {
   return evalExpr(rule.expr, entry);
 }
 

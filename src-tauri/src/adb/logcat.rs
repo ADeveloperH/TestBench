@@ -68,3 +68,47 @@ impl LogcatProcess {
         log::debug!("logcat 子进程已停止");
     }
 }
+
+// Child 默认析构不会结束进程；启动后任何错误路径和句柄替换都必须回收。
+impl Drop for LogcatProcess {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::io::Read;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    fn sleeper() -> LogcatProcess {
+        LogcatProcess {
+            child: std::process::Command::new("/bin/sleep")
+                .arg("60").stdout(Stdio::piped()).spawn().unwrap(),
+        }
+    }
+
+    #[test]
+    fn explicit_stop_reaps_child_and_is_repeatable() {
+        let mut process = sleeper();
+        process.stop();
+        assert!(process.child.try_wait().unwrap().is_some());
+        process.stop();
+    }
+
+    #[test]
+    fn drop_closes_pipe_even_after_stdout_transferred_to_reader() {
+        let mut process = sleeper();
+        let mut stdout = process.take_stdout().unwrap();
+        let (tx, rx) = mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            tx.send(stdout.read_to_end(&mut bytes).unwrap()).unwrap();
+        });
+        drop(process);
+        assert_eq!(rx.recv_timeout(Duration::from_secs(3)).unwrap(), 0);
+        reader.join().unwrap();
+    }
+}

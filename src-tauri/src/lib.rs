@@ -1,11 +1,12 @@
 mod adb;
 mod audio_export;
+mod ios;
 mod automation;
 mod log_store;
 mod log_storage;
 
 use std::io::{BufRead, BufReader};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -32,10 +33,28 @@ use log_store::LogSessionWriter;
 
 /// 全局运行状态：当前 logcat 进程 + 代号（用于识别过期读取线程）。
 struct RunningLogcat {
+    closing: AtomicBool,
     child: Mutex<Option<LogcatProcess>>,
     generation: Arc<AtomicU64>,
     /// 当前会话的原始日志落盘器。前端只消费展示窗口，完整日志留在这里。
     session: Arc<Mutex<Option<LogSessionWriter>>>,
+}
+
+impl RunningLogcat {
+    fn stop(&self, closing: bool) {
+        // 与整个启动过程共用锁，退出后不能再发布新的子进程句柄。
+        let mut child = self.child.lock().unwrap();
+        if closing {
+            self.closing.store(true, Ordering::SeqCst);
+        }
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        if let Some(mut process) = child.take() {
+            process.stop();
+        }
+        if let Some(writer) = self.session.lock().unwrap().as_mut() {
+            writer.flush();
+        }
+    }
 }
 
 /// 当前录屏会话（scrcpy 子进程 + 输出路径）。
@@ -63,6 +82,88 @@ async fn list_devices() -> Result<Vec<Device>, String> {
     run_blocking(adb_list_devices).await
 }
 
+#[tauri::command]
+async fn ios_probe_doctor(
+    runtime: State<'_, ios::IosRuntime>,
+) -> Result<ios::IosDoctorReport, String> {
+    let runtime = runtime.inner().clone();
+    run_blocking(move || Ok(ios::doctor(&runtime))).await
+}
+
+#[tauri::command]
+async fn ios_probe_list_devices(
+    runtime: State<'_, ios::IosRuntime>,
+) -> Result<Vec<ios_core::IosDevice>, ios_core::ProbeError> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let tool = runtime.resolve_tool()?;
+        tool.version()?;
+        ios_core::list_devices(&tool)
+    })
+    .await
+    .map_err(|error| {
+        ios_core::ProbeError::new(
+            ios_core::ProbeErrorKind::Io,
+            format!("iOS 设备枚举后台任务失败：{error}"),
+        )
+    })?
+}
+
+#[tauri::command]
+async fn ios_list_applications(runtime: State<'_, ios::IosRuntime>, device_id: String) -> Result<Vec<ios_core::IosApplication>, ios_core::ProbeError> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let tool = runtime.resolve_tool()?;
+        tool.version()?;
+        ios_core::list_applications(&tool, &device_id)
+    }).await.map_err(|_| ios_core::ProbeError::new(ios_core::ProbeErrorKind::Io, "iOS 应用枚举任务失败"))?
+}
+
+#[tauri::command]
+fn ios_probe_start_logs(
+    app: AppHandle,
+    runtime: State<'_, ios::IosRuntime>,
+    controller: State<'_, ios::IosLogController>,
+    device_id: String,
+    process_filter: Option<String>,
+    exact_process: Option<bool>,
+) -> Result<(), ios_core::ProbeError> {
+    controller.start(app, runtime.inner(), &device_id, process_filter, exact_process.unwrap_or(false))
+}
+
+#[tauri::command]
+fn ios_probe_stop_logs(controller: State<'_, ios::IosLogController>) {
+    controller.stop();
+}
+
+#[tauri::command]
+fn ios_probe_status(controller: State<'_, ios::IosLogController>) -> ios::IosProbeStatus {
+    controller.status()
+}
+
+#[tauri::command]
+async fn ios_probe_crash_reports(
+    app: AppHandle,
+    session_id: String,
+    bundle_id: String,
+    process: String,
+) -> Result<Vec<ios::IosCrashReport>, ios_core::ProbeError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let runtime = app.state::<ios::IosRuntime>();
+        app.state::<ios::IosLogController>()
+            .scan_crashes(&runtime, &session_id, &bundle_id, &process)
+    })
+    .await
+    .map_err(|_| {
+        ios_core::ProbeError::new(ios_core::ProbeErrorKind::Io, "iOS 崩溃报告查询任务失败")
+    })?
+}
+
+#[tauri::command]
+fn ios_probe_report_frontend_dropped(controller: State<'_, ios::IosLogController>, count: u64) {
+    controller.report_frontend_dropped(count);
+}
+
 /// 阻塞式 ADB/文件系统任务必须与 Tauri 异步运行时隔离。
 /// Windows 上 adb 偶发变慢时，否则会占住更新检查和其他 invoke 使用的工作线程。
 async fn run_blocking<T, F>(task: F) -> Result<T, String>
@@ -86,12 +187,17 @@ fn start_logcat(
 ) -> Result<(), String> {
     log::info!("收到前端命令 start_logcat：device={:?} buffer={:?}", device, buffer);
 
+    let mut child = state.child.lock().unwrap();
+    if state.closing.load(Ordering::SeqCst) {
+        return Err("应用正在退出，不能启动日志采集".into());
+    }
+
     // 递增代号，让旧的读取线程停止发送事件。
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
     log::debug!("本次抓取代号 generation={generation}");
 
     // 停止旧进程。
-    if let Some(mut proc) = state.child.lock().unwrap().take() {
+    if let Some(mut proc) = child.take() {
         log::debug!("发现旧 logcat 进程，先停止");
         proc.stop();
     }
@@ -120,7 +226,7 @@ fn start_logcat(
     let mut proc = LogcatProcess::start(device.as_deref(), buffer.as_deref())?;
     let stdout = proc.take_stdout().ok_or("无法读取 logcat 输出")?;
     let stderr = proc.take_stderr();
-    *state.child.lock().unwrap() = Some(proc);
+    *child = Some(proc);
 
     // stdout 读取线程：逐行读取，批量推给前端。
     // 高频日志（如游戏一秒上万行）若逐行 emit 会淹没 Tauri 事件通道，
@@ -232,13 +338,7 @@ fn start_logcat(
 #[tauri::command]
 fn stop_logcat(state: State<'_, RunningLogcat>) -> Result<(), String> {
     log::info!("收到前端命令 stop_logcat");
-    state.generation.fetch_add(1, Ordering::SeqCst);
-    if let Some(mut proc) = state.child.lock().unwrap().take() {
-        proc.stop();
-    }
-    if let Some(writer) = state.session.lock().unwrap().as_mut() {
-        writer.flush();
-    }
+    state.stop(false);
     Ok(())
 }
 
@@ -743,6 +843,7 @@ async fn cleanup_for_update(
     logcat_state: State<'_, RunningLogcat>,
     recording_state: State<'_, RecordingState>,
     bugreport_state: State<'_, BugreportState>,
+    ios_log_controller: State<'_, ios::IosLogController>,
 ) -> Result<(), String> {
     let automation_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -755,10 +856,7 @@ async fn cleanup_for_update(
     log::info!("收到前端命令 cleanup_for_update：停止子进程以准备更新");
 
     // 1. 停止 logcat（adb）
-    logcat_state.generation.fetch_add(1, Ordering::SeqCst);
-    if let Some(mut proc) = logcat_state.child.lock().unwrap().take() {
-        proc.stop();
-    }
+    logcat_state.stop(false);
 
     // 2. 停止录屏（scrcpy）
     if let Some(mut session) = recording_state.session.lock().unwrap().take() {
@@ -768,7 +866,12 @@ async fn cleanup_for_update(
     // 3. 停止 Bugreport（adb）
     bugreport_state.controller.stop();
 
-    // 4. Windows：兜底杀掉可能残留的 adb.exe / scrcpy.exe 孤儿进程
+    // 4. 停止 iOS 查询命令和 syslog sidecar。
+    ios_core::cancel_tool_queries();
+    ios_log_controller.stop();
+
+    // 5. Windows：兜底杀掉可能残留的 adb.exe / scrcpy.exe 孤儿进程。
+    // ios.exe 由会话持有的子进程句柄回收，不按进程名误杀其他工具实例。
     #[cfg(target_os = "windows")]
     {
         for exe in ["adb.exe", "scrcpy.exe"] {
@@ -808,6 +911,43 @@ async fn export_logs(app: AppHandle, text: String) -> Result<Option<String>, Str
             Ok(None)
         }
     }
+}
+
+#[tauri::command]
+async fn export_ios_session_logs(
+    app: AppHandle,
+    controller: State<'_, ios::IosLogController>,
+    session_id: String,
+) -> Result<Option<String>, String> {
+    let status = controller.status();
+    if status.session_id.as_deref() != Some(&session_id)
+        || matches!(status.state, ios::LogSessionState::Running)
+    {
+        return Err("请先停止当前 iOS 会话，再导出完整日志".into());
+    }
+    let dir = status
+        .session_dir
+        .clone()
+        .ok_or("当前没有可导出的 iOS 会话")?;
+    let Some(destination) = save_file_dialog(&app, "ios-session.zip", "iOS 完整会话", &["zip"])?
+    else {
+        return Ok(None);
+    };
+    let current = controller.status();
+    if current.session_id != status.session_id
+        || matches!(current.state, ios::LogSessionState::Running)
+    {
+        return Err("iOS 会话已变化，请重新导出".into());
+    }
+    run_blocking(move || {
+        ios::store::export_archive(
+            std::path::Path::new(&dir),
+            &destination,
+            &serde_json::to_vec_pretty(&status.export_summary()).map_err(|e| e.to_string())?,
+        )?;
+        Ok(Some(destination.display().to_string()))
+    })
+    .await
 }
 
 /// 直接导出当前会话的完整原始日志，避免把历史日志重新拼到前端内存中。
@@ -1072,19 +1212,22 @@ fn quit_app(app: &tauri::AppHandle) {
 
 /// 优雅停止录屏（SIGINT 收尾 mp4）与 logcat 后退出应用。
 fn stop_all_and_exit(app: &tauri::AppHandle) {
+    stop_all_processes(app);
+    app.exit(0);
+}
+
+fn stop_all_processes(app: &tauri::AppHandle) {
     app.state::<automation::AutomationController>().shutdown();
+    ios_core::shutdown_tool_queries();
     let state = app.state::<RecordingState>();
     if let Some(mut session) = state.session.lock().unwrap().take() {
         session.child.stop();
         log::info!("退出前已停止录屏，文件：{}", session.path);
     }
     let logcat = app.state::<RunningLogcat>();
-    logcat.generation.fetch_add(1, Ordering::SeqCst);
-    if let Some(mut proc) = logcat.child.lock().unwrap().take() {
-        proc.stop();
-    }
+    logcat.stop(true);
+    app.state::<ios::IosLogController>().stop();
     app.state::<BugreportState>().controller.stop();
-    app.exit(0);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1146,6 +1289,7 @@ pub fn run() {
         })
         .manage(automation::AutomationController::default())
         .manage(RunningLogcat {
+            closing: AtomicBool::new(false),
             child: Mutex::new(None),
             generation: Arc::new(AtomicU64::new(0)),
             session: Arc::new(Mutex::new(None)),
@@ -1159,9 +1303,11 @@ pub fn run() {
         .manage(AudioExportState {
             controller: AudioExportController::default(),
         })
+        .manage(ios::IosLogController::default())
         .setup(|app| {
             let resource_dir = app.path().resource_dir().ok();
-            adb::init_binary_paths(resource_dir);
+            adb::init_binary_paths(resource_dir.clone());
+            app.manage(ios::IosRuntime::new(resource_dir));
             match app.path().app_data_dir() {
                 Ok(path) => {
                     let storage = Arc::new(log_storage::LogStorage::new(path));
@@ -1189,6 +1335,14 @@ pub fn run() {
             automation::automation_default_output,
             automation::automation_open_output,
             list_devices,
+            ios_probe_doctor,
+            ios_probe_list_devices,
+            ios_list_applications,
+            ios_probe_start_logs,
+            ios_probe_stop_logs,
+            ios_probe_status,
+            ios_probe_crash_reports,
+            ios_probe_report_frontend_dropped,
             start_logcat,
             stop_logcat,
             clear_log,
@@ -1226,10 +1380,17 @@ pub fn run() {
             app_performance,
             export_logs,
             export_session_logs,
+            export_ios_session_logs,
             export_config,
             import_config,
             export_debug_log
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // 原生 Cmd+Q/系统退出也必须回收，不能只依赖托盘菜单。
+            if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+                stop_all_processes(app);
+            }
+        });
 }

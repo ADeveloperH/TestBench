@@ -1,0 +1,2 @@
+# 许可证按上游原始字节校验；Windows checkout 不转换换行。
+go-ios/LICENSE.txt text eol=lf

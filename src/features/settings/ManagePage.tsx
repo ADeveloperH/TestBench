@@ -1,3 +1,6 @@
+import { configuredIosApps } from "../../core/iosApps";
+import { IosAppSettings } from "../ios/IosAppSettings";
+import { IosLogBlockSettings } from "../ios/IosLogBlockSettings";
 import { useState } from "react";
 import { Icon } from "../../components/Icon";
 import { invoke } from "@tauri-apps/api/core";
@@ -20,6 +23,8 @@ import type { Favorite, ListKind, Prefs } from "./usePrefs";
 import type { SavedFilter } from "../filters/useSavedFilters";
 import type { TestCasesStore } from "../testcases/useTestCasesStore";
 import type { FilterState } from "../../core/types";
+import { IosFilterSettings } from "../ios/IosFilterSettings";
+import { normalizeIosFilterPreferences, type IosFilterPreferences } from "../ios/iosFilterPreferences";
 import { FilterManager } from "../filters/FilterManager";
 import { TestCaseManager } from "../testcases/TestCaseManager";
 import { TagBlockManager } from "./TagBlockManager";
@@ -91,6 +96,7 @@ interface Props {
   onUpdateFilter: (id: string, filters: FilterState) => void;
   onDeleteFilter: (id: string) => void;
   onMoveFilter: (fromIndex: number, toIndex: number) => void;
+  onUpdateIosLog: (update: (current: IosFilterPreferences) => IosFilterPreferences) => void;
   onExportConfig: () => Promise<string>;
   onImportConfig: () => Promise<string>;
   onExportDebugLog: () => Promise<string>;
@@ -309,7 +315,7 @@ export function ManagePage(props: Props) {
             <span className="manage-nav-label">配置</span>
             <button className={tab === "apps" ? "active" : ""} onClick={() => setTab("apps")}>
               <span>应用</span>
-              <small>{props.effectiveApps.length} 个应用</small>
+              <small>{props.effectiveApps.length} Android / {configuredIosApps(normalizeIosFilterPreferences(props.prefs.iosLog).customApps, normalizeIosFilterPreferences(props.prefs.iosLog).removedBuiltinApps, IS_DEBUG).length} iOS</small>
             </button>
             <button className={tab === "search" ? "active" : ""} onClick={() => setTab("search")}>
               <span>常用搜索</span>
@@ -323,14 +329,14 @@ export function ManagePage(props: Props) {
               className={tab === "tag-blocking" ? "active" : ""}
               onClick={() => setTab("tag-blocking")}
             >
-              <span>Tag 屏蔽</span>
+              <span>日志屏蔽</span>
               <small>
-                {props.tagBlockRules.filter((rule) => rule.enabled).length} / {props.tagBlockRules.length} 条
+                {props.tagBlockRules.filter((rule) => rule.enabled).length} / {props.tagBlockRules.length} Android · iOS 3 项
               </small>
             </button>
             <button className={tab === "filters" ? "active" : ""} onClick={() => setTab("filters")}>
               <span>过滤器</span>
-              <small>{props.savedFilters.length} 个</small>
+              <small>{props.savedFilters.length + (props.prefs.iosLog?.savedFilters.length ?? 0)} 个</small>
             </button>
             <button className={tab === "testcases" ? "active" : ""} onClick={() => setTab("testcases")}>
               <span>测试用例</span>
@@ -417,8 +423,8 @@ export function ManagePage(props: Props) {
         </section>
       )}
       {tab === "apps" && (
-        <section className="manage-section">
-          <h2>应用清单（内置 + 手动）</h2>
+        <><section className="manage-section">
+          <h2>Android 应用清单（内置 + 手动）</h2>
           <div className="manage-add">
             <input
               placeholder="应用名"
@@ -549,7 +555,7 @@ export function ManagePage(props: Props) {
               );
             })}
           </ul>
-        </section>
+        </section><IosAppSettings preferences={normalizeIosFilterPreferences(props.prefs.iosLog)} onChange={props.onUpdateIosLog} /></>
       )}
 
       {tab === "search" && (
@@ -597,7 +603,7 @@ export function ManagePage(props: Props) {
       )}
 
       {tab === "tag-blocking" && (
-        <TagBlockManager
+        <><TagBlockManager
           enabled={props.prefs.tagBlockingEnabled}
           rules={props.tagBlockRules}
           onSetEnabled={props.onSetTagBlockingEnabled}
@@ -605,7 +611,7 @@ export function ManagePage(props: Props) {
           onRemove={props.onRemoveTagBlockRule}
           onSetRuleEnabled={props.onSetTagBlockRuleEnabled}
           onSetGroupEnabled={props.onSetTagBlockGroupEnabled}
-        />
+        /><IosLogBlockSettings preferences={normalizeIosFilterPreferences(props.prefs.iosLog)} onChange={props.onUpdateIosLog} /></>
       )}
 
       {tab === "testcases" && (
@@ -613,7 +619,7 @@ export function ManagePage(props: Props) {
       )}
 
       {tab === "filters" && (
-        <FilterManager
+        <><FilterManager
           savedFilters={props.savedFilters}
           apps={props.effectiveApps}
           onSave={props.onSaveFilter}
@@ -621,7 +627,7 @@ export function ManagePage(props: Props) {
           onUpdate={props.onUpdateFilter}
           onDelete={props.onDeleteFilter}
           onMove={props.onMoveFilter}
-        />
+        /><IosFilterSettings preferences={normalizeIosFilterPreferences(props.prefs.iosLog)} onChange={props.onUpdateIosLog} /></>
       )}
 
       {tab === "help" && (
@@ -828,7 +834,7 @@ function ListSection(p: ListSectionProps) {
 
   return (
     <section className="manage-section">
-      <h2>常用{p.title}</h2>
+      <h2>常用{p.title}{p.kind === "search" ? "（Android / iOS 共享）" : ""}</h2>
       <div className="manage-add manage-favorite-add">
         <input
           placeholder={`常用${p.title}内容`}
@@ -944,7 +950,7 @@ function ListSection(p: ListSectionProps) {
         })}
       </ul>
 
-      <h2>{p.title}历史</h2>
+      <h2>{p.kind === "search" ? "Android 搜索历史" : `${p.title}历史`}</h2>
       <div className="manage-list-head">
         <span className="count">{p.history.length} 条</span>
         <button onClick={p.onClearHistory} disabled={p.history.length === 0}>

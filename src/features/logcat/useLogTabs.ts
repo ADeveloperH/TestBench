@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FilterState } from "../../core/types";
+import type { LogFindState } from "../../core/logView";
+export type { LogFindState } from "../../core/logView";
 
 const STORAGE_KEY = "logcat-workspace-tabs-v1";
 
@@ -11,14 +13,6 @@ export const EMPTY_LOG_FILTERS: FilterState = {
   pid: "",
   app: "",
 };
-
-export interface LogFindState {
-  open: boolean;
-  query: string;
-  caseSensitive: boolean;
-  useRegex: boolean;
-  currentMatch: number;
-}
 
 export const EMPTY_LOG_FIND: LogFindState = {
   open: false,

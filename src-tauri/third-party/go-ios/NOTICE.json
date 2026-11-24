@@ -1,0 +1,11 @@
+{
+  "component": "go-ios",
+  "version": "1.3.2",
+  "source": "https://github.com/danielpaulus/go-ios",
+  "releaseUrl": "https://github.com/danielpaulus/go-ios/releases/tag/v1.3.2",
+  "license": "MIT",
+  "licenseSource": "https://raw.githubusercontent.com/danielpaulus/go-ios/v1.3.2/LICENSE",
+  "licenseFile": "LICENSE.txt",
+  "distribution": "Official prebuilt binaries; TestBench does not modify upstream source. macOS application packaging may apply code signing.",
+  "appleComponents": "Apple USB drivers and Apple Mobile Device Service are not included. Windows USB connectivity requires separately installed official Apple components."
+}
